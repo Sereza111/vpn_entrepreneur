@@ -1,8 +1,24 @@
+# Переменные задавай в Portainer: Stack → Environment variables (Advanced mode).
+# Не используем env_file — при деплое из Git файла .env на сервере нет.
 services:
   bot:
     build: .
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      BOT_TOKEN: ${BOT_TOKEN}
+      WEB_APP_URL: ${WEB_APP_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      SESSION_JWT_SECRET: ${SESSION_JWT_SECRET}
+      REMNAWAVE_BASE_URL: ${REMNAWAVE_BASE_URL}
+      REMNAWAVE_ACCESS_TOKEN: ${REMNAWAVE_ACCESS_TOKEN}
+      REMNAWAVE_USERNAME: ${REMNAWAVE_USERNAME}
+      REMNAWAVE_PASSWORD: ${REMNAWAVE_PASSWORD}
+      REMNAWAVE_INTERNAL_SQUAD_UUIDS: ${REMNAWAVE_INTERNAL_SQUAD_UUIDS}
+      REMNAWAVE_DEFAULT_TRAFFIC_LIMIT_BYTES: ${REMNAWAVE_DEFAULT_TRAFFIC_LIMIT_BYTES:-0}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}

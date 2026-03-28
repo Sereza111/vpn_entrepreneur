@@ -59,8 +59,7 @@ git push -u origin main
 
 1. **Stacks** → **Add stack**
 2. **Repository** → URL репозитория, ветка `main`, путь к compose: `docker-compose.yml`
-3. Или **Web editor** — вставь содержимое `docker-compose.yml`
-4. Добавь переменные из `.env.example` (реальные значения — в Environment)
-5. **Deploy**
+3. В блоке **Environment variables** нажми **Advanced mode** и вставь все пары из [`.env.example`](.env.example) (имя = значение, по одной строке `KEY=value`). Файл `.env` в Git **не нужен** и **не используется** — иначе при деплое из репозитория Portainer ищет `/data/compose/.../.env` на диске и падает с ошибкой `env file ... not found`.
+4. **Deploy**
 
 Образ собирается **в Docker** (`Dockerfile` сам делает `vite build`), папка `public/` в Git не нужна.
