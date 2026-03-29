@@ -159,6 +159,107 @@ body::before {
   font-weight: 600;
 }
 
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.seg-btn {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: #121929;
+  color: var(--muted);
+  padding: 10px 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: all 140ms ease;
+}
+
+.seg-btn.active {
+  color: var(--fg);
+  border-color: #4a5f84;
+  background: linear-gradient(145deg, #1f2940, #171f33);
+}
+
+.section {
+  display: none;
+}
+
+.section.is-visible {
+  display: block;
+}
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.plan-btn {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #161e2f, #121a28);
+  color: var(--fg);
+  padding: 12px 8px;
+  font-weight: 800;
+  font-size: 0.84rem;
+  transition: transform 120ms ease, border-color 150ms ease;
+}
+
+.plan-btn:active {
+  transform: scale(0.98);
+}
+
+.plan-btn:hover {
+  border-color: #4a5f84;
+}
+
+.btn.done {
+  border-color: rgba(109, 231, 168, 0.35);
+  color: var(--ok);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%) translateY(12px);
+  background: rgba(18, 24, 36, 0.96);
+  border: 1px solid #31405c;
+  color: var(--fg);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  opacity: 0;
+  transition: all 180ms ease;
+  z-index: 20;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(90deg, #141b29 20%, #1d2638 40%, #141b29 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s linear infinite;
+  margin-bottom: 10px;
+}
+
+.s1 { height: 22px; width: 48%; }
+.s2 { height: 14px; width: 70%; }
+.s3 { height: 14px; width: 55%; }
+.s4 { height: 44px; width: 100%; }
+
+@keyframes shimmer {
+  0% { background-position: 150% 0; }
+  100% { background-position: -50% 0; }
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;

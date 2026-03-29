@@ -13,6 +13,17 @@ function showError(msg) {
   root.appendChild(el(`<div class="card"><p class="err">${msg}</p></div>`));
 }
 
+function showToast(message) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = el(`<div id="toast" class="toast"></div>`);
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 1400);
+}
+
 async function api(path, opts = {}) {
   const r = await fetch(path, {
     ...opts,
@@ -47,7 +58,17 @@ async function boot() {
     return;
   }
 
-  root.innerHTML = `<div class="card muted">Загрузка профиля...</div>`;
+  root.innerHTML = `
+    <div class="card">
+      <div class="skeleton s1"></div>
+      <div class="skeleton s2"></div>
+    </div>
+    <div class="card">
+      <div class="skeleton s3"></div>
+      <div class="skeleton s4"></div>
+      <div class="skeleton s4"></div>
+    </div>
+  `;
 
   let token;
   try {
@@ -92,8 +113,18 @@ async function boot() {
   const status = u.status || "—";
   const sub = u.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
+  const nav = el(`
+    <div class="card">
+      <div class="segmented">
+        <button class="seg-btn active" data-target="status">Статус</button>
+        <button class="seg-btn" data-target="connect">Подключение</button>
+        <button class="seg-btn" data-target="extend">Продление</button>
+      </div>
+    </div>
+  `);
+  root.appendChild(nav);
 
-  const card = el(`<div class="card">
+  const card = el(`<div class="card section is-visible" id="section-status">
     <div class="chip ${isActive ? "active" : ""}">
       ${isActive ? "Активна" : "Неактивна"}
     </div>
@@ -115,6 +146,12 @@ async function boot() {
         <div class="value">${u.trafficLimitBytes ?? "—"}</div>
       </div>
     </div>
+  </div>`);
+  root.appendChild(card);
+
+  const connect = el(`<div class="card section" id="section-connect">
+    <h3 class="value" style="margin:0 0 6px">Подключение VPN</h3>
+    <p class="muted">Скопируйте подписку или откройте ссылку напрямую в клиенте.</p>
     <div class="link-block">
       <div class="label">Ссылка подписки</div>
       <div class="link" id="subUrl">${sub}</div>
@@ -122,18 +159,56 @@ async function boot() {
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
-  root.appendChild(card);
+  root.appendChild(connect);
+
+  const extend = el(`<div class="card section" id="section-extend">
+    <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
+    <p class="muted">Выберите план. После оплаты срок обновится автоматически.</p>
+    <div class="plans">
+      <button class="plan-btn" data-days="30">30 дней</button>
+      <button class="plan-btn" data-days="90">90 дней</button>
+      <button class="plan-btn" data-days="180">180 дней</button>
+    </div>
+    <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
+  </div>`);
+  root.appendChild(extend);
+
+  document.querySelectorAll(".seg-btn").forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll(".seg-btn").forEach((x) => x.classList.remove("active"));
+      btn.classList.add("active");
+      const key = btn.getAttribute("data-target");
+      document.querySelectorAll(".section").forEach((s) => s.classList.remove("is-visible"));
+      document.getElementById(`section-${key}`)?.classList.add("is-visible");
+    };
+  });
 
   document.getElementById("copyBtn").onclick = async () => {
     try {
       await navigator.clipboard.writeText(sub);
-      tg.showAlert("Скопировано");
+      const b = document.getElementById("copyBtn");
+      b.textContent = "Скопировано";
+      b.classList.add("done");
+      showToast("Ссылка скопирована");
+      setTimeout(() => {
+        b.textContent = "Скопировать ссылку";
+        b.classList.remove("done");
+      }, 1200);
     } catch {
       tg.showAlert("Не удалось скопировать");
     }
   };
   document.getElementById("openBtn").onclick = () => {
     if (sub && sub !== "—") tg.openLink(sub);
+  };
+  document.querySelectorAll(".plan-btn").forEach((b) => {
+    b.onclick = () => {
+      const days = b.getAttribute("data-days");
+      tg.showAlert(`Тариф на ${days} дней. Подключим оплату на следующем шаге.`);
+    };
+  });
+  document.getElementById("supportBtn").onclick = () => {
+    tg.openTelegramLink("https://t.me/VL_VPNbot");
   };
 }
 
