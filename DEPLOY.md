@@ -55,11 +55,21 @@ git push -u origin main
 
 ---
 
-## 3. Стек в Portainer
+## 3. Сборка образа на GitHub (без build в Portainer)
 
-1. **Stacks** → **Add stack**
-2. **Repository** → URL репозитория, ветка `main`, путь к compose: `docker-compose.yml`
-3. В блоке **Environment variables** нажми **Advanced mode** и вставь все пары из [`.env.example`](.env.example) (имя = значение, по одной строке `KEY=value`). Файл `.env` в Git **не нужен** и **не используется** — иначе при деплое из репозитория Portainer ищет `/data/compose/.../.env` на диске и падает с ошибкой `env file ... not found`.
-4. **Deploy**
+1. В репозитории на GitHub: **Settings** → **Actions** → **General** → разреши *Workflow permissions* с правом **Read and write** (или оставь по умолчанию для `GITHUB_TOKEN` публикации в Packages — обычно уже ок).
+2. Сделай `git push` в `main`. Открой вкладку **Actions** — workflow **Docker publish** должен собрать образ и отправить в **GitHub Container Registry**.
+3. Открой **Packages** у своего пользователя/организации — пакет будет `ghcr.io/<логин>/<репозиторий>`. Тег **`latest`** и хеш коммита.
+4. Если пакет **приватный**: в Portainer добавь **Registries** → **Docker Hub / Custom registry**: URL `ghcr.io`, логин — твой GitHub username, пароль — **Personal Access Token** с правом `read:packages`.
 
-Образ собирается **в Docker** (`Dockerfile` сам делает `vite build`), папка `public/` в Git не нужна.
+---
+
+## 4. Стек в Portainer (только pull образа)
+
+1. **Stacks** → **Add stack** → **Repository** → URL репо, ветка `main`, compose: `docker-compose.yml`
+2. В **Environment variables** (**Advanced mode**) добавь обязательно:
+   - **`IMAGE`** — полный путь образа, например `ghcr.io/твой_логин/имя_репо:latest` (строчными буквами, как в URL пакета на GitHub).
+   - остальные переменные из [`.env.example`](.env.example) (`BOT_TOKEN`, `REMNAWAVE_*`, …).
+3. **Deploy** — Portainer скачает готовый образ, **сборки на сервере не будет** (нет ошибок BuildKit / http2).
+
+Локальная сборка с нуля: `docker compose -f docker-compose.local.yml --env-file .env up --build`

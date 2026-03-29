@@ -1,8 +1,11 @@
-# Переменные задавай в Portainer: Stack → Environment variables (Advanced mode).
-# Не используем env_file — при деплое из Git файла .env на сервере нет.
+# Portainer: задай IMAGE = образ из GitHub Packages после первого успешного Actions.
+# Пример: IMAGE=ghcr.io/ivanivanov/tg-vpn-subscription-bot:latest
+# Сборка идёт в GitHub Actions (.github/workflows/docker-publish.yml), не на сервере.
+
 services:
   bot:
-    build: .
+    image: ${IMAGE}
+    pull_policy: always
     restart: unless-stopped
     ports:
       - "3000:3000"
