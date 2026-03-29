@@ -132,8 +132,8 @@ app.post("/api/webhooks/payment", async (req, res) => {
 const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
-  const kb = new InlineKeyboard().webApp("РџРѕРґРїРёСЃРєР° VPN", config.webAppUrl);
-  await ctx.reply("РћС‚РєСЂРѕР№ РјРёРЅРё-РїСЂРёР»РѕР¶РµРЅРёРµ: С‚Р°Рј СЃСЃС‹Р»РєР° РґР»СЏ Happ/РєР»РёРµРЅС‚Р° Рё СЃС‚Р°С‚СѓСЃ РёР· Remnawave.",
+  const kb = new InlineKeyboard().webApp("Р СџР С•Р Т‘Р С—Р С‘РЎРѓР С”Р В° VPN", config.webAppUrl);
+  await ctx.reply("Р С›РЎвЂљР С”РЎР‚Р С•Р в„– Р СР С‘Р Р…Р С‘-Р С—РЎР‚Р С‘Р В»Р С•Р В¶Р ВµР Р…Р С‘Р Вµ: РЎвЂљР В°Р С РЎРѓРЎРѓРЎвЂ№Р В»Р С”Р В° Р Т‘Р В»РЎРЏ Happ/Р С”Р В»Р С‘Р ВµР Р…РЎвЂљР В° Р С‘ РЎРѓРЎвЂљР В°РЎвЂљРЎС“РЎРѓ Р С‘Р В· Remnawave.",
     { reply_markup: kb },
   );
 });
@@ -156,6 +156,8 @@ app.listen(config.port, async () => {
     await bot.api.setWebhook(url, extra);
     console.log("Telegram webhook ->", url);
   } else {
-    console.log("PUBLIC_BASE_URL not set вЂ” setWebhook skipped");
+    console.log("PUBLIC_BASE_URL not set, using long polling");
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
+    bot.start();
   }
 });
