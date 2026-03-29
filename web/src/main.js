@@ -96,7 +96,7 @@ async function boot() {
   root.innerHTML = "";
 
   const head = el(
-    `<div class="card"><h1 class="hero-title">VPN подписка</h1><p class="muted">Remnawave + Telegram</p></div>`,
+    `<div class="card"><h1 class="hero-title">VPN подписка</h1></div>`,
   );
   root.appendChild(head);
 
@@ -150,8 +150,19 @@ async function boot() {
     });
 
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
-    document.getElementById("payBtn").onclick = () =>
-      tg.showAlert("Оплата подключается. Пока для оформления напишите в поддержку.");
+    document.getElementById("payBtn").onclick = async () => {
+      try {
+        await api("/api/test/grant", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ days: 30 }),
+        });
+        showToast("Тестово выдано на 30 дней");
+        setTimeout(() => window.location.reload(), 600);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
+    };
     document.getElementById("supportBtn").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
     return;
   }
@@ -249,9 +260,19 @@ async function boot() {
     if (sub && sub !== "—") tg.openLink(sub);
   };
   document.querySelectorAll(".plan-btn").forEach((b) => {
-    b.onclick = () => {
+    b.onclick = async () => {
       const days = b.getAttribute("data-days");
-      tg.showAlert(`Тариф на ${days} дней. Подключим оплату на следующем шаге.`);
+      try {
+        await api("/api/test/grant", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ days: Number(days) }),
+        });
+        showToast(`Тестово продлено на ${days} дней`);
+        setTimeout(() => window.location.reload(), 600);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
     };
   });
   document.getElementById("supportBtn").onclick = () => {

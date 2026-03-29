@@ -29,6 +29,9 @@ export const config = {
   },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   corsOrigin: process.env.CORS_ORIGIN || "",
+  testGrantEnabled:
+    String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||
+    String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "true",
 };
 
 if (!config.remnawave.baseUrl) {

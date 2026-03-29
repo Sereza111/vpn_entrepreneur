@@ -164,12 +164,43 @@ app.post("/api/webhooks/payment", async (req, res) => {
   }
 });
 
+app.post("/api/test/grant", authMiddleware, async (req, res) => {
+  if (!config.testGrantEnabled) {
+    return res.status(403).json({ error: "test_grant_disabled" });
+  }
+  const days = Number(req.body?.days || 30);
+  if (!Number.isFinite(days) || days < 1) {
+    return res.status(400).json({ error: "bad_days" });
+  }
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const users = await rw.getUsersByTelegramId(tid);
+    const squads = config.remnawave.internalSquadUuids;
+    if (!users.length) {
+      const uname = rw.defaultUsernameFromTelegramId(tid);
+      const expireAt = rw.addDaysIso(days);
+      await rw.createUser({
+        username: uname,
+        expireAtIso: expireAt,
+        telegramId: tid,
+        activeInternalSquads: squads,
+      });
+    } else {
+      await rw.bulkExtendExpiration([users[0].uuid], days);
+    }
+    const data = await loadMe(tid);
+    return res.json({ ok: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("Подписка VPN", config.webAppUrl);
   await ctx.reply(
-    "Открой мини-приложение: там ссылка для Happ/клиента и статус из Remnawave.",
+    "Открой мини-приложение: там статус подписки и подключение VPN.",
     { reply_markup: kb },
   );
 });
