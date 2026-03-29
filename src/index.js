@@ -132,12 +132,16 @@ app.post("/api/webhooks/payment", async (req, res) => {
 const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
-  const kb = new InlineKeyboard().webApp("Р В РЎСџР В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂќР В Р’В° VPN", config.webAppUrl);
-  await ctx.reply("Р В РЎвЂєР РЋРІР‚С™Р В РЎвЂќР РЋР вЂљР В РЎвЂўР В РІвЂћвЂ“ Р В РЎВР В РЎвЂР В Р вЂ¦Р В РЎвЂ-Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р’В»Р В РЎвЂўР В Р’В¶Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ: Р РЋРІР‚С™Р В Р’В°Р В РЎВ Р РЋР С“Р РЋР С“Р РЋРІР‚в„–Р В Р’В»Р В РЎвЂќР В Р’В° Р В РўвЂР В Р’В»Р РЋР РЏ Happ/Р В РЎвЂќР В Р’В»Р В РЎвЂР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В° Р В РЎвЂ Р РЋР С“Р РЋРІР‚С™Р В Р’В°Р РЋРІР‚С™Р РЋРЎвЂњР РЋР С“ Р В РЎвЂР В Р’В· Remnawave.",
+  const kb = new InlineKeyboard().webApp("Подписка VPN", config.webAppUrl);
+  await ctx.reply(
+    "Открой мини-приложение: там ссылка для Happ/клиента и статус из Remnawave.",
     { reply_markup: kb },
   );
 });
-if (config.publicBaseUrl) {\n  app.use(whPath, webhookCallback(bot, "express", { secretToken: config.webhookSecret || undefined }));\n}
+
+if (config.publicBaseUrl) {
+  app.use(whPath, webhookCallback(bot, "express", { secretToken: config.webhookSecret || undefined }));
+}
 
 app.use("/app", express.static(publicDir));
 app.get(["/app", "/app/"], (_req, res) => {
