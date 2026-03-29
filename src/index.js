@@ -132,8 +132,8 @@ app.post("/api/webhooks/payment", async (req, res) => {
 const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
-  const kb = new InlineKeyboard().webApp("Подписка VPN", config.webAppUrl);
-  await ctx.reply("Открой мини-приложение: там ссылка для Happ/клиента и статус из Remnawave.",
+  const kb = new InlineKeyboard().webApp("РџРѕРґРїРёСЃРєР° VPN", config.webAppUrl);
+  await ctx.reply("РћС‚РєСЂРѕР№ РјРёРЅРё-РїСЂРёР»РѕР¶РµРЅРёРµ: С‚Р°Рј СЃСЃС‹Р»РєР° РґР»СЏ Happ/РєР»РёРµРЅС‚Р° Рё СЃС‚Р°С‚СѓСЃ РёР· Remnawave.",
     { reply_markup: kb },
   );
 });
@@ -156,6 +156,6 @@ app.listen(config.port, async () => {
     await bot.api.setWebhook(url, extra);
     console.log("Telegram webhook ->", url);
   } else {
-    console.log("PUBLIC_BASE_URL not set — setWebhook skipped");
+    console.log("PUBLIC_BASE_URL not set вЂ” setWebhook skipped");
   }
 });
