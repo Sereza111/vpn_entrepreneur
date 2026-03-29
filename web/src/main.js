@@ -47,7 +47,7 @@ async function boot() {
     return;
   }
 
-  root.innerHTML = `<div class="card muted">Загрузка…</div>`;
+  root.innerHTML = `<div class="card muted">Загрузка профиля...</div>`;
 
   let token;
   try {
@@ -74,13 +74,15 @@ async function boot() {
   const u = me.remnawaveUser;
   root.innerHTML = "";
 
-  const head = el(`<div class="card"><h1>VPN подписка</h1><p class="muted">Remnawave + Telegram</p></div>`);
+  const head = el(
+    `<div class="card"><h1 class="hero-title">VPN подписка</h1><p class="muted">Remnawave + Telegram</p></div>`,
+  );
   root.appendChild(head);
 
   if (!u) {
     root.appendChild(
       el(
-        `<div class="card"><p>Аккаунт в панели ещё не привязан к вашему Telegram ID.</p><p class="muted">После оплаты бот создаст пользователя или обратитесь в поддержку.</p></div>`,
+        `<div class="card"><p><b>Аккаунт в панели еще не привязан к вашему Telegram ID.</b></p><p class="muted">После оплаты бот создаст пользователя автоматически, либо обратитесь в поддержку.</p></div>`,
       ),
     );
     return;
@@ -89,12 +91,34 @@ async function boot() {
   const exp = u.expireAt ? new Date(u.expireAt).toLocaleString("ru-RU") : "—";
   const status = u.status || "—";
   const sub = u.subscriptionUrl || "—";
+  const isActive = String(status).toUpperCase() === "ACTIVE";
 
   const card = el(`<div class="card">
-    <p><b>Статус:</b> ${status}</p>
-    <p><b>До:</b> ${exp}</p>
-    <p class="muted"><b>Юзернейм:</b> ${u.username || "—"}</p>
-    <p class="muted link"><b>Ссылка подписки:</b><br/><span id="subUrl">${sub}</span></p>
+    <div class="chip ${isActive ? "active" : ""}">
+      ${isActive ? "Активна" : "Неактивна"}
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div class="stat">
+        <div class="label">Пользователь</div>
+        <div class="value">${u.username || "—"}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Статус панели</div>
+        <div class="value">${status}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Действует до</div>
+        <div class="value">${exp}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Трафик лимит</div>
+        <div class="value">${u.trafficLimitBytes ?? "—"}</div>
+      </div>
+    </div>
+    <div class="link-block">
+      <div class="label">Ссылка подписки</div>
+      <div class="link" id="subUrl">${sub}</div>
+    </div>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
