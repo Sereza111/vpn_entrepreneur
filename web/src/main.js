@@ -122,7 +122,9 @@ async function boot() {
       el(`
         <div class="card section" id="section-connect">
           <h3 class="value" style="margin:0 0 6px">Подключение</h3>
-          <p class="muted">Ссылка появится после создания аккаунта в панели.</p>
+          <p class="muted">Вставьте short UUID или ссылку подписки из панели Remnawave, чтобы привязать аккаунт.</p>
+          <input class="text-input" id="linkInput" placeholder="Например: f7a2c3... или https://.../sub/f7a2c3..." />
+          <button class="btn" type="button" id="linkBtn">Привязать подписку</button>
           <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
         </div>
       `),
@@ -149,6 +151,24 @@ async function boot() {
       };
     });
 
+    document.getElementById("linkBtn").onclick = async () => {
+      const v = document.getElementById("linkInput").value.trim();
+      if (!v) {
+        showToast("Вставьте short UUID или ссылку");
+        return;
+      }
+      try {
+        await api("/api/link-subscription", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ shortUuid: v }),
+        });
+        showToast("Привязано. Обновляю...");
+        setTimeout(() => window.location.reload(), 500);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
+    };
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
     document.getElementById("payBtn").onclick = () => tg.showAlert("Скоро подключим прямую оплату в мини-аппе.");
     document.getElementById("supportBtn").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");

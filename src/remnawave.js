@@ -73,6 +73,17 @@ export async function getUsersByTelegramId(telegramId) {
   return data.response || [];
 }
 
+export async function getUserByShortUuid(shortUuid) {
+  const res = await rwFetch(`/api/users/by-short-uuid/${encodeURIComponent(shortUuid)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`getUserByShortUuid: ${res.status} ${t}`);
+  }
+  const data = await res.json();
+  return data.response || null;
+}
+
 export async function createUser({
   username,
   expireAtIso,

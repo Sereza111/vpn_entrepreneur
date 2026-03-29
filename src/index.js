@@ -94,6 +94,41 @@ app.get("/api/subscription", authMiddleware, async (req, res) => {
   }
 });
 
+app.post("/api/link-subscription", authMiddleware, async (req, res) => {
+  const raw = String(req.body?.shortUuid || "").trim();
+  if (!raw) return res.status(400).json({ error: "short_uuid_required" });
+
+  // Accept either short UUID itself or full subscription URL.
+  const m = raw.match(/\/sub\/([^/?#]+)/i);
+  const shortUuid = (m?.[1] || raw).trim();
+  if (!shortUuid) return res.status(400).json({ error: "invalid_short_uuid" });
+
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const alreadyLinked = await rw.getUsersByTelegramId(tid);
+    if (alreadyLinked.length) {
+      return res.status(409).json({ error: "telegram_already_linked" });
+    }
+
+    const user = await rw.getUserByShortUuid(shortUuid);
+    if (!user) return res.status(404).json({ error: "subscription_not_found" });
+
+    if (user.telegramId && Number(user.telegramId) !== tid) {
+      return res.status(409).json({ error: "subscription_already_linked" });
+    }
+
+    await rw.updateUser({
+      uuid: user.uuid,
+      patch: { telegramId: tid },
+    });
+
+    const data = await loadMe(tid);
+    return res.json({ ok: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 app.post("/api/webhooks/payment", async (req, res) => {
   if (!config.paymentWebhookSecret) {
     return res.status(503).json({ error: "webhook_disabled" });
