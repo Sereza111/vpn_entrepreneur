@@ -101,11 +101,57 @@ async function boot() {
   root.appendChild(head);
 
   if (!u) {
+    const nav = el(`
+      <div class="card">
+        <div class="segmented">
+          <button class="seg-btn active" data-target="status">Статус</button>
+          <button class="seg-btn" data-target="connect">Подключение</button>
+          <button class="seg-btn" data-target="extend">Продление</button>
+        </div>
+      </div>
+    `);
+    root.appendChild(nav);
+
     root.appendChild(
       el(
-        `<div class="card"><p><b>Аккаунт в панели еще не привязан к вашему Telegram ID.</b></p><p class="muted">После оплаты бот создаст пользователя автоматически, либо обратитесь в поддержку.</p></div>`,
+        `<div class="card section is-visible" id="section-status"><p><b>Аккаунт в панели еще не привязан к вашему Telegram ID.</b></p><p class="muted">После оплаты бот создаст пользователя автоматически, либо обратитесь в поддержку.</p></div>`,
       ),
     );
+
+    root.appendChild(
+      el(`
+        <div class="card section" id="section-connect">
+          <h3 class="value" style="margin:0 0 6px">Подключение</h3>
+          <p class="muted">Ссылка появится после создания аккаунта в панели.</p>
+          <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
+        </div>
+      `),
+    );
+
+    root.appendChild(
+      el(`
+        <div class="card section" id="section-extend">
+          <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
+          <p class="muted">Нажмите, чтобы перейти к оплате или связаться с поддержкой.</p>
+          <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
+          <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
+        </div>
+      `),
+    );
+
+    document.querySelectorAll(".seg-btn").forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll(".seg-btn").forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+        const key = btn.getAttribute("data-target");
+        document.querySelectorAll(".section").forEach((s) => s.classList.remove("is-visible"));
+        document.getElementById(`section-${key}`)?.classList.add("is-visible");
+      };
+    });
+
+    document.getElementById("refreshBtn").onclick = () => window.location.reload();
+    document.getElementById("payBtn").onclick = () => tg.showAlert("Скоро подключим прямую оплату в мини-аппе.");
+    document.getElementById("supportBtn").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
     return;
   }
 
