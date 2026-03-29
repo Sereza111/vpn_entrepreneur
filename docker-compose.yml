@@ -1,10 +1,9 @@
-# Portainer: задай IMAGE = образ из GitHub Packages после первого успешного Actions.
-# Пример: IMAGE=ghcr.io/ivanivanov/tg-vpn-subscription-bot:latest
-# Сборка идёт в GitHub Actions (.github/workflows/docker-publish.yml), не на сервере.
+# Сборка в GitHub Actions → ghcr.io. Если в стеке не задашь IMAGE — подставится образ этого репо.
+# Переопределение: IMAGE=ghcr.io/другой/образ:тег
 
 services:
   bot:
-    image: ${IMAGE}
+    image: ${IMAGE:-ghcr.io/sereza111/vpn_entrepreneur:latest}
     pull_policy: always
     restart: unless-stopped
     ports:

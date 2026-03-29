@@ -67,9 +67,8 @@ git push -u origin main
 ## 4. Стек в Portainer (только pull образа)
 
 1. **Stacks** → **Add stack** → **Repository** → URL репо, ветка `main`, compose: `docker-compose.yml`
-2. В **Environment variables** (**Advanced mode**) добавь обязательно:
-   - **`IMAGE`** — полный путь образа, например `ghcr.io/твой_логин/имя_репо:latest` (строчными буквами, как в URL пакета на GitHub).
-   - остальные переменные из [`.env.example`](.env.example) (`BOT_TOKEN`, `REMNAWAVE_*`, …).
+2. В **Environment variables** (**Advanced mode**) добавь переменные из [`.env.example`](.env.example) (`BOT_TOKEN`, `REMNAWAVE_*`, …).
+   - **`IMAGE`** — опционально: образ из GHCR. Если не указать, в `docker-compose.yml` уже стоит значение по умолчанию для репозитория `Sereza111/vpn_entrepreneur` (`ghcr.io/sereza111/vpn_entrepreneur:latest`). Другой форк — задай свой `IMAGE`.
 3. **Deploy** — Portainer скачает готовый образ, **сборки на сервере не будет** (нет ошибок BuildKit / http2).
 
 Локальная сборка с нуля: `docker compose -f docker-compose.local.yml --env-file .env up --build`
