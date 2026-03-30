@@ -157,6 +157,14 @@ app.post("/api/webhooks/payment", async (req, res) => {
       });
     } else {
       await rw.bulkExtendExpiration([users[0].uuid], days);
+      // Если пользователь уже существует, при следующей оплате/продлении
+      // тоже обновим активные внутренние сквады (иначе они могут остаться пустыми).
+      if (squads?.length) {
+        await rw.updateUser({
+          uuid: users[0].uuid,
+          patch: { activeInternalSquads: squads },
+        });
+      }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -187,6 +195,12 @@ app.post("/api/test/grant", authMiddleware, async (req, res) => {
       });
     } else {
       await rw.bulkExtendExpiration([users[0].uuid], days);
+      if (squads?.length) {
+        await rw.updateUser({
+          uuid: users[0].uuid,
+          patch: { activeInternalSquads: squads },
+        });
+      }
     }
     const data = await loadMe(tid);
     return res.json({ ok: true, ...data });
