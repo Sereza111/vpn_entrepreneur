@@ -105,6 +105,7 @@ export async function createUser({
   telegramId,
   trafficLimitBytes,
   activeInternalSquads,
+  hwidDeviceLimit,
 }) {
   const body = {
     username,
@@ -116,6 +117,9 @@ export async function createUser({
   };
   if (activeInternalSquads?.length) {
     body.activeInternalSquads = activeInternalSquads;
+  }
+  if (Number.isFinite(Number(hwidDeviceLimit)) && Number(hwidDeviceLimit) > 0) {
+    body.hwidDeviceLimit = Number(hwidDeviceLimit);
   }
   const res = await rwFetch("/api/users", { method: "POST", json: body });
   if (!res.ok) {

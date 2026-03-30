@@ -251,6 +251,10 @@ async function boot() {
         <div class="label">Трафик лимит</div>
         <div class="value">${hasLimit ? fmtBytes(limitBytes) : "∞"}</div>
       </div>
+      <div class="stat">
+        <div class="label">Лимит устройств</div>
+        <div class="value">${u.hwidDeviceLimit || "—"}</div>
+      </div>
     </div>
   </div>`);
   root.appendChild(card);
@@ -275,6 +279,7 @@ async function boot() {
       <button class="plan-btn" data-days="90">90 дней</button>
       <button class="plan-btn" data-days="180">180 дней</button>
     </div>
+    <button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
   </div>`);
   root.appendChild(extend);
@@ -323,6 +328,19 @@ async function boot() {
       }
     };
   });
+  document.getElementById("addDeviceBtn").onclick = async () => {
+    try {
+      await api("/api/test/add-device-slot", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ slots: 1 }),
+      });
+      showToast("Лимит устройств увеличен на +1");
+      setTimeout(() => window.location.reload(), 700);
+    } catch (e) {
+      showToast(`Ошибка: ${e.message}`);
+    }
+  };
   document.getElementById("supportBtn").onclick = () => {
     tg.openTelegramLink("https://t.me/VL_VPNbot");
   };

@@ -70,9 +70,17 @@ async function loadMe(telegramId) {
       expireAt: pick.expireAt,
       subscriptionUrl: pick.subscriptionUrl,
       trafficLimitBytes: pick.trafficLimitBytes,
+      hwidDeviceLimit: pick.hwidDeviceLimit ?? null,
       userTraffic: pick.userTraffic || null,
     },
   };
+}
+
+function calcNewDeviceLimit(currentLimit, addSlots) {
+  const base = Number.isFinite(Number(currentLimit)) && Number(currentLimit) > 0
+    ? Number(currentLimit)
+    : config.remnawave.defaultHwidDeviceLimit;
+  return Math.max(1, base + Number(addSlots || 0));
 }
 
 app.get("/api/me", authMiddleware, async (req, res) => {
@@ -138,34 +146,55 @@ app.post("/api/webhooks/payment", async (req, res) => {
   if (sec !== config.paymentWebhookSecret) {
     return res.status(403).json({ error: "forbidden" });
   }
-  const { telegramId, extendDays, planDays } = req.body || {};
+  const { telegramId, extendDays, planDays, addDeviceSlots } = req.body || {};
   const days = Number(extendDays || planDays || 0);
-  if (!telegramId || !Number.isFinite(days) || days < 1) {
+  const slots = Number(addDeviceSlots || 0);
+  if (!telegramId || (!Number.isFinite(days) && !Number.isFinite(slots))) {
     return res.status(400).json({ error: "bad_body" });
+  }
+  if (days < 0 || slots < 0 || (days < 1 && slots < 1)) {
+    return res.status(400).json({ error: "nothing_to_apply" });
   }
   try {
     const tid = Number(telegramId);
-    const users = await rw.getUsersByTelegramId(tid);
+    let users = await rw.getUsersByTelegramId(tid);
     const squads = config.remnawave.internalSquadUuids;
     if (!users.length) {
+      if (days < 1) {
+        return res.status(404).json({ error: "subscription_not_found_for_device_addon" });
+      }
       const uname = rw.defaultUsernameFromTelegramId(tid);
       const expireAt = rw.addDaysIso(days);
-      await rw.createUser({
+      const created = await rw.createUser({
         username: uname,
         expireAtIso: expireAt,
         telegramId: tid,
         activeInternalSquads: squads,
+        hwidDeviceLimit: config.remnawave.defaultHwidDeviceLimit,
       });
+      users = [created];
     } else {
-      await rw.bulkExtendExpiration([users[0].uuid], days);
-      // Если пользователь уже существует, при следующей оплате/продлении
-      // тоже обновим активные внутренние сквады (иначе они могут остаться пустыми).
-      if (squads?.length) {
-        await rw.updateUser({
-          uuid: users[0].uuid,
-          patch: { activeInternalSquads: squads },
-        });
+      if (days > 0) {
+        await rw.bulkExtendExpiration([users[0].uuid], days);
       }
+    }
+    const patch = {};
+    if (squads?.length) {
+      patch.activeInternalSquads = squads;
+    }
+    if (slots > 0) {
+      patch.hwidDeviceLimit = calcNewDeviceLimit(users[0]?.hwidDeviceLimit, slots);
+    } else if (
+      !users[0]?.hwidDeviceLimit &&
+      Number(config.remnawave.defaultHwidDeviceLimit) > 0
+    ) {
+      patch.hwidDeviceLimit = Number(config.remnawave.defaultHwidDeviceLimit);
+    }
+    if (Object.keys(patch).length) {
+      await rw.updateUser({
+        uuid: users[0].uuid,
+        patch,
+      });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -193,18 +222,55 @@ app.post("/api/test/grant", authMiddleware, async (req, res) => {
         expireAtIso: expireAt,
         telegramId: tid,
         activeInternalSquads: squads,
+        hwidDeviceLimit: config.remnawave.defaultHwidDeviceLimit,
       });
     } else {
       await rw.bulkExtendExpiration([users[0].uuid], days);
+      const patch = {};
       if (squads?.length) {
+        patch.activeInternalSquads = squads;
+      }
+      if (
+        !users[0]?.hwidDeviceLimit &&
+        Number(config.remnawave.defaultHwidDeviceLimit) > 0
+      ) {
+        patch.hwidDeviceLimit = Number(config.remnawave.defaultHwidDeviceLimit);
+      }
+      if (Object.keys(patch).length) {
         await rw.updateUser({
           uuid: users[0].uuid,
-          patch: { activeInternalSquads: squads },
+          patch,
         });
       }
     }
     const data = await loadMe(tid);
     return res.json({ ok: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
+  if (!config.testGrantEnabled) {
+    return res.status(403).json({ error: "test_grant_disabled" });
+  }
+  const slots = Number(req.body?.slots || 1);
+  if (!Number.isFinite(slots) || slots < 1) {
+    return res.status(400).json({ error: "bad_slots" });
+  }
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const users = await rw.getUsersByTelegramId(tid);
+    if (!users.length) {
+      return res.status(404).json({ error: "subscription_not_found" });
+    }
+    const nextLimit = calcNewDeviceLimit(users[0]?.hwidDeviceLimit, slots);
+    await rw.updateUser({
+      uuid: users[0].uuid,
+      patch: { hwidDeviceLimit: nextLimit },
+    });
+    const data = await loadMe(tid);
+    return res.json({ ok: true, addedSlots: slots, hwidDeviceLimit: nextLimit, ...data });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

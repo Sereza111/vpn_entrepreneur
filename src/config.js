@@ -30,6 +30,9 @@ export const config = {
     defaultTrafficLimitBytes: Number(
       process.env.REMNAWAVE_DEFAULT_TRAFFIC_LIMIT_BYTES ?? "0",
     ),
+    defaultHwidDeviceLimit: Number(
+      process.env.REMNAWAVE_DEFAULT_HWID_DEVICE_LIMIT ?? "2",
+    ),
   },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   corsOrigin: process.env.CORS_ORIGIN || "",
