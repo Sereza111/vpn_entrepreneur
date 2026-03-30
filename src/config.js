@@ -17,6 +17,10 @@ export const config = {
   remnawave: {
     baseUrl: process.env.REMNAWAVE_BASE_URL?.replace(/\/$/, "") || "",
     accessToken: process.env.REMNAWAVE_ACCESS_TOKEN || "",
+    // В твоём nginx на `panel...:8443` `/api/*` отдаётся только при наличии cookie
+    // (см. nginx.conf map $http_cookie $auth_cookie / $authorized).
+    // Если nginx не требует маскировку, оставь пустым.
+    bypassCookie: process.env.REMNAWAVE_BYPASS_COOKIE || "",
     username: process.env.REMNAWAVE_USERNAME || "",
     password: process.env.REMNAWAVE_PASSWORD || "",
     internalSquadUuids: (process.env.REMNAWAVE_INTERNAL_SQUAD_UUIDS || "")
@@ -36,6 +40,19 @@ export const config = {
 
 if (!config.remnawave.baseUrl) {
   throw new Error("Missing REMNAWAVE_BASE_URL");
+}
+
+const looksLikeJwt = (s) =>
+  /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/i.test(String(s).trim());
+if (looksLikeJwt(config.remnawave.baseUrl)) {
+  throw new Error(
+    "REMNAWAVE_BASE_URL похож на JWT, а не на адрес API. Поменяй местами: в REMNAWAVE_BASE_URL укажи https://... (база HTTP API), токен — в REMNAWAVE_ACCESS_TOKEN.",
+  );
+}
+if (!/^https?:\/\//i.test(config.remnawave.baseUrl)) {
+  throw new Error(
+    "REMNAWAVE_BASE_URL должен быть полным URL (https://host или http://host:port), без пробелов и без токена.",
+  );
 }
 
 if (

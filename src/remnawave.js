@@ -5,9 +5,13 @@ let tokenExpiresAt = 0;
 
 async function login() {
   const { baseUrl, username, password } = config.remnawave;
+  const headers = { "Content-Type": "application/json" };
+  if (config.remnawave.bypassCookie) {
+    headers["Cookie"] = config.remnawave.bypassCookie;
+  }
   const res = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ username, password }),
   });
   if (!res.ok) {
@@ -36,6 +40,17 @@ export async function rwFetch(path, options = {}) {
     Accept: "application/json",
     ...(options.headers || {}),
   };
+
+  // nginx на твоей панели может "прикрывать" доступ к `/api/*`,
+  // разрешая только при наличии cookie XkhRCZEJ=nEnUoUYP.
+  // Если нужно - пришлём cookie автоматически.
+  const hasCookieHeader =
+    "Cookie" in headers ||
+    "cookie" in headers;
+  if (config.remnawave.bypassCookie && !hasCookieHeader) {
+    headers["Cookie"] = config.remnawave.bypassCookie;
+  }
+
   if (options.json !== undefined) {
     headers["Content-Type"] = "application/json";
   }
