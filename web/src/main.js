@@ -95,8 +95,36 @@ async function boot() {
   const u = me.remnawaveUser;
   root.innerHTML = "";
 
+  const fmtBytes = (bytes) => {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let v = n;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    const digits = v >= 100 ? 0 : v >= 10 ? 1 : 2;
+    return `${v.toFixed(digits)} ${units[i]}`;
+  };
+  const fmtSpeed = (bps) => {
+    const n = Number(bps || 0);
+    if (!Number.isFinite(n) || n <= 0) return "0 Mbps";
+    const mbps = (n * 8) / 1_000_000;
+    return `${mbps.toFixed(mbps >= 10 ? 0 : 1)} Mbps`;
+  };
+
   const head = el(
-    `<div class="card"><h1 class="hero-title">VPN подписка</h1></div>`,
+    `<div class="card">
+      <div class="brand">
+        <div class="brand-mark">VPN</div>
+        <div>
+          <h1 class="hero-title">VPN подписка</h1>
+          <div class="muted">Все регионы в одной подписке</div>
+        </div>
+      </div>
+    </div>`,
   );
   root.appendChild(head);
 
@@ -171,6 +199,10 @@ async function boot() {
   const status = u.status || "—";
   const sub = u.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
+  const usedBytes = Number(u.userTraffic?.usedTrafficBytes ?? 0);
+  const limitBytes = Number(u.trafficLimitBytes ?? 0);
+  const hasLimit = Number.isFinite(limitBytes) && limitBytes > 0;
+
   const nav = el(`
     <div class="card">
       <div class="segmented">
@@ -185,6 +217,22 @@ async function boot() {
   const card = el(`<div class="card section is-visible" id="section-status">
     <div class="chip ${isActive ? "active" : ""}">
       ${isActive ? "Активна" : "Неактивна"}
+    </div>
+    <div class="meter" style="margin-top:10px">
+      <div class="meter-head">
+        <div>
+          <div class="label">Трафик</div>
+          <div class="value" id="trafficText">${hasLimit ? `${fmtBytes(usedBytes)} / ${fmtBytes(limitBytes)}` : `${fmtBytes(usedBytes)} / ∞`}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Сейчас</div>
+          <div class="value" id="speedText">0 Mbps</div>
+        </div>
+      </div>
+      <div class="meter-bar" aria-hidden="true">
+        <div class="meter-fill" id="trafficFill" style="width:${hasLimit ? `${Math.min(100, Math.max(0, (usedBytes / limitBytes) * 100)).toFixed(1)}%` : "0%"}"></div>
+      </div>
+      <div class="label" id="trafficHint">${hasLimit ? "Прогресс по лимиту" : "Безлимит: показываем использовано"}</div>
     </div>
     <div class="grid" style="margin-top:10px">
       <div class="stat">
@@ -201,7 +249,7 @@ async function boot() {
       </div>
       <div class="stat">
         <div class="label">Трафик лимит</div>
-        <div class="value">${u.trafficLimitBytes ?? "—"}</div>
+        <div class="value">${hasLimit ? fmtBytes(limitBytes) : "∞"}</div>
       </div>
     </div>
   </div>`);
@@ -278,6 +326,44 @@ async function boot() {
   document.getElementById("supportBtn").onclick = () => {
     tg.openTelegramLink("https://t.me/VL_VPNbot");
   };
+
+  // "Спидометр": считаем скорость как прирост usedTrafficBytes за интервал.
+  // Никаких внешних speedtest — только то, что реально прошло через подписку.
+  let last = { at: Date.now(), used: usedBytes };
+  const tick = async () => {
+    try {
+      const me2 = await api("/api/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const u2 = me2.remnawaveUser;
+      const used2 = Number(u2?.userTraffic?.usedTrafficBytes ?? 0);
+      const now = Date.now();
+      const dt = Math.max(1, (now - last.at) / 1000);
+      const du = Math.max(0, used2 - last.used);
+      const bps = du / dt;
+      last = { at: now, used: used2 };
+
+      const speedEl = document.getElementById("speedText");
+      if (speedEl) speedEl.textContent = fmtSpeed(bps);
+
+      const trafficEl = document.getElementById("trafficText");
+      if (trafficEl) {
+        trafficEl.textContent = hasLimit
+          ? `${fmtBytes(used2)} / ${fmtBytes(limitBytes)}`
+          : `${fmtBytes(used2)} / ∞`;
+      }
+      if (hasLimit) {
+        const fill = document.getElementById("trafficFill");
+        if (fill) {
+          const pct = Math.min(100, Math.max(0, (used2 / limitBytes) * 100));
+          fill.style.width = `${pct.toFixed(1)}%`;
+        }
+      }
+    } catch {
+      // Игнорим временные ошибки (например, если Remnawave недоступен).
+    }
+  };
+  setInterval(tick, 5000);
 }
 
 boot();

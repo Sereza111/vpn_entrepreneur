@@ -70,6 +70,7 @@ async function loadMe(telegramId) {
       expireAt: pick.expireAt,
       subscriptionUrl: pick.subscriptionUrl,
       trafficLimitBytes: pick.trafficLimitBytes,
+      userTraffic: pick.userTraffic || null,
     },
   };
 }
