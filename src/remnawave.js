@@ -99,6 +99,18 @@ export async function getUserByShortUuid(shortUuid) {
   return data.response || null;
 }
 
+/** Remnawave ожидает [{ uuid: "..." }], а из env приходит строка UUID — нормализуем. */
+export function normalizeInternalSquadsInput(squads) {
+  if (!squads?.length) return undefined;
+  return squads.map((s) =>
+    typeof s === "string"
+      ? { uuid: s.trim() }
+      : s && typeof s.uuid === "string"
+        ? { uuid: s.uuid }
+        : s,
+  );
+}
+
 export async function createUser({
   username,
   expireAtIso,
@@ -116,7 +128,7 @@ export async function createUser({
     status: "ACTIVE",
   };
   if (activeInternalSquads?.length) {
-    body.activeInternalSquads = activeInternalSquads;
+    body.activeInternalSquads = normalizeInternalSquadsInput(activeInternalSquads);
   }
   if (Number.isFinite(Number(hwidDeviceLimit)) && Number(hwidDeviceLimit) > 0) {
     body.hwidDeviceLimit = Number(hwidDeviceLimit);
@@ -132,6 +144,9 @@ export async function createUser({
 
 export async function updateUser({ uuid, patch }) {
   const body = { uuid, ...patch };
+  if (body.activeInternalSquads?.length) {
+    body.activeInternalSquads = normalizeInternalSquadsInput(body.activeInternalSquads);
+  }
   const res = await rwFetch("/api/users", { method: "PATCH", json: body });
   if (!res.ok) {
     const t = await res.text();
