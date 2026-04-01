@@ -14,6 +14,13 @@ export const config = {
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
   webhookSecret: process.env.WEBHOOK_SECRET || "",
   sessionJwtSecret: req("SESSION_JWT_SECRET"),
+  bypass: {
+    // Optional extra subscription (e.g. from 3X-UI) that will be merged into Remnawave subscription.
+    subscriptionUrl: process.env.BYPASS_SUBSCRIPTION_URL || "",
+    insecureTls:
+      String(process.env.BYPASS_INSECURE_TLS || "").toLowerCase() === "1" ||
+      String(process.env.BYPASS_INSECURE_TLS || "").toLowerCase() === "true",
+  },
   remnawave: {
     baseUrl: process.env.REMNAWAVE_BASE_URL?.replace(/\/$/, "") || "",
     accessToken: process.env.REMNAWAVE_ACCESS_TOKEN || "",

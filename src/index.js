@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
+import { Agent } from "undici";
 import { config } from "./config.js";
 import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
@@ -37,6 +38,82 @@ function authMiddleware(req, res, next) {
 }
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+function isProbablyBase64(s) {
+  const t = String(s || "").trim();
+  if (!t || t.length < 16) return false;
+  if (t.includes("://") || t.includes("\n")) return false;
+  return /^[A-Za-z0-9+/=_-]+$/.test(t);
+}
+
+function decodeSubscriptionToLines(body) {
+  const raw = String(body || "").trim();
+  if (!raw) return [];
+  let text = raw;
+  if (isProbablyBase64(raw)) {
+    try {
+      text = Buffer.from(raw, "base64").toString("utf8");
+    } catch {
+      text = raw;
+    }
+  }
+  return text
+    .split(/\r?\n/g)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+}
+
+async function fetchText(url, opts = {}) {
+  const { insecureTls = false } = opts;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const dispatcher = insecureTls
+      ? new Agent({ connect: { rejectUnauthorized: false } })
+      : undefined;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+    if (!res.ok) {
+      const tt = await res.text().catch(() => "");
+      throw new Error(`fetch failed: ${res.status} ${tt}`.trim());
+    }
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Public merged subscription: Remnawave subscription (by shortUuid) + optional BYPASS_SUBSCRIPTION_URL (e.g. 3X-UI).
+app.get("/sub/merged/:shortUuid", async (req, res) => {
+  const shortUuid = String(req.params.shortUuid || "").trim();
+  if (!shortUuid) return res.status(400).send("short_uuid_required");
+  try {
+    const user = await rw.getUserByShortUuid(shortUuid);
+    if (!user?.subscriptionUrl) return res.status(404).send("subscription_not_found");
+
+    const [rwBody, bypassBody] = await Promise.all([
+      fetchText(user.subscriptionUrl),
+      config.bypass.subscriptionUrl
+        ? fetchText(config.bypass.subscriptionUrl, { insecureTls: config.bypass.insecureTls })
+        : Promise.resolve(""),
+    ]);
+
+    const lines = new Set([
+      ...decodeSubscriptionToLines(rwBody),
+      ...decodeSubscriptionToLines(bypassBody),
+    ]);
+
+    const out = Array.from(lines).join("\n");
+    const b64 = Buffer.from(out, "utf8").toString("base64");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.status(200).send(b64);
+  } catch (e) {
+    return res.status(500).send(String(e?.message || e));
+  }
+});
 
 app.post("/api/auth/telegram", (req, res) => {
   const { initData } = req.body || {};
