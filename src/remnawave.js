@@ -99,16 +99,18 @@ export async function getUserByShortUuid(shortUuid) {
   return data.response || null;
 }
 
-/** Remnawave ожидает [{ uuid: "..." }], а из env приходит строка UUID — нормализуем. */
+/** Remnawave ожидает массив строк UUID internal squads. */
 export function normalizeInternalSquadsInput(squads) {
   if (!squads?.length) return undefined;
-  return squads.map((s) =>
-    typeof s === "string"
-      ? { uuid: s.trim() }
-      : s && typeof s.uuid === "string"
-        ? { uuid: s.uuid }
-        : s,
-  );
+  return squads
+    .map((s) =>
+      typeof s === "string"
+        ? s.trim()
+        : s && typeof s.uuid === "string"
+          ? s.uuid.trim()
+          : "",
+    )
+    .filter(Boolean);
 }
 
 export async function createUser({
