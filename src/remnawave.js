@@ -149,9 +149,22 @@ export async function updateUser({ uuid, patch }) {
   if (body.activeInternalSquads?.length) {
     body.activeInternalSquads = normalizeInternalSquadsInput(body.activeInternalSquads);
   }
-  const res = await rwFetch("/api/users", { method: "PATCH", json: body });
+  let res = await rwFetch("/api/users", { method: "PATCH", json: body });
   if (!res.ok) {
     const t = await res.text();
+    // Some Remnawave builds fail PATCH /api/users when activeInternalSquads is present.
+    // Retry without squads to avoid blocking user updates.
+    if (body.activeInternalSquads?.length) {
+      const retryBody = { ...body };
+      delete retryBody.activeInternalSquads;
+      res = await rwFetch("/api/users", { method: "PATCH", json: retryBody });
+      if (res.ok) {
+        const retryData = await res.json();
+        return retryData.response;
+      }
+      const t2 = await res.text();
+      throw new Error(`updateUser: ${res.status} ${t2}`);
+    }
     throw new Error(`updateUser: ${res.status} ${t}`);
   }
   const data = await res.json();
