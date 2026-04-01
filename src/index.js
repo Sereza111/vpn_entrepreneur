@@ -138,6 +138,12 @@ async function loadMe(telegramId) {
   const users = await rw.getUsersByTelegramId(telegramId);
   const pick = users[0] || null;
   if (!pick) return { remnawaveUser: null };
+  const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
+  const hasMergeSource = Boolean(config.bypass.subscriptionUrl);
+  const mergedUrl =
+    base && hasMergeSource && pick.shortUuid
+      ? `${base}/sub/merged/${pick.shortUuid}`
+      : null;
   return {
     remnawaveUser: {
       uuid: pick.uuid,
@@ -145,7 +151,7 @@ async function loadMe(telegramId) {
       shortUuid: pick.shortUuid,
       status: pick.status,
       expireAt: pick.expireAt,
-      subscriptionUrl: pick.subscriptionUrl,
+      subscriptionUrl: mergedUrl || pick.subscriptionUrl,
       trafficLimitBytes: pick.trafficLimitBytes,
       hwidDeviceLimit: pick.hwidDeviceLimit ?? null,
       userTraffic: pick.userTraffic || null,
