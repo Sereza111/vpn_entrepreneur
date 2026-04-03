@@ -93,6 +93,7 @@ async function boot() {
   }
 
   const u = me.remnawaveUser;
+  const xui = me.xui || null;
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -266,6 +267,12 @@ async function boot() {
       <div class="label">Ссылка подписки</div>
       <div class="link" id="subUrl">${sub}</div>
     </div>
+    ${
+      xui && !xui.linked
+        ? `<button class="btn secondary" type="button" id="xuiProvisionBtn">Создать XUI-подписку</button>
+           <div class="muted" style="margin-top:8px">Нажмите один раз — бот создаст клиента в 3X-UI и выдаст новую ссылку.</div>`
+        : ""
+    }
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
@@ -312,6 +319,27 @@ async function boot() {
   document.getElementById("openBtn").onclick = () => {
     if (sub && sub !== "—") tg.openLink(sub);
   };
+
+  const provBtn = document.getElementById("xuiProvisionBtn");
+  if (provBtn) {
+    provBtn.onclick = async () => {
+      try {
+        provBtn.disabled = true;
+        provBtn.textContent = "Создаём...";
+        await api("/api/xui/provision", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        });
+        showToast("Готово. Обновляем...");
+        setTimeout(() => window.location.reload(), 700);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+        provBtn.disabled = false;
+        provBtn.textContent = "Создать XUI-подписку";
+      }
+    };
+  }
   document.querySelectorAll(".plan-btn").forEach((b) => {
     b.onclick = async () => {
       const days = b.getAttribute("data-days");
