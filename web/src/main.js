@@ -94,6 +94,7 @@ async function boot() {
 
   const u = me.remnawaveUser;
   const xui = me.xui || null;
+  const hasAccount = Boolean(u || xui?.linked);
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -129,7 +130,7 @@ async function boot() {
   );
   root.appendChild(head);
 
-  if (!u) {
+  if (!hasAccount) {
     const nav = el(`
       <div class="card">
         <div class="segmented">
@@ -196,13 +197,32 @@ async function boot() {
     return;
   }
 
-  const exp = u.expireAt ? new Date(u.expireAt).toLocaleString("ru-RU") : "—";
-  const status = u.status || "—";
-  const sub = u.subscriptionUrl || "—";
+  const st = me.subscriptionStatus || null;
+  const exp = st?.expireAt || u?.expireAt
+    ? new Date(st?.expireAt || u?.expireAt).toLocaleString("ru-RU")
+    : "—";
+  const status = st?.panelStatus || u?.status || "—";
+  const sub = me.subscriptionUrl || u?.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
-  const usedBytes = Number(u.userTraffic?.usedTrafficBytes ?? 0);
-  const limitBytes = Number(u.trafficLimitBytes ?? 0);
+  const isPending = String(status).toUpperCase() === "PENDING";
+  const usedBytes = Number(
+    st?.usedTrafficBytes ?? u?.userTraffic?.usedTrafficBytes ?? 0,
+  );
+  const limitBytes = Number(st?.trafficLimitBytes ?? u?.trafficLimitBytes ?? 0);
   const hasLimit = Number.isFinite(limitBytes) && limitBytes > 0;
+  const displayUser = st?.username || u?.username || "—";
+  const hwidOrDash =
+    st?.deviceLimit != null ? st.deviceLimit : (u?.hwidDeviceLimit ?? "—");
+  const limitEndStat =
+    st?.source === "xui"
+      ? `<div class="stat">
+        <div class="label">Лимит IP</div>
+        <div class="value">${st.ipLimit > 0 ? st.ipLimit : "∞"}</div>
+      </div>`
+      : `<div class="stat">
+        <div class="label">Лимит устройств</div>
+        <div class="value">${hwidOrDash}</div>
+      </div>`;
 
   const nav = el(`
     <div class="card">
@@ -216,8 +236,8 @@ async function boot() {
   root.appendChild(nav);
 
   const card = el(`<div class="card section is-visible" id="section-status">
-    <div class="chip ${isActive ? "active" : ""}">
-      ${isActive ? "Активна" : "Неактивна"}
+    <div class="chip ${isActive ? "active" : ""}" style="${isPending ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.35)" : ""}">
+      ${isActive ? "Активна" : isPending ? "Создайте клиента" : "Неактивна"}
     </div>
     <div class="meter" style="margin-top:10px">
       <div class="meter-head">
@@ -238,10 +258,10 @@ async function boot() {
     <div class="grid" style="margin-top:10px">
       <div class="stat">
         <div class="label">Пользователь</div>
-        <div class="value">${u.username || "—"}</div>
+        <div class="value">${displayUser}</div>
       </div>
       <div class="stat">
-        <div class="label">Статус панели</div>
+        <div class="label">${st?.source === "xui" ? "Статус (XUI)" : "Статус панели"}</div>
         <div class="value">${status}</div>
       </div>
       <div class="stat">
@@ -252,10 +272,7 @@ async function boot() {
         <div class="label">Трафик лимит</div>
         <div class="value">${hasLimit ? fmtBytes(limitBytes) : "∞"}</div>
       </div>
-      <div class="stat">
-        <div class="label">Лимит устройств</div>
-        <div class="value">${u.hwidDeviceLimit || "—"}</div>
-      </div>
+      ${limitEndStat}
     </div>
   </div>`);
   root.appendChild(card);
@@ -378,7 +395,12 @@ async function boot() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const u2 = me2.remnawaveUser;
-      const used2 = Number(u2?.userTraffic?.usedTrafficBytes ?? 0);
+      const st2 = me2.subscriptionStatus;
+      const used2 = Number(
+        st2?.usedTrafficBytes ?? u2?.userTraffic?.usedTrafficBytes ?? 0,
+      );
+      const limit2 = Number(st2?.trafficLimitBytes ?? u2?.trafficLimitBytes ?? 0);
+      const hasLimit2 = Number.isFinite(limit2) && limit2 > 0;
       const now = Date.now();
       const dt = Math.max(1, (now - last.at) / 1000);
       const du = Math.max(0, used2 - last.used);
@@ -390,14 +412,14 @@ async function boot() {
 
       const trafficEl = document.getElementById("trafficText");
       if (trafficEl) {
-        trafficEl.textContent = hasLimit
-          ? `${fmtBytes(used2)} / ${fmtBytes(limitBytes)}`
+        trafficEl.textContent = hasLimit2
+          ? `${fmtBytes(used2)} / ${fmtBytes(limit2)}`
           : `${fmtBytes(used2)} / ∞`;
       }
-      if (hasLimit) {
+      if (hasLimit2) {
         const fill = document.getElementById("trafficFill");
         if (fill) {
-          const pct = Math.min(100, Math.max(0, (used2 / limitBytes) * 100));
+          const pct = Math.min(100, Math.max(0, (used2 / limit2) * 100));
           fill.style.width = `${pct.toFixed(1)}%`;
         }
       }

@@ -185,11 +185,80 @@ async function loadMe(telegramId) {
       ? xuiPublicUrl
       : mergedUrl || pick?.subscriptionUrl || xuiPublicUrl || null;
 
+  /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
+  let subscriptionStatus = null;
+  const primaryIsXui = config.subscriptions.primary === "xui";
+  const canQueryXui =
+    primaryIsXui &&
+    Boolean(config.xui.panelBaseUrl && config.xui.username && config.xui.password) &&
+    Number(config.xui.inboundId) > 0;
+
+  if (canQueryXui) {
+    try {
+      const found = await xui.findClientInInbound({
+        inboundId: config.xui.inboundId,
+        telegramId,
+      });
+      if (found?.client) {
+        const email =
+          String(found.client.email || "").trim() ||
+          xui.stableXuiEmailFromTelegramId(telegramId);
+        const trJson = await xui.getClientTrafficsByEmail(email);
+        const t = trJson?.obj ?? trJson?.response ?? trJson;
+        const up = Number(t?.up ?? 0);
+        const down = Number(t?.down ?? 0);
+        const client = found.client;
+        const totalGb = Number(client.totalGB ?? client.totalGb ?? 0);
+        const expMs = Number(client.expiryTime ?? 0);
+        const limitIp = Number(client.limitIp ?? 0);
+        subscriptionStatus = {
+          source: "xui",
+          username: email,
+          panelStatus: client.enable === false ? "DISABLED" : "ACTIVE",
+          expireAt: expMs > 0 ? new Date(expMs).toISOString() : null,
+          usedTrafficBytes: up + down,
+          trafficLimitBytes: totalGb > 0 ? Math.round(totalGb * 1024 * 1024 * 1024) : 0,
+          ipLimit: Number.isFinite(limitIp) ? limitIp : null,
+        };
+      } else if (xuiPublicUrl) {
+        subscriptionStatus = {
+          source: "xui",
+          username: xui.stableXuiEmailFromTelegramId(telegramId),
+          panelStatus: "PENDING",
+          expireAt: null,
+          usedTrafficBytes: 0,
+          trafficLimitBytes: 0,
+          ipLimit: null,
+        };
+      }
+    } catch {
+      // не ломаем /api/me, если панель временно недоступна
+    }
+  }
+
+  if (!subscriptionStatus && pick) {
+    subscriptionStatus = {
+      source: "remnawave",
+      username: pick.username,
+      panelStatus: pick.status,
+      expireAt: pick.expireAt,
+      usedTrafficBytes: Number(pick.userTraffic?.usedTrafficBytes ?? 0),
+      trafficLimitBytes: Number(pick.trafficLimitBytes ?? 0),
+      ipLimit: null,
+      deviceLimit: pick.hwidDeviceLimit ?? null,
+    };
+  }
+
+  const xuiPayload = xuiLink
+    ? { linked: true, subscriptionUrl: xuiPublicUrl }
+    : { linked: false };
+
   if (!pick) {
     return {
       remnawaveUser: null,
       subscriptionUrl: primary,
-      xui: xuiLink ? { linked: true, subscriptionUrl: xuiPublicUrl } : { linked: false },
+      xui: xuiPayload,
+      subscriptionStatus,
     };
   }
   return {
@@ -205,7 +274,8 @@ async function loadMe(telegramId) {
       userTraffic: pick.userTraffic || null,
     },
     subscriptionUrl: primary,
-    xui: xuiLink ? { linked: true, subscriptionUrl: xuiPublicUrl } : { linked: false },
+    xui: xuiPayload,
+    subscriptionStatus,
   };
 }
 

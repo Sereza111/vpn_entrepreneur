@@ -134,6 +134,18 @@ export async function listInbounds() {
   return await res.json();
 }
 
+/** Статистика трафика клиента по email (как в панели). */
+export async function getClientTrafficsByEmail(email) {
+  const enc = encodeURIComponent(String(email || "").trim());
+  if (!enc) throw new Error("xui_email_required");
+  const res = await xuiFetch(`/panel/api/inbounds/getClientTraffics/${enc}`);
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`xui_get_traffic: ${res.status} ${t}`.trim());
+  }
+  return await res.json();
+}
+
 function safeJsonParse(s) {
   try {
     return JSON.parse(String(s || ""));
