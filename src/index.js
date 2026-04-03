@@ -308,11 +308,36 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     if (!config.xui.inboundId) {
       return res.status(503).json({ error: "xui_inbound_id_required" });
     }
-    // If already linked, just return /api/me payload.
     const existing = await xuiStore.getXuiLinkByTelegramId(tid);
     if (existing && !force) {
       const data = await loadMe(tid);
       return res.json({ ok: true, alreadyLinked: true, ...data });
+    }
+
+    // Уже есть клиент в XUI с этим tgId / email tg_<id> — не плодим новых, только синхронизируем subId.
+    const found = await xui.findClientInInbound({
+      inboundId: config.xui.inboundId,
+      telegramId: tid,
+    }).catch(() => null);
+    if (found?.client) {
+      const subFromClient = found.client.subId ? String(found.client.subId) : "";
+      const effective =
+        subFromClient ||
+        (await xui.getClientSubIdFromInbound({
+          inboundId: config.xui.inboundId,
+          telegramId: tid,
+          email: found.client.email,
+        }));
+      if (effective) {
+        await xuiStore.linkXuiSubscription({ telegramId: tid, xuiUrlOrToken: effective });
+        const data = await loadMe(tid);
+        return res.json({
+          ok: true,
+          reused: true,
+          xuiClientEmail: found.client.email || null,
+          ...data,
+        });
+      }
     }
 
     const created = await xui.addClientToInbound({
@@ -320,7 +345,6 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
       telegramId: tid,
     });
 
-    // Link by token (subId). Resolve to URL via XUI_BASE_URL on serve.
     await xuiStore.linkXuiSubscription({
       telegramId: tid,
       xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,

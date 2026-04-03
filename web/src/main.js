@@ -267,8 +267,8 @@ async function boot() {
       <div class="label">Ссылка подписки</div>
       <div class="link" id="subUrl">${sub}</div>
     </div>
-    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Пересоздать XUI-подписку" : "Создать XUI-подписку"}</button>
-    <div class="muted" style="margin-top:8px">Нажмите один раз — бот создаст клиента в 3X-UI и выдаст новую ссылку.</div>
+    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку"}</button>
+    <div class="muted" style="margin-top:8px">Если клиент уже есть в панели (ваш Telegram) — ссылка обновится без нового клиента. Новый клиент создаётся только при первом выдавании.</div>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
@@ -332,7 +332,7 @@ async function boot() {
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
         provBtn.disabled = false;
-        provBtn.textContent = xui?.linked ? "Пересоздать XUI-подписку" : "Создать XUI-подписку";
+        provBtn.textContent = xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку";
       }
     };
   }

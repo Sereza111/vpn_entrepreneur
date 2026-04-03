@@ -149,18 +149,40 @@ function normalizeClientsFromInbound(inbound) {
   return [];
 }
 
-export async function getClientSubIdFromInbound({ inboundId, telegramId, email }) {
+export function stableXuiEmailFromTelegramId(telegramId) {
+  return `tg_${String(telegramId)}`;
+}
+
+/** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */
+export async function findClientInInbound({ inboundId, telegramId }) {
   const list = await listInbounds();
   const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
   if (!inb) return null;
   const clients = normalizeClientsFromInbound(inb);
   const tid = String(telegramId);
+  const emailStable = stableXuiEmailFromTelegramId(telegramId);
   const pick =
     clients.find((c) => String(c?.tgId || "") === tid) ||
-    (email ? clients.find((c) => String(c?.email || "") === String(email)) : null) ||
+    clients.find((c) => String(c?.email || "") === emailStable) ||
+    clients.find((c) => String(c?.email || "").startsWith(`${emailStable}_`)) ||
     null;
-  const subId = pick?.subId ? String(pick.subId) : "";
-  return subId || null;
+  if (!pick) return null;
+  return { inbound: inb, client: pick };
+}
+
+export async function getClientSubIdFromInbound({ inboundId, telegramId, email }) {
+  const found = await findClientInInbound({ inboundId, telegramId }).catch(() => null);
+  if (found?.client?.subId) return String(found.client.subId);
+  if (email) {
+    const list = await listInbounds();
+    const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
+    if (!inb) return null;
+    const clients = normalizeClientsFromInbound(inb);
+    const pick = clients.find((c) => String(c?.email || "") === String(email)) || null;
+    const subId = pick?.subId ? String(pick.subId) : "";
+    return subId || null;
+  }
+  return null;
 }
 
 export function generateClientCreds({ telegramId }) {
@@ -169,7 +191,7 @@ export function generateClientCreds({ telegramId }) {
   // 3X-UI subscription ids are commonly short tokens (often 16+ chars).
   // Using UUID here can lead to 400 errors on /sub/<id> on some builds.
   const subId = crypto.randomBytes(8).toString("hex"); // 16 chars
-  const email = `tg_${tid}_${Date.now().toString(36)}`;
+  const email = stableXuiEmailFromTelegramId(telegramId);
   return { id, subId, email };
 }
 
