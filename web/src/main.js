@@ -267,12 +267,8 @@ async function boot() {
       <div class="label">Ссылка подписки</div>
       <div class="link" id="subUrl">${sub}</div>
     </div>
-    ${
-      xui && !xui.linked
-        ? `<button class="btn secondary" type="button" id="xuiProvisionBtn">Создать XUI-подписку</button>
-           <div class="muted" style="margin-top:8px">Нажмите один раз — бот создаст клиента в 3X-UI и выдаст новую ссылку.</div>`
-        : ""
-    }
+    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Пересоздать XUI-подписку" : "Создать XUI-подписку"}</button>
+    <div class="muted" style="margin-top:8px">Нажмите один раз — бот создаст клиента в 3X-UI и выдаст новую ссылку.</div>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
@@ -329,14 +325,14 @@ async function boot() {
         await api("/api/xui/provision", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ force: true }),
         });
         showToast("Готово. Обновляем...");
         setTimeout(() => window.location.reload(), 700);
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
         provBtn.disabled = false;
-        provBtn.textContent = "Создать XUI-подписку";
+        provBtn.textContent = xui?.linked ? "Пересоздать XUI-подписку" : "Создать XUI-подписку";
       }
     };
   }

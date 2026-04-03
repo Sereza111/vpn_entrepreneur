@@ -93,7 +93,10 @@ function resolveXuiUrlFromLink(link) {
   if (link.kind === "url") return link.value;
   if (link.kind === "token") {
     if (!config.xui.baseUrl) return null;
-    return `${config.xui.baseUrl}/sub/${link.value}`;
+    const root = String(config.xui.subPath || "/sub").trim() || "/sub";
+    const root2 = root.startsWith("/") ? root : `/${root}`;
+    const root3 = root2.replace(/\/+$/, "");
+    return `${config.xui.baseUrl}${root3}/${link.value}`;
   }
   return null;
 }
@@ -298,6 +301,7 @@ app.post("/api/unlink-xui", authMiddleware, async (req, res) => {
 app.post("/api/xui/provision", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const force = Boolean(req.body?.force);
     if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
       return res.status(503).json({ error: "xui_not_configured" });
     }
@@ -306,7 +310,7 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     }
     // If already linked, just return /api/me payload.
     const existing = await xuiStore.getXuiLinkByTelegramId(tid);
-    if (existing) {
+    if (existing && !force) {
       const data = await loadMe(tid);
       return res.json({ ok: true, alreadyLinked: true, ...data });
     }
@@ -319,7 +323,7 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     // Link by token (subId). Resolve to URL via XUI_BASE_URL on serve.
     await xuiStore.linkXuiSubscription({
       telegramId: tid,
-      xuiUrlOrToken: created.creds.subId,
+      xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
     });
 
     const data = await loadMe(tid);

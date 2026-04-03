@@ -28,6 +28,9 @@ export const config = {
     username: process.env.XUI_USERNAME || "",
     password: process.env.XUI_PASSWORD || "",
     inboundId: Number(process.env.XUI_INBOUND_ID || 0),
+    // Subscription path root on subscription host.
+    // Usually "/sub" (or custom if you changed "Корневой путь URL-адреса подписки" in 3X-UI).
+    subPath: process.env.XUI_SUB_PATH || "/sub",
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",

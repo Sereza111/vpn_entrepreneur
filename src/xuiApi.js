@@ -112,13 +112,42 @@ export async function listInbounds() {
   return await res.json();
 }
 
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(String(s || ""));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeClientsFromInbound(inbound) {
+  const st = safeJsonParse(inbound?.settings);
+  const clients = st?.clients;
+  if (Array.isArray(clients)) return clients;
+  return [];
+}
+
+export async function getClientSubIdFromInbound({ inboundId, telegramId, email }) {
+  const list = await listInbounds();
+  const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
+  if (!inb) return null;
+  const clients = normalizeClientsFromInbound(inb);
+  const tid = String(telegramId);
+  const pick =
+    clients.find((c) => String(c?.tgId || "") === tid) ||
+    (email ? clients.find((c) => String(c?.email || "") === String(email)) : null) ||
+    null;
+  const subId = pick?.subId ? String(pick.subId) : "";
+  return subId || null;
+}
+
 export function generateClientCreds({ telegramId }) {
   const tid = String(telegramId);
   const id = crypto.randomUUID();
   // 3X-UI subscription ids are commonly short tokens (often 16+ chars).
   // Using UUID here can lead to 400 errors on /sub/<id> on some builds.
   const subId = crypto.randomBytes(8).toString("hex"); // 16 chars
-  const email = `tg_${tid}`;
+  const email = `tg_${tid}_${Date.now().toString(36)}`;
   return { id, subId, email };
 }
 
@@ -160,6 +189,11 @@ export async function addClientToInbound({
     throw new Error(`xui_add_client: ${res.status} ${t}`.trim());
   }
   const data = await res.json().catch(() => ({}));
-  return { ok: true, creds, response: data };
+  const effective = await getClientSubIdFromInbound({
+    inboundId,
+    telegramId,
+    email: creds.email,
+  }).catch(() => null);
+  return { ok: true, creds: { ...creds, subIdEffective: effective }, response: data };
 }
 
