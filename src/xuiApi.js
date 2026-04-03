@@ -115,7 +115,9 @@ export async function listInbounds() {
 export function generateClientCreds({ telegramId }) {
   const tid = String(telegramId);
   const id = crypto.randomUUID();
-  const subId = crypto.randomUUID();
+  // 3X-UI subscription ids are commonly short tokens (often 16+ chars).
+  // Using UUID here can lead to 400 errors on /sub/<id> on some builds.
+  const subId = crypto.randomBytes(8).toString("hex"); // 16 chars
   const email = `tg_${tid}`;
   return { id, subId, email };
 }
