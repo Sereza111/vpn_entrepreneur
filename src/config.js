@@ -14,6 +14,18 @@ export const config = {
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
   webhookSecret: process.env.WEBHOOK_SECRET || "",
   sessionJwtSecret: req("SESSION_JWT_SECRET"),
+  subscriptions: {
+    // remnawave | xui
+    primary: (process.env.PRIMARY_SUBSCRIPTION_SOURCE || "remnawave").toLowerCase(),
+  },
+  xui: {
+    // Optional base URL for 3X-UI panel, used when user links only a token (sub id).
+    // Example: https://your-3xui-domain:2096
+    baseUrl: (process.env.XUI_BASE_URL || "").replace(/\/$/, ""),
+    insecureTls:
+      String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
+      String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
+  },
   bypass: {
     // Optional extra subscription (e.g. from 3X-UI) that will be merged into Remnawave subscription.
     subscriptionUrl: process.env.BYPASS_SUBSCRIPTION_URL || "",
