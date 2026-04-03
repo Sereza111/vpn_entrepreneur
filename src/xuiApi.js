@@ -17,6 +17,22 @@ function urlJoin(base, p) {
   return `${b}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+/** Корень панели: совпадает с webBasePath в 3X-UI (с регистром). */
+export function getPanelRoot() {
+  const base = String(config.xui.panelBaseUrl || "").trim();
+  const wp = String(config.xui.webBasePath || "").trim();
+  if (!base) return "";
+  if (!wp) return base.replace(/\/+$/, "");
+  let path = wp.startsWith("/") ? wp : `/${wp}`;
+  path = path.replace(/\/+$/, "");
+  try {
+    const u = new URL(base.includes("://") ? base : `https://${base}`);
+    return `${u.origin}${path}`;
+  } catch {
+    return `${base.replace(/\/+$/, "")}${path}`;
+  }
+}
+
 function encodeForm(obj) {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(obj || {})) {
@@ -42,11 +58,12 @@ function pickCookie(setCookieHeaders) {
 }
 
 async function xuiLogin() {
-  if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
+  const root = getPanelRoot();
+  if (!root || !config.xui.username || !config.xui.password) {
     throw new Error("xui_not_configured");
   }
   const dispatcher = getDispatcher();
-  const res = await fetch(urlJoin(config.xui.panelBaseUrl, "/login"), {
+  const res = await fetch(urlJoin(root, "/login"), {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -58,7 +75,11 @@ async function xuiLogin() {
   });
   if (!res.ok && res.status !== 302) {
     const t = await res.text().catch(() => "");
-    throw new Error(`xui_login_failed: ${res.status} ${t}`.trim());
+    const hint =
+      res.status === 404
+        ? " Проверь XUI_WEB_BASE_PATH: скопируй точный «Web Base Path» из 3X-UI (регистр букв!)."
+        : "";
+    throw new Error(`xui_login_failed: ${res.status} ${t}${hint}`.trim());
   }
   const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
   const cookie = pickCookie(sc);
@@ -74,6 +95,7 @@ async function xuiCookie() {
 }
 
 async function xuiFetch(path, { method = "GET", json } = {}) {
+  const root = getPanelRoot();
   const dispatcher = getDispatcher();
   const cookie = await xuiCookie();
   const headers = {
@@ -82,7 +104,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
   };
   if (json !== undefined) headers["Content-Type"] = "application/json";
 
-  let res = await fetch(urlJoin(config.xui.panelBaseUrl, path), {
+  let res = await fetch(urlJoin(root, path), {
     method,
     headers,
     body: json !== undefined ? JSON.stringify(json) : undefined,
@@ -93,7 +115,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
     cachedCookie = null;
     const cookie2 = await xuiCookie();
     headers.Cookie = cookie2;
-    res = await fetch(urlJoin(config.xui.panelBaseUrl, path), {
+    res = await fetch(urlJoin(root, path), {
       method,
       headers,
       body: json !== undefined ? JSON.stringify(json) : undefined,

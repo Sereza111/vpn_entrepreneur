@@ -25,6 +25,9 @@ export const config = {
     // Base URL for 3X-UI panel login/api (often same host as baseUrl).
     // Example: https://your-3xui-domain:2096
     panelBaseUrl: (process.env.XUI_PANEL_BASE_URL || "").replace(/\/$/, ""),
+    // 3X-UI "Web Base Path" из настроек (например /8dFlsHsLZMTgKsrUhd/).
+    // Если задан — к POST /login и /panel/api идём с XUI_PANEL_BASE_URL только как origin (https://ip:порт).
+    webBasePath: String(process.env.XUI_WEB_BASE_PATH || "").trim(),
     username: process.env.XUI_USERNAME || "",
     password: process.env.XUI_PASSWORD || "",
     inboundId: Number(process.env.XUI_INBOUND_ID || 0),
