@@ -19,9 +19,15 @@ export const config = {
     primary: (process.env.PRIMARY_SUBSCRIPTION_SOURCE || "remnawave").toLowerCase(),
   },
   xui: {
-    // Optional base URL for 3X-UI panel, used when user links only a token (sub id).
+    // Base URL for 3X-UI subscription host (where /sub/<id> is served).
     // Example: https://your-3xui-domain:2096
     baseUrl: (process.env.XUI_BASE_URL || "").replace(/\/$/, ""),
+    // Base URL for 3X-UI panel login/api (often same host as baseUrl).
+    // Example: https://your-3xui-domain:2096
+    panelBaseUrl: (process.env.XUI_PANEL_BASE_URL || "").replace(/\/$/, ""),
+    username: process.env.XUI_USERNAME || "",
+    password: process.env.XUI_PASSWORD || "",
+    inboundId: Number(process.env.XUI_INBOUND_ID || 0),
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",

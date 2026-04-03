@@ -8,6 +8,7 @@ import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
 import * as rw from "./remnawave.js";
 import * as xuiStore from "./xuiLinksStore.js";
+import * as xui from "./xuiApi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -290,6 +291,41 @@ app.post("/api/unlink-xui", authMiddleware, async (req, res) => {
     return res.json({ ok: true, ...data });
   } catch (e) {
     return res.status(500).json({ error: e.message });
+  }
+});
+
+// Auto-provision 3X-UI client for current Telegram user and link subscription.
+app.post("/api/xui/provision", authMiddleware, async (req, res) => {
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
+      return res.status(503).json({ error: "xui_not_configured" });
+    }
+    if (!config.xui.inboundId) {
+      return res.status(503).json({ error: "xui_inbound_id_required" });
+    }
+    // If already linked, just return /api/me payload.
+    const existing = await xuiStore.getXuiLinkByTelegramId(tid);
+    if (existing) {
+      const data = await loadMe(tid);
+      return res.json({ ok: true, alreadyLinked: true, ...data });
+    }
+
+    const created = await xui.addClientToInbound({
+      inboundId: config.xui.inboundId,
+      telegramId: tid,
+    });
+
+    // Link by token (subId). Resolve to URL via XUI_BASE_URL on serve.
+    await xuiStore.linkXuiSubscription({
+      telegramId: tid,
+      xuiUrlOrToken: created.creds.subId,
+    });
+
+    const data = await loadMe(tid);
+    return res.json({ ok: true, created: created.creds, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
