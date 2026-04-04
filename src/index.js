@@ -180,10 +180,14 @@ async function loadMe(telegramId) {
       ? `${base}/sub/merged/${pick.shortUuid}`
       : null;
 
+  // При основном источнике XUI не отдаём ссылку Remnawave, пока нет /sub/xui/… в боте.
   const primary =
-    config.subscriptions.primary === "xui" && xuiPublicUrl
-      ? xuiPublicUrl
+    config.subscriptions.primary === "xui"
+      ? xuiPublicUrl || null
       : mergedUrl || pick?.subscriptionUrl || xuiPublicUrl || null;
+
+  const subscriptionPrimarySource =
+    config.subscriptions.primary === "xui" ? "xui" : "remnawave";
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
@@ -236,7 +240,7 @@ async function loadMe(telegramId) {
     }
   }
 
-  if (!subscriptionStatus && pick) {
+  if (!subscriptionStatus && pick && config.subscriptions.primary !== "xui") {
     subscriptionStatus = {
       source: "remnawave",
       username: pick.username,
@@ -257,6 +261,7 @@ async function loadMe(telegramId) {
     return {
       remnawaveUser: null,
       subscriptionUrl: primary,
+      subscriptionPrimarySource,
       xui: xuiPayload,
       subscriptionStatus,
     };
@@ -274,6 +279,7 @@ async function loadMe(telegramId) {
       userTraffic: pick.userTraffic || null,
     },
     subscriptionUrl: primary,
+    subscriptionPrimarySource,
     xui: xuiPayload,
     subscriptionStatus,
   };
@@ -284,6 +290,59 @@ function calcNewDeviceLimit(currentLimit, addSlots) {
     ? Number(currentLimit)
     : config.remnawave.defaultHwidDeviceLimit;
   return Math.max(1, base + Number(addSlots || 0));
+}
+
+/**
+ * Создаёт клиента в 3X-UI (если нет) и привязывает subId в боте.
+ * @returns {"already_linked"|"reused"|"created"}
+ */
+async function xuiProvisionCore(telegramId, { force }) {
+  const tid = Number(telegramId);
+  if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
+    throw new Error("xui_not_configured");
+  }
+  if (!config.xui.inboundId) {
+    throw new Error("xui_inbound_id_required");
+  }
+  const existing = await xuiStore.getXuiLinkByTelegramId(tid);
+  if (existing && !force) {
+    return "already_linked";
+  }
+
+  const found = await xui
+    .findClientInInbound({
+      inboundId: config.xui.inboundId,
+      telegramId: tid,
+    })
+    .catch(() => null);
+  if (found?.client) {
+    const subFromClient = found.client.subId ? String(found.client.subId) : "";
+    const effective =
+      subFromClient ||
+      (await xui.getClientSubIdFromInbound({
+        inboundId: config.xui.inboundId,
+        telegramId: tid,
+        email: found.client.email,
+      }));
+    if (effective) {
+      await xuiStore.linkXuiSubscription({
+        telegramId: tid,
+        xuiUrlOrToken: effective,
+      });
+      return "reused";
+    }
+  }
+
+  const created = await xui.addClientToInbound({
+    inboundId: config.xui.inboundId,
+    telegramId: tid,
+  });
+
+  await xuiStore.linkXuiSubscription({
+    telegramId: tid,
+    xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
+  });
+  return "created";
 }
 
 app.get("/api/me", authMiddleware, async (req, res) => {
@@ -372,58 +431,23 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
     const force = Boolean(req.body?.force);
-    if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
-      return res.status(503).json({ error: "xui_not_configured" });
-    }
-    if (!config.xui.inboundId) {
-      return res.status(503).json({ error: "xui_inbound_id_required" });
-    }
-    const existing = await xuiStore.getXuiLinkByTelegramId(tid);
-    if (existing && !force) {
-      const data = await loadMe(tid);
+    const r = await xuiProvisionCore(tid, { force });
+    const data = await loadMe(tid);
+    if (r === "already_linked") {
       return res.json({ ok: true, alreadyLinked: true, ...data });
     }
-
-    // Уже есть клиент в XUI с этим tgId / email tg_<id> — не плодим новых, только синхронизируем subId.
-    const found = await xui.findClientInInbound({
-      inboundId: config.xui.inboundId,
-      telegramId: tid,
-    }).catch(() => null);
-    if (found?.client) {
-      const subFromClient = found.client.subId ? String(found.client.subId) : "";
-      const effective =
-        subFromClient ||
-        (await xui.getClientSubIdFromInbound({
-          inboundId: config.xui.inboundId,
-          telegramId: tid,
-          email: found.client.email,
-        }));
-      if (effective) {
-        await xuiStore.linkXuiSubscription({ telegramId: tid, xuiUrlOrToken: effective });
-        const data = await loadMe(tid);
-        return res.json({
-          ok: true,
-          reused: true,
-          xuiClientEmail: found.client.email || null,
-          ...data,
-        });
-      }
-    }
-
-    const created = await xui.addClientToInbound({
-      inboundId: config.xui.inboundId,
-      telegramId: tid,
+    return res.json({
+      ok: true,
+      reused: r === "reused",
+      created: r === "created",
+      ...data,
     });
-
-    await xuiStore.linkXuiSubscription({
-      telegramId: tid,
-      xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
-    });
-
-    const data = await loadMe(tid);
-    return res.json({ ok: true, created: created.creds, ...data });
   } catch (e) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    const msg = String(e?.message || e);
+    if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
+      return res.status(503).json({ error: msg });
+    }
+    return res.status(500).json({ error: msg });
   }
 });
 
@@ -446,6 +470,13 @@ app.post("/api/webhooks/payment", async (req, res) => {
   }
   try {
     const tid = Number(telegramId);
+    if (config.subscriptions.primary === "xui") {
+      if (days < 1 && slots < 1) {
+        return res.status(400).json({ error: "nothing_to_apply" });
+      }
+      await xuiProvisionCore(tid, { force: true });
+      return res.json({ ok: true });
+    }
     let users = await rw.getUsersByTelegramId(tid);
     const squads = config.remnawave.internalSquadUuids;
     if (!users.length) {
@@ -501,6 +532,11 @@ app.post("/api/test/grant", authMiddleware, async (req, res) => {
   }
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    if (config.subscriptions.primary === "xui") {
+      await xuiProvisionCore(tid, { force: true });
+      const data = await loadMe(tid);
+      return res.json({ ok: true, ...data });
+    }
     const users = await rw.getUsersByTelegramId(tid);
     const squads = config.remnawave.internalSquadUuids;
     if (!users.length) {

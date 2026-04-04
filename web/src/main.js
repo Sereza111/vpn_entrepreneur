@@ -202,7 +202,10 @@ async function boot() {
     ? new Date(st?.expireAt || u?.expireAt).toLocaleString("ru-RU")
     : "—";
   const status = st?.panelStatus || u?.status || "—";
-  const sub = me.subscriptionUrl || u?.subscriptionUrl || "—";
+  const sub =
+    me.subscriptionPrimarySource === "xui"
+      ? me.subscriptionUrl || "—"
+      : me.subscriptionUrl || u?.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
   const isPending = String(status).toUpperCase() === "PENDING";
   const usedBytes = Number(
