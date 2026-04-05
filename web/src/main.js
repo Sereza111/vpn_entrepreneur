@@ -280,9 +280,16 @@ async function boot() {
   </div>`);
   root.appendChild(card);
 
+  const isXuiPrimary = me.subscriptionPrimarySource === "xui";
+
   const connect = el(`<div class="card section" id="section-connect">
     <h3 class="value" style="margin:0 0 6px">Подключение VPN</h3>
     <p class="muted">Скопируйте подписку или откройте ссылку напрямую в клиенте.</p>
+    ${
+      isXuiPrimary
+        ? `<p class="muted" style="margin-top:8px;line-height:1.45">На втором устройстве (ПК) добавляйте <b>подписку по URL</b> / «обновить подписку», а не «импорт из буфера как YAML/конфиг» — иначе клиент пытается разобрать base64 как YAML и показывает ошибку про <code>vless</code>.</p>`
+        : ""
+    }
     <div class="link-block">
       <div class="label">Ссылка подписки</div>
       <div class="link" id="subUrl">${sub}</div>
@@ -302,7 +309,11 @@ async function boot() {
       <button class="plan-btn" data-days="90">90 дней</button>
       <button class="plan-btn" data-days="180">180 дней</button>
     </div>
-    <button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>
+    ${
+      isXuiPrimary
+        ? `<p class="muted" style="margin-top:10px;line-height:1.45">Лимит «+1 устройство» в боте относится к старой схеме Remnawave. Для XUI один и тот же URL подписки можно поставить на несколько устройств; ограничение по IP задаётся в панели 3X-UI (limit IP), не через эту кнопку.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
+    }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
   </div>`);
   root.appendChild(extend);
@@ -372,19 +383,22 @@ async function boot() {
       }
     };
   });
-  document.getElementById("addDeviceBtn").onclick = async () => {
-    try {
-      await api("/api/test/add-device-slot", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ slots: 1 }),
-      });
-      showToast("Лимит устройств увеличен на +1");
-      setTimeout(() => window.location.reload(), 700);
-    } catch (e) {
-      showToast(`Ошибка: ${e.message}`);
-    }
-  };
+  const addDev = document.getElementById("addDeviceBtn");
+  if (addDev) {
+    addDev.onclick = async () => {
+      try {
+        await api("/api/test/add-device-slot", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ slots: 1 }),
+        });
+        showToast("Лимит устройств увеличен на +1");
+        setTimeout(() => window.location.reload(), 700);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
+    };
+  }
   document.getElementById("supportBtn").onclick = () => {
     tg.openTelegramLink("https://t.me/VL_VPNbot");
   };

@@ -584,6 +584,12 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
     return res.status(400).json({ error: "bad_slots" });
   }
   try {
+    if (config.subscriptions.primary === "xui") {
+      return res.status(400).json({
+        error:
+          "not_applicable: для подписки XUI один URL добавляется на все устройства; лимит по IP настраивается в 3X-UI, не через эту кнопку",
+      });
+    }
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
     const users = await rw.getUsersByTelegramId(tid);
     if (!users.length) {
