@@ -204,6 +204,24 @@ async function loadMe(telegramId) {
     subscriptionPrimarySource,
     xui: xuiPayload,
     subscriptionStatus,
+    proxy:
+      config.proxy.host && config.proxy.username && config.proxy.password
+        ? {
+            host: config.proxy.host,
+            socks5: {
+              host: config.proxy.host,
+              port: config.proxy.socksPort,
+              username: config.proxy.username,
+              password: config.proxy.password,
+            },
+            http: {
+              host: config.proxy.host,
+              port: config.proxy.httpPort,
+              username: config.proxy.username,
+              password: config.proxy.password,
+            },
+          }
+        : null,
   };
 }
 

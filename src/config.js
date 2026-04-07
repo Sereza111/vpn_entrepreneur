@@ -37,6 +37,13 @@ export const config = {
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
   },
+  proxy: {
+    host: process.env.PROXY_HOST || "",
+    socksPort: Number(process.env.PROXY_SOCKS_PORT || 1080),
+    httpPort: Number(process.env.PROXY_HTTP_PORT || 3128),
+    username: process.env.PROXY_USERNAME || "",
+    password: process.env.PROXY_PASSWORD || "",
+  },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:

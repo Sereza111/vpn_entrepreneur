@@ -226,11 +226,13 @@ async function boot() {
         <div class="value">${hwidOrDash}</div>
       </div>`;
 
+  const hasProxy = Boolean(me.proxy?.host);
   const nav = el(`
     <div class="card">
       <div class="segmented">
         <button class="seg-btn active" data-target="status">Статус</button>
         <button class="seg-btn" data-target="connect">Подключение</button>
+        ${hasProxy ? `<button class="seg-btn" data-target="proxy">Прокси</button>` : ""}
         <button class="seg-btn" data-target="extend">Продление</button>
       </div>
     </div>
@@ -300,6 +302,27 @@ async function boot() {
   </div>`);
   root.appendChild(connect);
 
+  if (hasProxy) {
+    const p = me.proxy;
+    const proxySec = el(`<div class="card section" id="section-proxy">
+      <h3 class="value" style="margin:0 0 6px">Прокси</h3>
+      <p class="muted">SOCKS5 и HTTP прокси (отдельная услуга).</p>
+
+      <div class="link-block" style="margin-top:10px">
+        <div class="label">SOCKS5</div>
+        <div class="link" id="socksLine">${p.socks5.host}:${p.socks5.port}  ${p.socks5.username}:${p.socks5.password}</div>
+      </div>
+      <button class="btn secondary" type="button" id="copySocksBtn">Скопировать SOCKS5</button>
+
+      <div class="link-block" style="margin-top:10px">
+        <div class="label">HTTP proxy</div>
+        <div class="link" id="httpLine">${p.http.host}:${p.http.port}  ${p.http.username}:${p.http.password}</div>
+      </div>
+      <button class="btn secondary" type="button" id="copyHttpBtn">Скопировать HTTP</button>
+    </div>`);
+    root.appendChild(proxySec);
+  }
+
   const extend = el(`<div class="card section" id="section-extend">
     <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
     <p class="muted">Выберите план. После оплаты срок обновится автоматически.</p>
@@ -346,6 +369,27 @@ async function boot() {
   document.getElementById("openBtn").onclick = () => {
     if (sub && sub !== "—") tg.openLink(sub);
   };
+
+  const copySocksBtn = document.getElementById("copySocksBtn");
+  if (copySocksBtn) {
+    copySocksBtn.onclick = async () => {
+      const p = me.proxy?.socks5;
+      const line = p ? `${p.host}:${p.port} ${p.username}:${p.password}` : "";
+      if (!line) return;
+      await navigator.clipboard.writeText(line);
+      showToast("SOCKS5 скопирован");
+    };
+  }
+  const copyHttpBtn = document.getElementById("copyHttpBtn");
+  if (copyHttpBtn) {
+    copyHttpBtn.onclick = async () => {
+      const p = me.proxy?.http;
+      const line = p ? `${p.host}:${p.port} ${p.username}:${p.password}` : "";
+      if (!line) return;
+      await navigator.clipboard.writeText(line);
+      showToast("HTTP прокси скопирован");
+    };
+  }
 
   const provBtn = document.getElementById("xuiProvisionBtn");
   if (provBtn) {
