@@ -328,7 +328,7 @@ async function boot() {
                ${servers
                  .map(
                    (s) =>
-                     `<button class="plan-btn proxy-btn" data-proxy-server="${s.id}">${s.country || s.id}</button>`,
+                     `<button class="proxy-btn" data-proxy-server="${s.id}">${s.country || s.id}</button>`,
                  )
                  .join("")}
              </div>
@@ -456,7 +456,7 @@ async function boot() {
       }
     };
   }
-  document.querySelectorAll(".plan-btn").forEach((b) => {
+  document.querySelectorAll(".plan-btn[data-days]").forEach((b) => {
     b.onclick = async () => {
       const days = b.getAttribute("data-days");
       try {
