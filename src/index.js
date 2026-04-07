@@ -8,6 +8,12 @@ import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
 import * as xuiStore from "./xuiLinksStore.js";
 import * as xui from "./xuiApi.js";
+import * as proxyStore from "./proxyStore.js";
+import {
+  ensureProxyUserOnServer,
+  generateProxyCredentials,
+  parseProxyServers,
+} from "./proxyProvision.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -198,30 +204,39 @@ async function loadMe(telegramId) {
     ? { linked: true, subscriptionUrl: xuiPublicUrl }
     : { linked: false };
 
+  const proxyServers = parseProxyServers(config.proxy.serversJson);
+  const proxyRec = await proxyStore.getProxyByTelegramId(telegramId);
+  const proxyServer =
+    proxyRec?.serverId
+      ? proxyServers.find((s) => s.id === proxyRec.serverId) || null
+      : null;
+  const proxyPayload = proxyRec && proxyServer
+    ? {
+        country: proxyServer.country,
+        serverId: proxyServer.id,
+        socks5: {
+          host: proxyServer.host,
+          port: proxyServer.socksPort,
+          username: proxyRec.username,
+          password: proxyRec.password,
+        },
+        http: {
+          host: proxyServer.host,
+          port: proxyServer.httpPort,
+          username: proxyRec.username,
+          password: proxyRec.password,
+        },
+      }
+    : null;
+
   return {
     remnawaveUser: null,
     subscriptionUrl: primary,
     subscriptionPrimarySource,
     xui: xuiPayload,
     subscriptionStatus,
-    proxy:
-      config.proxy.host && config.proxy.username && config.proxy.password
-        ? {
-            host: config.proxy.host,
-            socks5: {
-              host: config.proxy.host,
-              port: config.proxy.socksPort,
-              username: config.proxy.username,
-              password: config.proxy.password,
-            },
-            http: {
-              host: config.proxy.host,
-              port: config.proxy.httpPort,
-              username: config.proxy.username,
-              password: config.proxy.password,
-            },
-          }
-        : null,
+    proxy: proxyPayload,
+    proxyServers: proxyServers.map((s) => ({ id: s.id, country: s.country })),
   };
 }
 
@@ -353,6 +368,36 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
       return res.status(503).json({ error: msg });
     }
     return res.status(500).json({ error: msg });
+  }
+});
+
+// Create per-user proxy account on selected proxy server.
+app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const servers = parseProxyServers(config.proxy.serversJson);
+    const serverId = String(req.body?.serverId || "").trim();
+    const server = servers.find((s) => s.id === serverId) || null;
+    if (!server) return res.status(400).json({ error: "bad_serverId" });
+
+    const existing = await proxyStore.getProxyByTelegramId(tid);
+    if (existing?.serverId === serverId) {
+      const data = await loadMe(tid);
+      return res.json({ ok: true, alreadyProvisioned: true, ...data });
+    }
+
+    const creds = generateProxyCredentials(tid);
+    await ensureProxyUserOnServer({ server, username: creds.username, password: creds.password });
+    await proxyStore.setProxyForTelegramId(tid, {
+      serverId,
+      username: creds.username,
+      password: creds.password,
+      createdAt: new Date().toISOString(),
+    });
+    const data = await loadMe(tid);
+    return res.json({ ok: true, created: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
   }
 });
 

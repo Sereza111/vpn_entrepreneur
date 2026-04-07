@@ -226,7 +226,7 @@ async function boot() {
         <div class="value">${hwidOrDash}</div>
       </div>`;
 
-  const hasProxy = Boolean(me.proxy?.host);
+  const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
   const nav = el(`
     <div class="card">
       <div class="segmented">
@@ -304,21 +304,36 @@ async function boot() {
 
   if (hasProxy) {
     const p = me.proxy;
+    const servers = Array.isArray(me.proxyServers) ? me.proxyServers : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
       <h3 class="value" style="margin:0 0 6px">Прокси</h3>
       <p class="muted">SOCKS5 и HTTP прокси (отдельная услуга).</p>
 
-      <div class="link-block" style="margin-top:10px">
-        <div class="label">SOCKS5</div>
-        <div class="link" id="socksLine">${p.socks5.host}:${p.socks5.port}  ${p.socks5.username}:${p.socks5.password}</div>
-      </div>
-      <button class="btn secondary" type="button" id="copySocksBtn">Скопировать SOCKS5</button>
+      ${
+        p
+          ? `<div class="muted" style="margin-top:8px">Страна: <b>${p.country || "—"}</b></div>
+             <div class="link-block" style="margin-top:10px">
+               <div class="label">SOCKS5</div>
+               <div class="link" id="socksLine">${p.socks5.host}:${p.socks5.port}  ${p.socks5.username}:${p.socks5.password}</div>
+             </div>
+             <button class="btn secondary" type="button" id="copySocksBtn">Скопировать SOCKS5</button>
 
-      <div class="link-block" style="margin-top:10px">
-        <div class="label">HTTP proxy</div>
-        <div class="link" id="httpLine">${p.http.host}:${p.http.port}  ${p.http.username}:${p.http.password}</div>
-      </div>
-      <button class="btn secondary" type="button" id="copyHttpBtn">Скопировать HTTP</button>
+             <div class="link-block" style="margin-top:10px">
+               <div class="label">HTTP proxy</div>
+               <div class="link" id="httpLine">${p.http.host}:${p.http.port}  ${p.http.username}:${p.http.password}</div>
+             </div>
+             <button class="btn secondary" type="button" id="copyHttpBtn">Скопировать HTTP</button>`
+          : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>
+             <div class="plans" style="margin-top:10px">
+               ${servers
+                 .map(
+                   (s) =>
+                     `<button class="plan-btn proxy-btn" data-proxy-server="${s.id}">${s.country || s.id}</button>`,
+                 )
+                 .join("")}
+             </div>
+             <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
+      }
     </div>`);
     root.appendChild(proxySec);
   }
@@ -388,6 +403,36 @@ async function boot() {
       if (!line) return;
       await navigator.clipboard.writeText(line);
       showToast("HTTP прокси скопирован");
+    };
+  }
+
+  const proxyCreateBtn = document.getElementById("proxyCreateBtn");
+  if (proxyCreateBtn) {
+    let selectedServer = null;
+    document.querySelectorAll(".proxy-btn").forEach((b) => {
+      b.onclick = () => {
+        document.querySelectorAll(".proxy-btn").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        selectedServer = b.getAttribute("data-proxy-server");
+      };
+    });
+    proxyCreateBtn.onclick = async () => {
+      try {
+        if (!selectedServer) return showToast("Выберите страну");
+        proxyCreateBtn.disabled = true;
+        proxyCreateBtn.textContent = "Создаём...";
+        await api("/api/proxy/provision", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ serverId: selectedServer }),
+        });
+        showToast("Прокси создан");
+        setTimeout(() => window.location.reload(), 700);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+        proxyCreateBtn.disabled = false;
+        proxyCreateBtn.textContent = "Создать прокси";
+      }
     };
   }
 
