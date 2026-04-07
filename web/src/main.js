@@ -314,6 +314,10 @@ async function boot() {
         `<div class="muted" style="margin-top:8px">
            Доступно: <b>${Number(p.remaining || 0)}</b> / Куплено: <b>${Number(p.total || 0)}</b>
          </div>
+         <div class="plans" style="margin-top:10px">
+           <button class="plan-btn" type="button" id="proxyTestGrant1">Тест: +1 прокси</button>
+           <button class="plan-btn" type="button" id="proxyTestGrant5">Тест: +5 прокси</button>
+         </div>
          ${
            items.length
              ? `<div class="muted" style="margin-top:8px">Ваши прокси:</div>
@@ -419,6 +423,43 @@ async function boot() {
         showToast(`Ошибка: ${e.message}`);
         proxyCreateBtn.disabled = false;
         proxyCreateBtn.textContent = "Создать прокси";
+      }
+    };
+  }
+
+  const proxyTestGrant1 = document.getElementById("proxyTestGrant1");
+  if (proxyTestGrant1) {
+    proxyTestGrant1.onclick = async () => {
+      try {
+        proxyTestGrant1.disabled = true;
+        await api("/api/test/proxy/grant", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ count: 1, days: 30 }),
+        });
+        showToast("Выдано +1 прокси (тест)");
+        setTimeout(() => window.location.reload(), 600);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+        proxyTestGrant1.disabled = false;
+      }
+    };
+  }
+  const proxyTestGrant5 = document.getElementById("proxyTestGrant5");
+  if (proxyTestGrant5) {
+    proxyTestGrant5.onclick = async () => {
+      try {
+        proxyTestGrant5.disabled = true;
+        await api("/api/test/proxy/grant", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ count: 5, days: 30 }),
+        });
+        showToast("Выдано +5 прокси (тест)");
+        setTimeout(() => window.location.reload(), 600);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+        proxyTestGrant5.disabled = false;
       }
     };
   }
