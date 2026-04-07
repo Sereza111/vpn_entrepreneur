@@ -6,7 +6,6 @@ import { Agent } from "undici";
 import { config } from "./config.js";
 import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
-import * as rw from "./remnawave.js";
 import * as xuiStore from "./xuiLinksStore.js";
 import * as xui from "./xuiApi.js";
 
@@ -118,35 +117,6 @@ app.get("/sub/xui/:token", async (req, res) => {
   }
 });
 
-// Public merged subscription: Remnawave subscription (by shortUuid) + optional BYPASS_SUBSCRIPTION_URL (e.g. 3X-UI).
-app.get("/sub/merged/:shortUuid", async (req, res) => {
-  const shortUuid = String(req.params.shortUuid || "").trim();
-  if (!shortUuid) return res.status(400).send("short_uuid_required");
-  try {
-    const user = await rw.getUserByShortUuid(shortUuid);
-    if (!user?.subscriptionUrl) return res.status(404).send("subscription_not_found");
-
-    const [rwBody, bypassBody] = await Promise.all([
-      fetchText(user.subscriptionUrl),
-      config.bypass.subscriptionUrl
-        ? fetchText(config.bypass.subscriptionUrl, { insecureTls: config.bypass.insecureTls })
-        : Promise.resolve(""),
-    ]);
-
-    const lines = new Set([
-      ...decodeSubscriptionToLines(rwBody),
-      ...decodeSubscriptionToLines(bypassBody),
-    ]);
-
-    const out = Array.from(lines).join("\n");
-    const b64 = Buffer.from(out, "utf8").toString("base64");
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    return res.status(200).send(b64);
-  } catch (e) {
-    return res.status(500).send(String(e?.message || e));
-  }
-});
-
 app.post("/api/auth/telegram", (req, res) => {
   const { initData } = req.body || {};
   const v = validateWebAppInitData(initData);
@@ -172,28 +142,12 @@ async function loadMe(telegramId) {
   const xuiPublicUrl =
     base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
 
-  const users = await rw.getUsersByTelegramId(telegramId);
-  const pick = users[0] || null;
-  const hasMergeSource = Boolean(config.bypass.subscriptionUrl);
-  const mergedUrl =
-    base && hasMergeSource && pick?.shortUuid
-      ? `${base}/sub/merged/${pick.shortUuid}`
-      : null;
-
-  // При основном источнике XUI не отдаём ссылку Remnawave, пока нет /sub/xui/… в боте.
-  const primary =
-    config.subscriptions.primary === "xui"
-      ? xuiPublicUrl || null
-      : mergedUrl || pick?.subscriptionUrl || xuiPublicUrl || null;
-
-  const subscriptionPrimarySource =
-    config.subscriptions.primary === "xui" ? "xui" : "remnawave";
+  const primary = xuiPublicUrl || null;
+  const subscriptionPrimarySource = "xui";
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
-  const primaryIsXui = config.subscriptions.primary === "xui";
   const canQueryXui =
-    primaryIsXui &&
     Boolean(config.xui.panelBaseUrl && config.xui.username && config.xui.password) &&
     Number(config.xui.inboundId) > 0;
 
@@ -240,44 +194,12 @@ async function loadMe(telegramId) {
     }
   }
 
-  if (!subscriptionStatus && pick && config.subscriptions.primary !== "xui") {
-    subscriptionStatus = {
-      source: "remnawave",
-      username: pick.username,
-      panelStatus: pick.status,
-      expireAt: pick.expireAt,
-      usedTrafficBytes: Number(pick.userTraffic?.usedTrafficBytes ?? 0),
-      trafficLimitBytes: Number(pick.trafficLimitBytes ?? 0),
-      ipLimit: null,
-      deviceLimit: pick.hwidDeviceLimit ?? null,
-    };
-  }
-
   const xuiPayload = xuiLink
     ? { linked: true, subscriptionUrl: xuiPublicUrl }
     : { linked: false };
 
-  if (!pick) {
-    return {
-      remnawaveUser: null,
-      subscriptionUrl: primary,
-      subscriptionPrimarySource,
-      xui: xuiPayload,
-      subscriptionStatus,
-    };
-  }
   return {
-    remnawaveUser: {
-      uuid: pick.uuid,
-      username: pick.username,
-      shortUuid: pick.shortUuid,
-      status: pick.status,
-      expireAt: pick.expireAt,
-      subscriptionUrl: primary,
-      trafficLimitBytes: pick.trafficLimitBytes,
-      hwidDeviceLimit: pick.hwidDeviceLimit ?? null,
-      userTraffic: pick.userTraffic || null,
-    },
+    remnawaveUser: null,
     subscriptionUrl: primary,
     subscriptionPrimarySource,
     xui: xuiPayload,
@@ -288,7 +210,7 @@ async function loadMe(telegramId) {
 function calcNewDeviceLimit(currentLimit, addSlots) {
   const base = Number.isFinite(Number(currentLimit)) && Number(currentLimit) > 0
     ? Number(currentLimit)
-    : config.remnawave.defaultHwidDeviceLimit;
+    : 1;
   return Math.max(1, base + Number(addSlots || 0));
 }
 
@@ -365,41 +287,6 @@ app.get("/api/subscription", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/api/link-subscription", authMiddleware, async (req, res) => {
-  const raw = String(req.body?.shortUuid || "").trim();
-  if (!raw) return res.status(400).json({ error: "short_uuid_required" });
-
-  // Accept either short UUID itself or full subscription URL.
-  const m = raw.match(/\/sub\/([^/?#]+)/i);
-  const shortUuid = (m?.[1] || raw).trim();
-  if (!shortUuid) return res.status(400).json({ error: "invalid_short_uuid" });
-
-  try {
-    const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    const alreadyLinked = await rw.getUsersByTelegramId(tid);
-    if (alreadyLinked.length) {
-      return res.status(409).json({ error: "telegram_already_linked" });
-    }
-
-    const user = await rw.getUserByShortUuid(shortUuid);
-    if (!user) return res.status(404).json({ error: "subscription_not_found" });
-
-    if (user.telegramId && Number(user.telegramId) !== tid) {
-      return res.status(409).json({ error: "subscription_already_linked" });
-    }
-
-    await rw.updateUser({
-      uuid: user.uuid,
-      patch: { telegramId: tid },
-    });
-
-    const data = await loadMe(tid);
-    return res.json({ ok: true, ...data });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
 // Link 3X-UI subscription to this Telegram user.
 // Body: { subscriptionUrlOrToken: "https://.../sub/xxxx" } OR { subscriptionUrlOrToken: "xxxx" }
 app.post("/api/link-xui", authMiddleware, async (req, res) => {
@@ -470,52 +357,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
   }
   try {
     const tid = Number(telegramId);
-    if (config.subscriptions.primary === "xui") {
-      if (days < 1 && slots < 1) {
-        return res.status(400).json({ error: "nothing_to_apply" });
-      }
-      await xuiProvisionCore(tid, { force: true });
-      return res.json({ ok: true });
+    if (days < 1 && slots < 1) {
+      return res.status(400).json({ error: "nothing_to_apply" });
     }
-    let users = await rw.getUsersByTelegramId(tid);
-    const squads = config.remnawave.internalSquadUuids;
-    if (!users.length) {
-      if (days < 1) {
-        return res.status(404).json({ error: "subscription_not_found_for_device_addon" });
-      }
-      const uname = rw.defaultUsernameFromTelegramId(tid);
-      const expireAt = rw.addDaysIso(days);
-      const created = await rw.createUser({
-        username: uname,
-        expireAtIso: expireAt,
-        telegramId: tid,
-        activeInternalSquads: squads,
-        hwidDeviceLimit: config.remnawave.defaultHwidDeviceLimit,
-      });
-      users = [created];
-    } else {
-      if (days > 0) {
-        await rw.bulkExtendExpiration([users[0].uuid], days);
-      }
-    }
-    const patch = {};
-    if (squads?.length) {
-      patch.activeInternalSquads = squads;
-    }
-    if (slots > 0) {
-      patch.hwidDeviceLimit = calcNewDeviceLimit(users[0]?.hwidDeviceLimit, slots);
-    } else if (
-      !users[0]?.hwidDeviceLimit &&
-      Number(config.remnawave.defaultHwidDeviceLimit) > 0
-    ) {
-      patch.hwidDeviceLimit = Number(config.remnawave.defaultHwidDeviceLimit);
-    }
-    if (Object.keys(patch).length) {
-      await rw.updateUser({
-        uuid: users[0].uuid,
-        patch,
-      });
-    }
+    await xuiProvisionCore(tid, { force: true });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -532,42 +377,7 @@ app.post("/api/test/grant", authMiddleware, async (req, res) => {
   }
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    if (config.subscriptions.primary === "xui") {
-      await xuiProvisionCore(tid, { force: true });
-      const data = await loadMe(tid);
-      return res.json({ ok: true, ...data });
-    }
-    const users = await rw.getUsersByTelegramId(tid);
-    const squads = config.remnawave.internalSquadUuids;
-    if (!users.length) {
-      const uname = rw.defaultUsernameFromTelegramId(tid);
-      const expireAt = rw.addDaysIso(days);
-      await rw.createUser({
-        username: uname,
-        expireAtIso: expireAt,
-        telegramId: tid,
-        activeInternalSquads: squads,
-        hwidDeviceLimit: config.remnawave.defaultHwidDeviceLimit,
-      });
-    } else {
-      await rw.bulkExtendExpiration([users[0].uuid], days);
-      const patch = {};
-      if (squads?.length) {
-        patch.activeInternalSquads = squads;
-      }
-      if (
-        !users[0]?.hwidDeviceLimit &&
-        Number(config.remnawave.defaultHwidDeviceLimit) > 0
-      ) {
-        patch.hwidDeviceLimit = Number(config.remnawave.defaultHwidDeviceLimit);
-      }
-      if (Object.keys(patch).length) {
-        await rw.updateUser({
-          uuid: users[0].uuid,
-          patch,
-        });
-      }
-    }
+    await xuiProvisionCore(tid, { force: true });
     const data = await loadMe(tid);
     return res.json({ ok: true, ...data });
   } catch (e) {
@@ -584,30 +394,16 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
     return res.status(400).json({ error: "bad_slots" });
   }
   try {
-    if (config.subscriptions.primary === "xui") {
-      // Ensure client exists / link is present, then bump limitIp.
-      await xuiProvisionCore(Number(req.tgSession.sub || req.tgSession.tg), { force: true });
-      const tid = Number(req.tgSession.sub || req.tgSession.tg);
-      const r = await xui.incrementClientLimitIp({
-        inboundId: config.xui.inboundId,
-        telegramId: tid,
-        addSlots: slots,
-      });
-      const data = await loadMe(tid);
-      return res.json({ ok: true, addedSlots: slots, xuiLimitIp: r.next, ...data });
-    }
+    // Ensure client exists / link is present, then bump limitIp.
+    await xuiProvisionCore(Number(req.tgSession.sub || req.tgSession.tg), { force: true });
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    const users = await rw.getUsersByTelegramId(tid);
-    if (!users.length) {
-      return res.status(404).json({ error: "subscription_not_found" });
-    }
-    const nextLimit = calcNewDeviceLimit(users[0]?.hwidDeviceLimit, slots);
-    await rw.updateUser({
-      uuid: users[0].uuid,
-      patch: { hwidDeviceLimit: nextLimit },
+    const r = await xui.incrementClientLimitIp({
+      inboundId: config.xui.inboundId,
+      telegramId: tid,
+      addSlots: slots,
     });
     const data = await loadMe(tid);
-    return res.json({ ok: true, addedSlots: slots, hwidDeviceLimit: nextLimit, ...data });
+    return res.json({ ok: true, addedSlots: slots, xuiLimitIp: r.next, ...data });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

@@ -92,7 +92,7 @@ async function boot() {
     return;
   }
 
-  const u = me.remnawaveUser;
+  const u = null;
   const xui = me.xui || null;
   const hasAccount = Boolean(u || xui?.linked);
   root.innerHTML = "";
@@ -198,24 +198,23 @@ async function boot() {
   }
 
   const st = me.subscriptionStatus || null;
-  const exp = st?.expireAt || u?.expireAt
-    ? new Date(st?.expireAt || u?.expireAt).toLocaleString("ru-RU")
+  const exp = st?.expireAt
+    ? new Date(st.expireAt).toLocaleString("ru-RU")
     : "—";
-  const status = st?.panelStatus || u?.status || "—";
+  const status = st?.panelStatus || "—";
   const sub =
     me.subscriptionPrimarySource === "xui"
       ? me.subscriptionUrl || "—"
-      : me.subscriptionUrl || u?.subscriptionUrl || "—";
+      : me.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
   const isPending = String(status).toUpperCase() === "PENDING";
   const usedBytes = Number(
-    st?.usedTrafficBytes ?? u?.userTraffic?.usedTrafficBytes ?? 0,
+    st?.usedTrafficBytes ?? 0,
   );
-  const limitBytes = Number(st?.trafficLimitBytes ?? u?.trafficLimitBytes ?? 0);
+  const limitBytes = Number(st?.trafficLimitBytes ?? 0);
   const hasLimit = Number.isFinite(limitBytes) && limitBytes > 0;
-  const displayUser = st?.username || u?.username || "—";
-  const hwidOrDash =
-    st?.deviceLimit != null ? st.deviceLimit : (u?.hwidDeviceLimit ?? "—");
+  const displayUser = st?.username || "—";
+  const hwidOrDash = st?.deviceLimit ?? "—";
   const limitEndStat =
     st?.source === "xui"
       ? `<div class="stat">
@@ -412,12 +411,11 @@ async function boot() {
       const me2 = await api("/api/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const u2 = me2.remnawaveUser;
       const st2 = me2.subscriptionStatus;
       const used2 = Number(
-        st2?.usedTrafficBytes ?? u2?.userTraffic?.usedTrafficBytes ?? 0,
+        st2?.usedTrafficBytes ?? 0,
       );
-      const limit2 = Number(st2?.trafficLimitBytes ?? u2?.trafficLimitBytes ?? 0);
+      const limit2 = Number(st2?.trafficLimitBytes ?? 0);
       const hasLimit2 = Number.isFinite(limit2) && limit2 > 0;
       const now = Date.now();
       const dt = Math.max(1, (now - last.at) / 1000);
