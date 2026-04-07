@@ -585,10 +585,16 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
   }
   try {
     if (config.subscriptions.primary === "xui") {
-      return res.status(400).json({
-        error:
-          "not_applicable: для подписки XUI один URL добавляется на все устройства; лимит по IP настраивается в 3X-UI, не через эту кнопку",
+      // Ensure client exists / link is present, then bump limitIp.
+      await xuiProvisionCore(Number(req.tgSession.sub || req.tgSession.tg), { force: true });
+      const tid = Number(req.tgSession.sub || req.tgSession.tg);
+      const r = await xui.incrementClientLimitIp({
+        inboundId: config.xui.inboundId,
+        telegramId: tid,
+        addSlots: slots,
       });
+      const data = await loadMe(tid);
+      return res.json({ ok: true, addedSlots: slots, xuiLimitIp: r.next, ...data });
     }
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
     const users = await rw.getUsersByTelegramId(tid);

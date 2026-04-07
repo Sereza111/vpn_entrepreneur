@@ -253,3 +253,44 @@ export async function addClientToInbound({
   return { ok: true, creds: { ...creds, subIdEffective: effective }, response: data };
 }
 
+export async function updateClientInInbound({ inboundId, clientId, client }) {
+  if (!inboundId) throw new Error("xui_inbound_id_required");
+  const cid = String(clientId || "").trim();
+  if (!cid) throw new Error("xui_client_id_required");
+  if (!client || typeof client !== "object") throw new Error("xui_client_required");
+
+  const settings = { clients: [client] };
+  const res = await xuiFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(cid)}`, {
+    method: "POST",
+    json: {
+      id: Number(inboundId),
+      settings: JSON.stringify(settings),
+    },
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`xui_update_client: ${res.status} ${t}`.trim());
+  }
+  return await res.json().catch(() => ({}));
+}
+
+export async function incrementClientLimitIp({ inboundId, telegramId, addSlots = 1 }) {
+  const found = await findClientInInbound({ inboundId, telegramId });
+  if (!found?.client) throw new Error("xui_client_not_found");
+
+  const cur = Number(found.client.limitIp ?? 0);
+  const inc = Number(addSlots || 1);
+  if (!Number.isFinite(inc) || inc < 1) throw new Error("bad_slots");
+
+  // В 3X-UI limitIp: 0 = без лимита. Для «+1 устройство» переводим в лимитный режим.
+  const base = Number.isFinite(cur) && cur > 0 ? cur : 1;
+  const next = base + inc;
+
+  const clientId = String(found.client.id || found.client.ID || "").trim();
+  if (!clientId) throw new Error("xui_client_id_missing");
+
+  const patch = { ...found.client, limitIp: next };
+  await updateClientInInbound({ inboundId, clientId, client: patch });
+  return { previous: cur, next, email: found.client.email || null };
+}
+

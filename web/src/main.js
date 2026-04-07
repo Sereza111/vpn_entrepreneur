@@ -311,7 +311,8 @@ async function boot() {
     </div>
     ${
       isXuiPrimary
-        ? `<p class="muted" style="margin-top:10px;line-height:1.45">Лимит «+1 устройство» в боте относится к старой схеме Remnawave. Для XUI один и тот же URL подписки можно поставить на несколько устройств; ограничение по IP задаётся в панели 3X-UI (limit IP), не через эту кнопку.</p>`
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (IP лимит)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
         : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
