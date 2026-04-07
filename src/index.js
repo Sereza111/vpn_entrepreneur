@@ -206,28 +206,29 @@ async function loadMe(telegramId) {
 
   const proxyServers = parseProxyServers(config.proxy.serversJson);
   const proxyRec = await proxyStore.getProxyByTelegramId(telegramId);
-  const proxyServer =
-    proxyRec?.serverId
-      ? proxyServers.find((s) => s.id === proxyRec.serverId) || null
-      : null;
-  const proxyPayload = proxyRec && proxyServer
-    ? {
-        country: proxyServer.country,
-        serverId: proxyServer.id,
-        socks5: {
-          host: proxyServer.host,
-          port: proxyServer.socksPort,
-          username: proxyRec.username,
-          password: proxyRec.password,
-        },
-        http: {
-          host: proxyServer.host,
-          port: proxyServer.httpPort,
-          username: proxyRec.username,
-          password: proxyRec.password,
-        },
-      }
-    : null;
+  const remaining = proxyStore.computeProxyRemaining(proxyRec);
+  const proxyItems = Array.isArray(proxyRec?.items) ? proxyRec.items : [];
+  const proxyPayload = {
+    remaining,
+    total: Number(proxyRec?.credits?.total || 0),
+    used: Number(proxyRec?.credits?.used || 0),
+    creditExpiresAt: proxyRec?.creditExpiresAt || null,
+    items: proxyItems
+      .map((it) => {
+        const srv = proxyServers.find((s) => s.id === it.serverId) || null;
+        if (!srv) return null;
+        return {
+          id: it.id,
+          country: srv.country,
+          serverId: srv.id,
+          createdAt: it.createdAt || null,
+          expiresAt: it.expiresAt || null,
+          socks5: { host: srv.host, port: srv.socksPort, username: it.username, password: it.password },
+          http: { host: srv.host, port: srv.httpPort, username: it.username, password: it.password },
+        };
+      })
+      .filter(Boolean),
+  };
 
   return {
     remnawaveUser: null,
@@ -380,22 +381,46 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
     const server = servers.find((s) => s.id === serverId) || null;
     if (!server) return res.status(400).json({ error: "bad_serverId" });
 
-    const existing = await proxyStore.getProxyByTelegramId(tid);
-    if (existing?.serverId === serverId) {
-      const data = await loadMe(tid);
-      return res.json({ ok: true, alreadyProvisioned: true, ...data });
+    const rec = await proxyStore.getProxyByTelegramId(tid);
+    const remaining = proxyStore.computeProxyRemaining(rec);
+    if (remaining < 1) {
+      return res.status(402).json({ error: "proxy_quota_exhausted" });
     }
 
     const creds = generateProxyCredentials(tid);
     await ensureProxyUserOnServer({ server, username: creds.username, password: creds.password });
-    await proxyStore.setProxyForTelegramId(tid, {
-      serverId,
-      username: creds.username,
-      password: creds.password,
-      createdAt: new Date().toISOString(),
+    await proxyStore.addProxyItem({
+      telegramId: tid,
+      item: {
+        id: `p_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        serverId,
+        username: creds.username,
+        password: creds.password,
+        createdAt: new Date().toISOString(),
+        expiresAt: rec?.creditExpiresAt || null,
+      },
     });
     const data = await loadMe(tid);
     return res.json({ ok: true, created: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Test/admin: grant proxy quota
+app.post("/api/test/proxy/grant", authMiddleware, async (req, res) => {
+  if (!config.testGrantEnabled) {
+    return res.status(403).json({ error: "test_grant_disabled" });
+  }
+  const count = Number(req.body?.count || 1);
+  const days = Number(req.body?.days || 30);
+  if (!Number.isFinite(count) || count < 1) return res.status(400).json({ error: "bad_count" });
+  if (!Number.isFinite(days) || days < 0) return res.status(400).json({ error: "bad_days" });
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    await proxyStore.grantProxyCredits({ telegramId: tid, addCount: count, days });
+    const data = await loadMe(tid);
+    return res.json({ ok: true, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }

@@ -34,8 +34,8 @@ export function parseProxyServers(envValue) {
 }
 
 export function generateProxyCredentials(telegramId) {
-  const uname = `tg${String(telegramId)}`.replace(/\D/g, "");
-  const username = uname.length ? uname : `tg${crypto.randomBytes(4).toString("hex")}`;
+  const base = `tg${String(telegramId)}`.replace(/\D/g, "") || `tg${crypto.randomBytes(3).toString("hex")}`;
+  const username = `${base}_${crypto.randomBytes(3).toString("hex")}`;
   const password = crypto.randomBytes(8).toString("hex"); // safe charset
   return { username, password };
 }

@@ -30,7 +30,28 @@ async function writeJson(obj) {
 
 export async function getProxyByTelegramId(telegramId) {
   const db = await readJson();
-  return db[String(telegramId)] || null;
+  const rec = db[String(telegramId)] || null;
+  if (!rec) return null;
+  // Backward compat: migrate single proxy fields to list.
+  if (rec.username && rec.password && rec.serverId && !Array.isArray(rec.items)) {
+    return {
+      telegramId: String(telegramId),
+      credits: { total: 1, used: 1 },
+      items: [
+        {
+          id: `p_${Date.now()}`,
+          serverId: rec.serverId,
+          country: rec.country || "",
+          username: rec.username,
+          password: rec.password,
+          createdAt: rec.createdAt || rec.updatedAt || new Date().toISOString(),
+          expiresAt: null,
+        },
+      ],
+      updatedAt: rec.updatedAt || new Date().toISOString(),
+    };
+  }
+  return rec;
 }
 
 export async function setProxyForTelegramId(telegramId, payload) {
@@ -42,5 +63,41 @@ export async function setProxyForTelegramId(telegramId, payload) {
   };
   await writeJson(db);
   return db[String(telegramId)];
+}
+
+export async function grantProxyCredits({ telegramId, addCount, days }) {
+  const rec = (await getProxyByTelegramId(telegramId)) || {
+    telegramId: String(telegramId),
+    credits: { total: 0, used: 0 },
+    items: [],
+  };
+  const n = Number(addCount || 0);
+  if (!Number.isFinite(n) || n < 1) throw new Error("bad_count");
+  const d = Number(days || 0);
+  const expiresAt = d > 0 ? new Date(Date.now() + d * 86400_000).toISOString() : null;
+  rec.credits = rec.credits || { total: 0, used: 0 };
+  rec.credits.total = Number(rec.credits.total || 0) + n;
+  rec.creditExpiresAt = expiresAt;
+  return await setProxyForTelegramId(telegramId, rec);
+}
+
+export function computeProxyRemaining(rec) {
+  if (!rec?.credits) return 0;
+  const total = Number(rec.credits.total || 0);
+  const used = Number(rec.credits.used || 0);
+  return Math.max(0, total - used);
+}
+
+export async function addProxyItem({ telegramId, item }) {
+  const rec = (await getProxyByTelegramId(telegramId)) || {
+    telegramId: String(telegramId),
+    credits: { total: 0, used: 0 },
+    items: [],
+  };
+  rec.items = Array.isArray(rec.items) ? rec.items : [];
+  rec.credits = rec.credits || { total: 0, used: 0 };
+  rec.items.push(item);
+  rec.credits.used = Number(rec.credits.used || 0) + 1;
+  return await setProxyForTelegramId(telegramId, rec);
 }
 

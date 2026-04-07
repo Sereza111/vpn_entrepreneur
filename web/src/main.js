@@ -303,27 +303,33 @@ async function boot() {
   root.appendChild(connect);
 
   if (hasProxy) {
-    const p = me.proxy;
+    const p = me.proxy || {};
     const servers = Array.isArray(me.proxyServers) ? me.proxyServers : [];
+    const items = Array.isArray(p.items) ? p.items : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
       <h3 class="value" style="margin:0 0 6px">Прокси</h3>
       <p class="muted">SOCKS5 и HTTP прокси (отдельная услуга).</p>
 
       ${
-        p
-          ? `<div class="muted" style="margin-top:8px">Страна: <b>${p.country || "—"}</b></div>
-             <div class="link-block" style="margin-top:10px">
-               <div class="label">SOCKS5</div>
-               <div class="link" id="socksLine">${p.socks5.host}:${p.socks5.port}  ${p.socks5.username}:${p.socks5.password}</div>
-             </div>
-             <button class="btn secondary" type="button" id="copySocksBtn">Скопировать SOCKS5</button>
-
-             <div class="link-block" style="margin-top:10px">
-               <div class="label">HTTP proxy</div>
-               <div class="link" id="httpLine">${p.http.host}:${p.http.port}  ${p.http.username}:${p.http.password}</div>
-             </div>
-             <button class="btn secondary" type="button" id="copyHttpBtn">Скопировать HTTP</button>`
-          : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>
+        `<div class="muted" style="margin-top:8px">
+           Доступно: <b>${Number(p.remaining || 0)}</b> / Куплено: <b>${Number(p.total || 0)}</b>
+         </div>
+         ${
+           items.length
+             ? `<div class="muted" style="margin-top:8px">Ваши прокси:</div>
+                ${items
+                  .map(
+                    (it, i) => `
+                      <div class="link-block" style="margin-top:10px">
+                        <div class="label">#${i + 1} • ${it.country || "—"}</div>
+                        <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
+                        <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
+                      </div>
+                    `,
+                  )
+                  .join("")}`
+             : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>`
+         }
              <div class="plans" style="margin-top:10px">
                ${servers
                  .map(
@@ -385,26 +391,7 @@ async function boot() {
     if (sub && sub !== "—") tg.openLink(sub);
   };
 
-  const copySocksBtn = document.getElementById("copySocksBtn");
-  if (copySocksBtn) {
-    copySocksBtn.onclick = async () => {
-      const p = me.proxy?.socks5;
-      const line = p ? `${p.host}:${p.port} ${p.username}:${p.password}` : "";
-      if (!line) return;
-      await navigator.clipboard.writeText(line);
-      showToast("SOCKS5 скопирован");
-    };
-  }
-  const copyHttpBtn = document.getElementById("copyHttpBtn");
-  if (copyHttpBtn) {
-    copyHttpBtn.onclick = async () => {
-      const p = me.proxy?.http;
-      const line = p ? `${p.host}:${p.port} ${p.username}:${p.password}` : "";
-      if (!line) return;
-      await navigator.clipboard.writeText(line);
-      showToast("HTTP прокси скопирован");
-    };
-  }
+  // (Per-proxy copy buttons can be added later if needed)
 
   const proxyCreateBtn = document.getElementById("proxyCreateBtn");
   if (proxyCreateBtn) {
