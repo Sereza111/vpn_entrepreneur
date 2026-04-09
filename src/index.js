@@ -19,6 +19,73 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
 const whPath = "/telegram/webhook";
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Не даём упасть всему процессу из‑за сети до api.telegram.org (502 у nginx). */
+async function setupTelegramTransport() {
+  if (String(process.env.TELEGRAM_SKIP_WEBHOOK_SETUP || "").trim() === "1") {
+    console.warn("TELEGRAM_SKIP_WEBHOOK_SETUP=1 — пропускаем setWebhook/deleteWebhook (бот не получит апдейты, пока не настроите вручную).");
+    return;
+  }
+
+  const retries = Math.max(1, Number(process.env.TELEGRAM_WEBHOOK_RETRIES || 12));
+  const baseDelayMs = Math.max(500, Number(process.env.TELEGRAM_WEBHOOK_RETRY_MS || 5000));
+
+  const base = config.publicBaseUrl?.replace(/\/$/, "");
+  if (base) {
+    const url = `${base}${whPath}`;
+    const extra = config.webhookSecret ? { secret_token: config.webhookSecret } : {};
+    let lastErr;
+    for (let i = 0; i < retries; i++) {
+      try {
+        await bot.api.setWebhook(url, extra);
+        console.log("Telegram webhook ->", url);
+        return;
+      } catch (e) {
+        lastErr = e;
+        const msg = e?.message || String(e);
+        console.warn(
+          `[telegram] setWebhook failed (${i + 1}/${retries}): ${msg}`,
+        );
+        if (i < retries - 1) {
+          await sleep(baseDelayMs * Math.min(4, 1 + Math.floor(i / 3)));
+        }
+      }
+    }
+    console.error(
+      "[telegram] setWebhook не удался после всех попыток. HTTP-сервер работает (мини‑апп), но апдейты бота не придут, пока сервер не сможет достучаться до https://api.telegram.org",
+    );
+    console.error(
+      "[telegram] Частые причины: блокировка Telegram с хоста, фаервол, нет исходящего HTTPS. Решения: другой регион/VPS, прокси для Node, или временно TELEGRAM_SKIP_WEBHOOK_SETUP=1",
+    );
+    if (lastErr) console.error(lastErr);
+
+    const intervalMs = Math.max(60_000, Number(process.env.TELEGRAM_WEBHOOK_RETRY_INTERVAL_MS || 300_000));
+    setInterval(async () => {
+      try {
+        await bot.api.setWebhook(url, extra);
+        console.log("[telegram] setWebhook (повтор) ok ->", url);
+      } catch (e) {
+        console.warn("[telegram] setWebhook (фон):", e?.message || e);
+      }
+    }, intervalMs).unref?.();
+    return;
+  }
+
+  console.log("PUBLIC_BASE_URL not set, using long polling");
+  try {
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
+    bot.start();
+  } catch (e) {
+    console.error(
+      "[telegram] long polling setup failed:",
+      e?.message || e,
+    );
+  }
+}
+
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
@@ -500,7 +567,7 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
 const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
-  const kb = new InlineKeyboard().webApp("Подписка VPN", config.webAppUrl);
+  const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
   await ctx.reply(
     "Открой мини-приложение: там статус подписки и подключение VPN.",
     { reply_markup: kb },
@@ -519,17 +586,7 @@ app.get(/^\/app\/.*/, (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(config.port, async () => {
+app.listen(config.port, () => {
   console.log(`http://127.0.0.1:${config.port}`);
-  const base = config.publicBaseUrl?.replace(/\/$/, "");
-  if (base) {
-    const url = `${base}${whPath}`;
-    const extra = config.webhookSecret ? { secret_token: config.webhookSecret } : {};
-    await bot.api.setWebhook(url, extra);
-    console.log("Telegram webhook ->", url);
-  } else {
-    console.log("PUBLIC_BASE_URL not set, using long polling");
-    await bot.api.deleteWebhook({ drop_pending_updates: true });
-    bot.start();
-  }
+  void setupTelegramTransport();
 });
