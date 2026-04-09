@@ -58,38 +58,70 @@ async function boot() {
     return;
   }
 
+  const splash = el(`
+    <div class="splash" id="splash">
+      <div class="splash-card">
+        <div class="logo">
+          <div class="logo-mark">VL</div>
+          <div>
+            <div class="logo-title">VL</div>
+            <div class="logo-subtitle">Загружаем подписку и прокси…</div>
+          </div>
+        </div>
+        <div class="splash-bar"><div></div></div>
+        <div class="splash-foot">
+          <span id="splashHint">Подключение…</span>
+          <span>Secure Access</span>
+        </div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(splash);
   root.innerHTML = `
-    <div class="card">
-      <div class="skeleton s1"></div>
-      <div class="skeleton s2"></div>
-    </div>
-    <div class="card">
-      <div class="skeleton s3"></div>
-      <div class="skeleton s4"></div>
-      <div class="skeleton s4"></div>
-    </div>
-  `;
+      <div class="card">
+        <div class="skeleton s1"></div>
+        <div class="skeleton s2"></div>
+      </div>
+      <div class="card">
+        <div class="skeleton s3"></div>
+        <div class="skeleton s4"></div>
+        <div class="skeleton s4"></div>
+      </div>
+    `;
 
   let token;
   try {
+    const hint = document.getElementById("splashHint");
+    if (hint) hint.textContent = "Авторизация…";
     const auth = await api("/api/auth/telegram", {
       method: "POST",
       body: JSON.stringify({ initData }),
     });
     token = auth.token;
   } catch (e) {
+    document.getElementById("splash")?.remove();
     showError("Авторизация: " + e.message);
     return;
   }
 
   let me;
   try {
+    const hint = document.getElementById("splashHint");
+    if (hint) hint.textContent = "Получаем данные…";
     me = await api("/api/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (e) {
+    document.getElementById("splash")?.remove();
     showError("Профиль: " + e.message);
     return;
+  }
+
+  // Remove splash smoothly
+  const sp = document.getElementById("splash");
+  if (sp) {
+    sp.classList.add("is-hidden");
+    setTimeout(() => sp.remove(), 260);
   }
 
   const u = null;
@@ -120,10 +152,10 @@ async function boot() {
   const head = el(
     `<div class="card">
       <div class="brand">
-        <div class="brand-mark">VPN</div>
+        <div class="brand-mark">VL</div>
         <div>
-          <h1 class="hero-title">VPN подписка</h1>
-          <div class="muted">Все регионы в одной подписке</div>
+          <h1 class="hero-title">VL</h1>
+          <div class="muted">Подписка и прокси в одном месте</div>
         </div>
       </div>
     </div>`,
