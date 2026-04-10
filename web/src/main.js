@@ -196,7 +196,16 @@ async function boot() {
       el(`
         <div class="card section" id="section-proxy">
           <h3 class="value" style="margin:0 0 6px">Прокси</h3>
-          <p class="muted">Кнопка прокси на месте. Выдача прокси доступна в этом разделе после загрузки вашего профиля.</p>
+          <div class="muted">Доступно прокси: <b>${Number(me?.proxy?.remaining || 0)}</b></div>
+          <div class="muted" style="margin-top:4px">Выдано: ${Number(me?.proxy?.used || 0)} / ${Number(me?.proxy?.total || 0)}</div>
+          <div class="plans" id="proxyServerPickNoAcc" style="margin-top:10px">
+            ${(Array.isArray(me?.proxyServers) ? me.proxyServers : [])
+              .map((s) => `<button class="proxy-btn" data-proxy-server="${s.id}">${s.country}</button>`)
+              .join("") || `<div class="muted">Нет серверов в PROXY_SERVERS_JSON</div>`}
+          </div>
+          <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
+          <button class="btn secondary" type="button" id="proxyTestGrant1NoAcc">Тест: +1 прокси</button>
+          <button class="btn secondary" type="button" id="proxyTestGrant5NoAcc">Тест: +5 прокси</button>
           <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
       `),
@@ -227,6 +236,71 @@ async function boot() {
       }
     };
     document.getElementById("refreshProxyBtn").onclick = () => window.location.reload();
+    const proxyCreateBtnNoAcc = document.getElementById("proxyCreateBtnNoAcc");
+    if (proxyCreateBtnNoAcc) {
+      let selectedServerNoAcc = null;
+      document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((b) => {
+        b.onclick = () => {
+          document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+          selectedServerNoAcc = b.getAttribute("data-proxy-server");
+        };
+      });
+      proxyCreateBtnNoAcc.onclick = async () => {
+        try {
+          if (!selectedServerNoAcc) return showToast("Выберите страну");
+          proxyCreateBtnNoAcc.disabled = true;
+          proxyCreateBtnNoAcc.textContent = "Создаём...";
+          await api("/api/proxy/provision", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ serverId: selectedServerNoAcc }),
+          });
+          showToast("Прокси создан");
+          setTimeout(() => window.location.reload(), 700);
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+          proxyCreateBtnNoAcc.disabled = false;
+          proxyCreateBtnNoAcc.textContent = "Создать прокси";
+        }
+      };
+    }
+    const proxyTestGrant1NoAcc = document.getElementById("proxyTestGrant1NoAcc");
+    if (proxyTestGrant1NoAcc) {
+      proxyTestGrant1NoAcc.onclick = async () => {
+        try {
+          proxyTestGrant1NoAcc.disabled = true;
+          await api("/api/test/proxy/grant", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ count: 1, days: 30 }),
+          });
+          showToast("Выдано +1 прокси (тест)");
+          setTimeout(() => window.location.reload(), 600);
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+          proxyTestGrant1NoAcc.disabled = false;
+        }
+      };
+    }
+    const proxyTestGrant5NoAcc = document.getElementById("proxyTestGrant5NoAcc");
+    if (proxyTestGrant5NoAcc) {
+      proxyTestGrant5NoAcc.onclick = async () => {
+        try {
+          proxyTestGrant5NoAcc.disabled = true;
+          await api("/api/test/proxy/grant", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ count: 5, days: 30 }),
+          });
+          showToast("Выдано +5 прокси (тест)");
+          setTimeout(() => window.location.reload(), 600);
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+          proxyTestGrant5NoAcc.disabled = false;
+        }
+      };
+    }
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
     return;
   }
