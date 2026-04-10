@@ -14,6 +14,7 @@ import {
   generateProxyCredentials,
   parseProxyServers,
 } from "./proxyProvision.js";
+import * as nocobase from "./nocobase.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -297,6 +298,18 @@ async function loadMe(telegramId) {
       .filter(Boolean),
   };
 
+  let catalog = { source: "fallback", products: [] };
+  if (nocobase.nocobaseEnabled()) {
+    try {
+      const products = await nocobase.fetchCatalogProducts();
+      if (Array.isArray(products) && products.length) {
+        catalog = { source: "nocobase", products };
+      }
+    } catch {
+      // не ломаем /api/me
+    }
+  }
+
   return {
     remnawaveUser: null,
     subscriptionUrl: primary,
@@ -305,6 +318,7 @@ async function loadMe(telegramId) {
     subscriptionStatus,
     proxy: proxyPayload,
     proxyServers: proxyServers.map((s) => ({ id: s.id, country: s.country })),
+    catalog,
   };
 }
 
@@ -467,6 +481,12 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
         expiresAt: rec?.creditExpiresAt || null,
       },
     });
+    void nocobase.syncProxyInstanceIssued({
+      telegramId: tid,
+      serverId,
+      country: server.country || "",
+      username: creds.username,
+    });
     const data = await loadMe(tid);
     return res.json({ ok: true, created: true, ...data });
   } catch (e) {
@@ -501,7 +521,18 @@ app.post("/api/webhooks/payment", async (req, res) => {
   if (sec !== config.paymentWebhookSecret) {
     return res.status(403).json({ error: "forbidden" });
   }
-  const { telegramId, extendDays, planDays, addDeviceSlots } = req.body || {};
+  const {
+    telegramId,
+    extendDays,
+    planDays,
+    addDeviceSlots,
+    amount,
+    currency,
+    externalPaymentId,
+    paymentId,
+    productCode,
+    username,
+  } = req.body || {};
   const days = Number(extendDays || planDays || 0);
   const slots = Number(addDeviceSlots || 0);
   if (!telegramId || (!Number.isFinite(days) && !Number.isFinite(slots))) {
@@ -516,6 +547,17 @@ app.post("/api/webhooks/payment", async (req, res) => {
       return res.status(400).json({ error: "nothing_to_apply" });
     }
     await xuiProvisionCore(tid, { force: true });
+    void nocobase.syncPaymentOrder({
+      telegramId: tid,
+      extendDays: days,
+      addDeviceSlots: slots,
+      amount,
+      currency,
+      externalPaymentId: externalPaymentId ?? paymentId,
+      productCode,
+      username,
+      source: "payment_webhook",
+    });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

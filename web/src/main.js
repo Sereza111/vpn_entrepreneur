@@ -2,6 +2,14 @@ import "./style.css";
 
 const root = document.getElementById("root");
 
+function escAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function el(html) {
   const d = document.createElement("div");
   d.innerHTML = html.trim();
@@ -483,13 +491,34 @@ async function boot() {
     root.appendChild(proxySec);
   }
 
+  const cat = me.catalog;
+  const vpnFromNb =
+    cat?.source === "nocobase" && Array.isArray(cat.products) && cat.products.length
+      ? [...cat.products].sort(
+          (a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0),
+        )
+      : null;
+  const planButtonsHtml = vpnFromNb
+    ? vpnFromNb
+        .map(
+          (p) =>
+            `<button class="plan-btn" data-days="${Number(p.grantDays)}" data-product-code="${escAttr(p.code)}">${escAttr(p.title)}</button>`,
+        )
+        .join("")
+    : `<button class="plan-btn" data-days="30">30 дней</button>
+    <button class="plan-btn" data-days="90">90 дней</button>
+    <button class="plan-btn" data-days="180">180 дней</button>`;
+
   const extend = el(`<div class="card section" id="section-extend">
     <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
     <p class="muted">Выберите план. После оплаты срок обновится автоматически.</p>
+    ${
+      vpnFromNb
+        ? `<p class="muted" style="margin-top:6px;line-height:1.45">Тарифы загружаются из NocoBase (каталог <code>products</code>).</p>`
+        : ""
+    }
     <div class="plans">
-      <button class="plan-btn" data-days="30">30 дней</button>
-      <button class="plan-btn" data-days="90">90 дней</button>
-      <button class="plan-btn" data-days="180">180 дней</button>
+      ${planButtonsHtml}
     </div>
     ${
       isXuiPrimary
