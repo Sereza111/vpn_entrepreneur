@@ -198,6 +198,22 @@ async function boot() {
           <h3 class="value" style="margin:0 0 6px">Прокси</h3>
           <div class="muted">Доступно прокси: <b>${Number(me?.proxy?.remaining || 0)}</b></div>
           <div class="muted" style="margin-top:4px">Выдано: ${Number(me?.proxy?.used || 0)} / ${Number(me?.proxy?.total || 0)}</div>
+          ${
+            Array.isArray(me?.proxy?.items) && me.proxy.items.length
+              ? `<div class="muted" style="margin-top:8px">Ваши прокси:</div>
+                 ${me.proxy.items
+                   .map(
+                     (it, i) => `
+                       <div class="link-block" style="margin-top:10px">
+                         <div class="label">#${i + 1} • ${it.country || "—"}</div>
+                         <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
+                         <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
+                       </div>
+                     `,
+                   )
+                   .join("")}`
+              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Нажмите «Создать прокси», когда будет доступный остаток.</div>`
+          }
           <div class="plans" id="proxyServerPickNoAcc" style="margin-top:10px">
             ${(Array.isArray(me?.proxyServers) ? me.proxyServers : [])
               .map((s) => `<button class="proxy-btn" data-proxy-server="${s.id}">${s.country}</button>`)
@@ -248,6 +264,8 @@ async function boot() {
       });
       proxyCreateBtnNoAcc.onclick = async () => {
         try {
+          const rem = Number(me?.proxy?.remaining || 0);
+          if (rem < 1) return showToast("Лимит закончился: нажмите «Тест: +1 прокси»");
           if (!selectedServerNoAcc) return showToast("Выберите страну");
           proxyCreateBtnNoAcc.disabled = true;
           proxyCreateBtnNoAcc.textContent = "Создаём...";
@@ -259,7 +277,16 @@ async function boot() {
           showToast("Прокси создан");
           setTimeout(() => window.location.reload(), 700);
         } catch (e) {
-          showToast(`Ошибка: ${e.message}`);
+          const msg = String(e?.message || "");
+          if (msg === "proxy_quota_exhausted") {
+            showToast("Лимит прокси исчерпан: сначала добавьте квоту");
+          } else if (msg === "bad_serverId") {
+            showToast("Некорректный сервер: проверьте PROXY_SERVERS_JSON");
+          } else if (msg.startsWith("proxy_ssh_failed")) {
+            showToast("SSH/3proxy ошибка на сервере, проверь логи бота");
+          } else {
+            showToast(`Ошибка: ${msg}`);
+          }
           proxyCreateBtnNoAcc.disabled = false;
           proxyCreateBtnNoAcc.textContent = "Создать прокси";
         }
