@@ -60,19 +60,9 @@ async function boot() {
 
   const splash = el(`
     <div class="splash" id="splash">
-      <div class="splash-card">
-        <div class="logo">
-          <div class="logo-mark">VL</div>
-          <div>
-            <div class="logo-title">VL</div>
-            <div class="logo-subtitle">Загружаем подписку и прокси…</div>
-          </div>
-        </div>
-        <div class="splash-bar"><div></div></div>
-        <div class="splash-foot">
-          <span id="splashHint">Подключение…</span>
-          <span>Secure Access</span>
-        </div>
+      <div class="splash-simple">
+        <div class="splash-vl" id="splashVL">VL</div>
+        <div class="splash-hint" id="splashHint">Подключение…</div>
       </div>
     </div>
   `);
@@ -168,6 +158,7 @@ async function boot() {
         <div class="segmented">
           <button class="seg-btn active" data-target="status">Статус</button>
           <button class="seg-btn" data-target="connect">Подключение</button>
+          <button class="seg-btn" data-target="proxy">Прокси</button>
           <button class="seg-btn" data-target="extend">Продление</button>
         </div>
       </div>
@@ -196,7 +187,17 @@ async function boot() {
           <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
           <p class="muted">Выберите удобный способ: оплата или связь с оператором.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
-          <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
+          <button class="btn secondary" type="button" id="supportBtnNoAcc">Поддержка</button>
+        </div>
+      `),
+    );
+
+    root.appendChild(
+      el(`
+        <div class="card section" id="section-proxy">
+          <h3 class="value" style="margin:0 0 6px">Прокси</h3>
+          <p class="muted">Кнопка прокси на месте. Выдача прокси доступна в этом разделе после загрузки вашего профиля.</p>
+          <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
       `),
     );
@@ -225,7 +226,8 @@ async function boot() {
         showToast(`Ошибка: ${e.message}`);
       }
     };
-    document.getElementById("supportBtn").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
+    document.getElementById("refreshProxyBtn").onclick = () => window.location.reload();
+    document.getElementById("supportBtnNoAcc").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
     return;
   }
 
