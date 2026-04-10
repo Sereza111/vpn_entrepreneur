@@ -1,16 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=EB+Garamond:wght@400;600;700&display=swap");
+
 :root {
   color-scheme: dark;
-  --bg: #07090d;
-  --bg-soft: #0d1016;
-  --fg: #f2f4f8;
-  --muted: #a4adba;
-  --card: #121722;
-  --card-2: #171d2a;
-  --stroke: #242d3f;
-  --stroke-2: #313d54;
-  --ok: #6de7a8;
-  --brand: #7ae7b0;
-  --brand-2: #4aa6ff;
+  --bg: #060607;
+  --bg-soft: #0b0b0d;
+  --fg: #f2f2f2;
+  --muted: #b0b0b0;
+  --card: #111114;
+  --card-2: #16161a;
+  --stroke: #2e2e36;
+  --stroke-2: #454551;
+  --ok: #b7ffd6;
+  --brand: #f1f1f1;
+  --brand-2: #8e8e8e;
+  --accent-glow: rgba(255, 255, 255, 0.12);
 }
 
 * {
@@ -20,10 +23,10 @@
 
 body {
   margin: 0;
-  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-family: "EB Garamond", "Cormorant Garamond", "Times New Roman", serif;
   background:
-    radial-gradient(1200px 600px at 10% -20%, #192131 0%, transparent 45%),
-    radial-gradient(900px 500px at 100% 0%, #111824 0%, transparent 35%),
+    radial-gradient(1100px 560px at 8% -20%, rgba(255, 255, 255, 0.07) 0%, transparent 44%),
+    radial-gradient(900px 460px at 100% 0%, rgba(255, 255, 255, 0.04) 0%, transparent 36%),
     linear-gradient(140deg, var(--bg) 0%, var(--bg-soft) 100%);
   color: var(--fg);
   min-height: 100vh;
@@ -36,10 +39,9 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: 0.12;
+    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(255, 255, 255, 0.02) 2px, rgba(255, 255, 255, 0.02) 4px),
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 255, 255, 0.018) 2px, rgba(255, 255, 255, 0.018) 4px);
+  opacity: 0.2;
 }
 
 #root {
@@ -69,10 +71,13 @@ body::before {
 
 .splash-card {
   width: min(520px, calc(100vw - 28px));
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(145deg, rgba(22, 29, 42, 0.9), rgba(14, 19, 30, 0.94));
-  box-shadow: 0 18px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: linear-gradient(145deg, rgba(20, 20, 24, 0.94), rgba(12, 12, 15, 0.96));
+  box-shadow:
+    0 20px 50px rgba(0,0,0,0.62),
+    inset 0 0 0 1px rgba(255,255,255,0.04),
+    inset 0 0 22px rgba(255,255,255,0.03);
   padding: 18px;
 }
 
@@ -86,16 +91,16 @@ body::before {
 .logo-mark {
   width: 54px;
   height: 54px;
-  border-radius: 16px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   font-weight: 950;
   letter-spacing: 0.06em;
-  color: #0b1018;
+  color: #0e0e10;
   background:
     radial-gradient(120% 120% at 20% 0%, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 58%),
     linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
-  box-shadow: 0 14px 30px rgba(0,0,0,0.45);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.55);
   position: relative;
   overflow: hidden;
 }
@@ -112,9 +117,10 @@ body::before {
 
 .logo-title {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 900;
-  letter-spacing: 0.01em;
+  font-size: 1.24rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .logo-subtitle {
@@ -150,22 +156,24 @@ body::before {
 }
 
 .card {
-  background: linear-gradient(145deg, rgba(22, 29, 42, 0.92), rgba(14, 19, 30, 0.95));
+  background: linear-gradient(145deg, rgba(20, 20, 24, 0.95), rgba(12, 12, 15, 0.97));
   border: 1px solid var(--stroke);
-  border-radius: 18px;
+  border-radius: 10px;
   padding: 16px;
   margin-bottom: 12px;
   box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 10px 26px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 0 14px rgba(255, 255, 255, 0.02);
   animation: fadeUp 260ms ease;
 }
 
 .hero-title {
   margin: 0 0 6px;
-  font-size: 1.45rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .brand {
@@ -178,17 +186,17 @@ body::before {
 .brand-mark {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: 0.08em;
   font-size: 0.92rem;
-  color: #0b1018;
+  color: #0e0e10;
   background:
     radial-gradient(120% 120% at 20% 0%, rgba(255,255,255,0.45) 0%, rgba(0,0,0,0) 55%),
     linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
     0 10px 18px rgba(0,0,0,0.35),
     inset 0 1px 0 rgba(255,255,255,0.06);
@@ -196,9 +204,9 @@ body::before {
 
 .meter {
   border: 1px solid var(--stroke);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 12px;
-  background: linear-gradient(150deg, rgba(23, 29, 42, 0.92), rgba(14, 19, 30, 0.95));
+  background: linear-gradient(150deg, rgba(24, 24, 28, 0.93), rgba(13, 13, 16, 0.96));
 }
 
 .meter-head {
@@ -221,8 +229,8 @@ body::before {
   height: 100%;
   width: 0%;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(109, 231, 168, 0.8), rgba(109, 231, 168, 0.25));
-  box-shadow: 0 0 0 1px rgba(109, 231, 168, 0.15) inset;
+  background: linear-gradient(90deg, rgba(245, 245, 245, 0.92), rgba(189, 189, 189, 0.45));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
   transition: width 380ms ease;
 }
 
@@ -238,9 +246,9 @@ body::before {
 }
 
 .stat {
-  background: linear-gradient(150deg, var(--card-2), #121826);
+  background: linear-gradient(150deg, var(--card-2), #101013);
   border: 1px solid var(--stroke);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 10px;
 }
 
@@ -262,36 +270,41 @@ body::before {
   gap: 6px;
   border-radius: 999px;
   border: 1px solid var(--stroke-2);
-  background: #141a27;
+  background: #151518;
   padding: 5px 10px;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .chip.active {
-  color: var(--ok);
-  border-color: rgba(109, 231, 168, 0.35);
-  background: rgba(109, 231, 168, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .btn {
   width: 100%;
-  border: 1px solid var(--stroke-2);
-  border-radius: 14px;
-  padding: 12px;
+  border: 1px solid #4a4a55;
+  border-radius: 8px;
+  min-height: 46px;
+  padding: 12px 14px;
   color: var(--fg);
-  background: linear-gradient(145deg, #1b2435, #141b29);
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  background: linear-gradient(145deg, #212126, #15151a);
+  font-family: "Cinzel", "EB Garamond", serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
   margin-top: 10px;
   transition: transform 120ms ease, box-shadow 180ms ease, border-color 180ms ease;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
 }
 
 .btn:hover {
-  border-color: #425375;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.38);
+  border-color: #6a6a76;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.52), inset 0 0 10px rgba(255, 255, 255, 0.05);
 }
 
 .btn:active {
@@ -299,7 +312,8 @@ body::before {
 }
 
 .btn.secondary {
-  background: linear-gradient(145deg, #171d2b, #121826);
+  background: linear-gradient(145deg, #1a1a1f, #121216);
+  color: #d6d6d6;
 }
 
 .link-block {
@@ -325,24 +339,39 @@ body::before {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  background: rgba(16, 16, 18, 0.8);
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  padding: 8px;
 }
 
 .seg-btn {
   flex: 1 1 110px;
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  background: #121929;
+  border: 1px solid #3e3e48;
+  border-radius: 7px;
+  min-height: 42px;
+  background: linear-gradient(145deg, #1c1c22, #15151a);
   color: var(--muted);
-  padding: 10px 8px;
+  padding: 10px 10px;
+  font-family: "Cinzel", "EB Garamond", serif;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   transition: all 140ms ease;
 }
 
+.seg-btn:hover {
+  color: #ffffff;
+  border-color: #696978;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.08);
+}
+
 .seg-btn.active {
-  color: var(--fg);
-  border-color: #4a5f84;
-  background: linear-gradient(145deg, #1f2940, #171f33);
+  color: #ffffff;
+  border-color: #7a7a88;
+  background: linear-gradient(145deg, #2a2a31, #1c1c22);
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.09);
 }
 
 .section {
@@ -355,19 +384,23 @@ body::before {
 
 .plans {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
 
 .plan-btn {
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  background: linear-gradient(145deg, #161e2f, #121a28);
+  border: 1px solid #464652;
+  border-radius: 8px;
+  min-height: 46px;
+  background: linear-gradient(145deg, #1f1f25, #15151a);
   color: var(--fg);
-  padding: 12px 8px;
-  font-weight: 800;
-  font-size: 0.84rem;
+  padding: 12px 10px;
+  font-family: "Cinzel", "EB Garamond", serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   transition: transform 120ms ease, border-color 150ms ease;
 }
 
@@ -376,17 +409,22 @@ body::before {
 }
 
 .plan-btn:hover {
-  border-color: #4a5f84;
+  border-color: #70707f;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
 }
 
 .proxy-btn {
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  background: linear-gradient(145deg, #161e2f, #121a28);
+  border: 1px solid #464652;
+  border-radius: 8px;
+  min-height: 46px;
+  background: linear-gradient(145deg, #1f1f25, #15151a);
   color: var(--fg);
-  padding: 12px 8px;
-  font-weight: 800;
-  font-size: 0.84rem;
+  padding: 12px 10px;
+  font-family: "Cinzel", "EB Garamond", serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   transition: transform 120ms ease, border-color 150ms ease;
 }
 
@@ -395,20 +433,21 @@ body::before {
 }
 
 .proxy-btn:hover {
-  border-color: #4a5f84;
+  border-color: #70707f;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.08);
 }
 
 .proxy-btn.active {
-  border-color: #4a5f84;
-  box-shadow: 0 0 0 3px rgba(74, 95, 132, 0.18);
+  border-color: #7d7d8a;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.1);
 }
 
 .text-input {
   width: 100%;
   margin-top: 10px;
   border: 1px solid var(--stroke);
-  border-radius: 12px;
-  background: #0f1521;
+  border-radius: 8px;
+  background: #111116;
   color: var(--fg);
   padding: 12px;
   outline: none;
@@ -416,13 +455,14 @@ body::before {
 }
 
 .text-input:focus {
-  border-color: #4a5f84;
-  box-shadow: 0 0 0 3px rgba(74, 95, 132, 0.2);
+  border-color: #747482;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.09);
 }
 
 .btn.done {
-  border-color: rgba(109, 231, 168, 0.35);
-  color: var(--ok);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.09);
 }
 
 .toast {
@@ -431,9 +471,9 @@ body::before {
   bottom: 22px;
   transform: translateX(-50%) translateY(12px);
   background: rgba(18, 24, 36, 0.96);
-  border: 1px solid #31405c;
+  border: 1px solid #454551;
   color: var(--fg);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 10px 14px;
   font-size: 0.86rem;
   opacity: 0;
@@ -447,8 +487,8 @@ body::before {
 }
 
 .skeleton {
-  border-radius: 10px;
-  background: linear-gradient(90deg, #141b29 20%, #1d2638 40%, #141b29 60%);
+  border-radius: 8px;
+  background: linear-gradient(90deg, #141418 20%, #1e1e24 40%, #141418 60%);
   background-size: 200% 100%;
   animation: shimmer 1.1s linear infinite;
   margin-bottom: 10px;
@@ -458,6 +498,12 @@ body::before {
 .s2 { height: 14px; width: 70%; }
 .s3 { height: 14px; width: 55%; }
 .s4 { height: 44px; width: 100%; }
+
+@media (max-width: 460px) {
+  .plans {
+    grid-template-columns: 1fr;
+  }
+}
 
 @keyframes shimmer {
   0% { background-position: 150% 0; }
