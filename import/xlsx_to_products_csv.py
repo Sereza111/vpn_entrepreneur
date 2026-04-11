@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-Пересобирает import/products-nocobase.csv из Товары.xlsx в корне репозитория.
+Читает Товары.xlsx в корне репозитория и пишет два файла для NocoBase:
+
+- import/products-nocobase.csv  (UTF-8 с BOM)
+- import/products-nocobase.xlsx  (то же содержимое, если удобнее грузить Excel)
+
 Зависимость: pip install openpyxl
 
 Колонки экспорта NocoBase могут называться «Целое число» вместо grantDays — скрипт это учитывает.
@@ -13,7 +17,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 XLSX = ROOT / "Товары.xlsx"
-OUT = ROOT / "import" / "products-nocobase.csv"
+OUT_CSV = ROOT / "import" / "products-nocobase.csv"
+OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
+
+FIELDNAMES = ["code", "title", "grantDays", "productType", "sortOrder", "active", "serverId"]
+
+
+def write_products_xlsx(path: Path, rows: list[dict[str, object]]) -> None:
+    from openpyxl import Workbook
+
+    def cell(k: str, row: dict[str, object]) -> object:
+        v = row.get(k, "")
+        if k == "active":
+            return str(v).strip().lower() in ("1", "true", "yes", "да")
+        if k in ("grantDays", "sortOrder"):
+            try:
+                return int(float(v)) if v != "" and v is not None else 0
+            except (TypeError, ValueError):
+                return 0
+        return v if v != "" else None
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "products"
+    ws.append(FIELDNAMES)
+    for row in rows:
+        ws.append([cell(k, row) for k in FIELDNAMES])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
 
 
 def main() -> int:
@@ -120,16 +151,16 @@ def main() -> int:
             }
         )
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(
-            f,
-            fieldnames=["code", "title", "grantDays", "productType", "sortOrder", "active", "serverId"],
-        )
+    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    with OUT_CSV.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDNAMES)
         w.writeheader()
         w.writerows(out_rows)
 
-    print(f"OK -> {OUT} ({len(out_rows)} строк)")
+    write_products_xlsx(OUT_XLSX, out_rows)
+
+    print(f"OK -> {OUT_CSV} ({len(out_rows)} rows)")
+    print(f"OK -> {OUT_XLSX} ({len(out_rows)} rows)")
     return 0
 
 

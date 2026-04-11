@@ -26,6 +26,6 @@ if errorlevel 1 (
   )
 )
 
-echo OK: import\products-nocobase.csv
+echo OK: import\products-nocobase.csv + import\products-nocobase.xlsx
 pause
 endlocal
