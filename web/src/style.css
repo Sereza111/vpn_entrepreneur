@@ -52,7 +52,11 @@ body {
   font-size: 17px;
   font-weight: 500;
   line-height: 1.45;
-  background: var(--app-bg);
+  background-color: var(--app-bg);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--app-text) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--app-text) 5%, transparent) 1px, transparent 1px);
+  background-size: 14px 14px;
   color: var(--app-text);
   min-height: 100vh;
   padding: 12px 14px 28px;
@@ -85,24 +89,21 @@ body {
   text-align: center;
 }
 
-.splash-vl {
-  font-weight: 700;
-  letter-spacing: 0.28em;
-  font-size: clamp(48px, 18vw, 96px);
-  line-height: 1;
-  color: color-mix(in srgb, var(--app-text) 18%, transparent);
-  position: relative;
-  display: inline-block;
-  font-family: var(--font-gothic);
+.splash-brand {
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
 }
 
-.splash-vl::after {
-  content: "VL";
-  position: absolute;
-  inset: 0;
-  color: var(--app-text);
-  clip-path: inset(100% 0 0 0);
-  animation: inkFill 900ms ease-out forwards;
+.splash-logo {
+  width: min(44vw, 152px);
+  height: auto;
+  max-height: min(44vw, 152px);
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 0 28px color-mix(in srgb, var(--app-text) 25%, transparent));
+  animation: splashLogoIn 880ms ease-out forwards;
+  opacity: 0;
 }
 
 .splash-hint {
@@ -152,23 +153,28 @@ body {
   align-items: center;
 }
 
+/* Лого fleur-de-lis: белый контур на тёмной «плите», чтобы читалось в любой теме Telegram */
 .brand-mark {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: 0;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  font-size: 0.82rem;
-  font-family: var(--font-gothic);
-  color: var(--app-button-text);
-  background: linear-gradient(155deg, var(--app-button), color-mix(in srgb, var(--app-button) 65%, #000));
+  padding: 9px;
+  background: color-mix(in srgb, #0c0c10 78%, var(--app-bg-secondary));
   border: none;
-  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+  clip-path: var(--clip-chamfer);
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--app-button-text) 28%, transparent),
-    0 6px 18px color-mix(in srgb, var(--app-button) 40%, transparent);
+    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 35%, transparent),
+    0 6px 20px color-mix(in srgb, #000 55%, transparent);
+}
+
+.brand-mark__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .meter {
@@ -699,14 +705,27 @@ body {
   }
 }
 
-@keyframes inkFill {
-  0% { clip-path: inset(100% 0 0 0); }
-  100% { clip-path: inset(0 0 0 0); }
+@keyframes splashLogoIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+    filter: drop-shadow(0 0 8px transparent) blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 28px color-mix(in srgb, var(--app-text) 22%, transparent)) blur(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .card { animation: none; }
-  .splash-vl::after { animation: none; clip-path: inset(0 0 0 0); }
+  .splash-logo {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
+  }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
 }

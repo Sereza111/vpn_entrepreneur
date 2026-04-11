@@ -171,6 +171,8 @@ async function boot() {
   applyTelegramChrome(tg);
   applyThemeVariant(tg);
 
+  const logoUrl = `${import.meta.env.BASE_URL}branding/vl-fleur.png`;
+
   const initData = tg.initData;
   if (!initData) {
     showError("Нет initData. Откройте через кнопку бота /start.");
@@ -180,7 +182,9 @@ async function boot() {
   const splash = el(`
     <div class="splash" id="splash">
       <div class="splash-simple">
-        <div class="splash-vl" id="splashVL">VL</div>
+        <div class="splash-brand" aria-hidden="true">
+          <img class="splash-logo" src="${logoUrl}" alt="" width="160" height="160" decoding="async" />
+        </div>
         <div class="splash-hint" id="splashHint">Подключение…</div>
       </div>
     </div>
@@ -261,7 +265,9 @@ async function boot() {
   const head = el(
     `<div class="card">
       <div class="brand">
-        <div class="brand-mark">VL</div>
+        <div class="brand-mark brand-mark--logo" aria-hidden="true">
+          <img class="brand-mark__img" src="${logoUrl}" alt="" width="48" height="48" decoding="async" />
+        </div>
         <div>
           <h1 class="hero-title">VL</h1>
           <div class="muted">Подписка и прокси в одном месте</div>

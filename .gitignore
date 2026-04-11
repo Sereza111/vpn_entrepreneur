@@ -1,5 +1,6 @@
 node_modules/
-public/
+# Сборка Vite (корень репо); исходники статики мини-аппа — web/public/
+/public/
 .env
 .env.*
 !.env.example
