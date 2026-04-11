@@ -20,29 +20,55 @@ XLSX = ROOT / "Товары.xlsx"
 OUT_CSV = ROOT / "import" / "products-nocobase.csv"
 OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
 
-FIELDNAMES = ["code", "title", "grantDays", "productType", "sortOrder", "active", "serverId"]
+# Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
+NOCOBASE_IMPORT_HEADERS = [
+    "ID",
+    "code",
+    "Целое число",
+    "productType",
+    "title",
+    "sortOrder",
+    "active",
+]
 
 
-def write_products_xlsx(path: Path, rows: list[dict[str, object]]) -> None:
+def internal_to_nocobase_import_rows(rows: list[dict[str, object]]) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Возвращает (строки для Excel, строки для CSV). В Excel — типы как в экспорте; в CSV active — строки True/False."""
+    xlsx_rows: list[dict[str, object]] = []
+    csv_rows: list[dict[str, object]] = []
+    for r in rows:
+        active_raw = r.get("active", "false")
+        is_act = str(active_raw).strip().lower() in ("1", "true", "yes", "да")
+        try:
+            gd = int(float(r.get("grantDays", 0)))
+        except (TypeError, ValueError):
+            gd = 0
+        try:
+            so = int(float(r.get("sortOrder", 0)))
+        except (TypeError, ValueError):
+            so = 0
+        base = {
+            "ID": None,
+            "code": r.get("code", ""),
+            "Целое число": gd,
+            "productType": r.get("productType", ""),
+            "title": r.get("title", ""),
+            "sortOrder": so,
+        }
+        xlsx_rows.append({**base, "active": is_act})
+        csv_rows.append({**base, "active": "True" if is_act else "False"})
+    return xlsx_rows, csv_rows
+
+
+def write_products_xlsx(path: Path, import_rows: list[dict[str, object]]) -> None:
     from openpyxl import Workbook
-
-    def cell(k: str, row: dict[str, object]) -> object:
-        v = row.get(k, "")
-        if k == "active":
-            return str(v).strip().lower() in ("1", "true", "yes", "да")
-        if k in ("grantDays", "sortOrder"):
-            try:
-                return int(float(v)) if v != "" and v is not None else 0
-            except (TypeError, ValueError):
-                return 0
-        return v if v != "" else None
 
     wb = Workbook()
     ws = wb.active
     ws.title = "products"
-    ws.append(FIELDNAMES)
-    for row in rows:
-        ws.append([cell(k, row) for k in FIELDNAMES])
+    ws.append(NOCOBASE_IMPORT_HEADERS)
+    for row in import_rows:
+        ws.append([row.get(h) for h in NOCOBASE_IMPORT_HEADERS])
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
 
@@ -151,13 +177,15 @@ def main() -> int:
             }
         )
 
+    xlsx_import_rows, csv_import_rows = internal_to_nocobase_import_rows(out_rows)
+
     OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     with OUT_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        w = csv.DictWriter(f, fieldnames=NOCOBASE_IMPORT_HEADERS)
         w.writeheader()
-        w.writerows(out_rows)
+        w.writerows(csv_import_rows)
 
-    write_products_xlsx(OUT_XLSX, out_rows)
+    write_products_xlsx(OUT_XLSX, xlsx_import_rows)
 
     print(f"OK -> {OUT_CSV} ({len(out_rows)} rows)")
     print(f"OK -> {OUT_XLSX} ({len(out_rows)} rows)")
