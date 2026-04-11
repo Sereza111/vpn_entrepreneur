@@ -1,4 +1,5 @@
-/* VL mini-app: Telegram theme–first, system typography */
+/* VL mini-app: Gothic UI shell on Telegram theme tokens */
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap");
 
 :root {
   color-scheme: light dark;
@@ -13,11 +14,31 @@
   --app-accent: var(--tg-theme-button-color, #4d9fff);
   --app-stroke: color-mix(in srgb, var(--app-text) 14%, transparent);
   --app-stroke-strong: color-mix(in srgb, var(--app-text) 22%, transparent);
-  --app-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  --app-radius: 14px;
-  --app-radius-sm: 10px;
-  --app-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --app-card-shadow: 0 6px 28px rgba(0, 0, 0, 0.42);
+  --app-radius: 6px;
+  --app-radius-sm: 4px;
+  --font-gothic: "Cinzel", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-body: "Cormorant Garamond", "Palatino Linotype", Palatino, Georgia, serif;
   --app-font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --gothic-cut: 9px;
+  --gothic-gold: color-mix(in srgb, #c9a227 38%, var(--app-accent));
+  --gothic-frame: color-mix(in srgb, var(--app-accent) 28%, var(--app-stroke-strong));
+  --clip-chamfer: polygon(
+    var(--gothic-cut) 0%,
+    calc(100% - var(--gothic-cut)) 0%,
+    100% var(--gothic-cut),
+    100% calc(100% - var(--gothic-cut)),
+    calc(100% - var(--gothic-cut)) 100%,
+    var(--gothic-cut) 100%,
+    0% calc(100% - var(--gothic-cut)),
+    0% var(--gothic-cut)
+  );
+}
+
+html.vl-theme-light {
+  --gothic-gold: color-mix(in srgb, #8b6914 55%, var(--app-accent));
+  --gothic-frame: color-mix(in srgb, var(--app-text) 32%, var(--app-stroke-strong));
+  --app-card-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
 
 * {
@@ -27,8 +48,9 @@
 
 body {
   margin: 0;
-  font-family: var(--app-font);
-  font-size: 15px;
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 500;
   line-height: 1.45;
   background: var(--app-bg);
   color: var(--app-text);
@@ -64,14 +86,14 @@ body {
 }
 
 .splash-vl {
-  font-weight: 800;
-  letter-spacing: 0.2em;
+  font-weight: 700;
+  letter-spacing: 0.28em;
   font-size: clamp(48px, 18vw, 96px);
   line-height: 1;
   color: color-mix(in srgb, var(--app-text) 18%, transparent);
   position: relative;
   display: inline-block;
-  font-family: var(--app-font);
+  font-family: var(--font-gothic);
 }
 
 .splash-vl::after {
@@ -86,17 +108,18 @@ body {
 .splash-hint {
   margin-top: 12px;
   color: var(--app-hint);
-  font-size: 0.875rem;
+  font-size: 1rem;
+  font-family: var(--font-body);
 }
 
 /* Cards */
 .card {
   background: var(--app-bg-secondary);
-  border: 1px solid var(--app-stroke);
+  border: 2px solid var(--gothic-frame);
   border-radius: var(--app-radius);
   padding: 16px 18px;
   margin-bottom: 12px;
-  box-shadow: var(--app-card-shadow);
+  box-shadow: var(--app-card-shadow), inset 0 0 0 1px color-mix(in srgb, var(--app-text) 5%, transparent);
   animation: fadeUp 260ms ease;
 }
 
@@ -107,16 +130,19 @@ body {
 .section-title {
   margin: 0 0 8px;
   font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--app-text);
+  font-family: var(--font-gothic);
 }
 
 .hero-title {
   margin: 0 0 4px;
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: var(--font-gothic);
 }
 
 .brand {
@@ -127,25 +153,30 @@ body {
 }
 
 .brand-mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 0;
   display: grid;
   place-items: center;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-size: 0.82rem;
+  font-family: var(--font-gothic);
   color: var(--app-button-text);
-  background: linear-gradient(145deg, var(--app-button), color-mix(in srgb, var(--app-button) 70%, #000));
-  border: 1px solid color-mix(in srgb, var(--app-button-text) 25%, transparent);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--app-button) 45%, transparent);
+  background: linear-gradient(155deg, var(--app-button), color-mix(in srgb, var(--app-button) 65%, #000));
+  border: none;
+  clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--app-button-text) 28%, transparent),
+    0 6px 18px color-mix(in srgb, var(--app-button) 40%, transparent);
 }
 
 .meter {
-  border: 1px solid var(--app-stroke);
+  border: 2px solid var(--gothic-frame);
   border-radius: var(--app-radius-sm);
   padding: 14px;
   background: color-mix(in srgb, var(--app-bg) 65%, var(--app-bg-secondary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
 .meter-head {
@@ -157,8 +188,8 @@ body {
 
 .meter-bar {
   margin-top: 12px;
-  height: 8px;
-  border-radius: 999px;
+  height: 6px;
+  border-radius: 1px;
   background: color-mix(in srgb, var(--app-text) 8%, transparent);
   overflow: hidden;
 }
@@ -166,18 +197,18 @@ body {
 .meter-fill {
   height: 100%;
   width: 0%;
-  border-radius: 999px;
+  border-radius: 1px;
   background: linear-gradient(
     90deg,
-    var(--app-accent),
-    color-mix(in srgb, var(--app-accent) 55%, var(--app-text))
+    var(--gothic-gold),
+    color-mix(in srgb, var(--app-accent) 60%, var(--app-text))
   );
   transition: width 380ms ease;
 }
 
 .muted {
   color: var(--app-hint);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   line-height: 1.5;
 }
 
@@ -185,7 +216,7 @@ body {
   font-family: var(--app-font-mono);
   font-size: 0.82em;
   padding: 0.1em 0.35em;
-  border-radius: 4px;
+  border-radius: 2px;
   background: color-mix(in srgb, var(--app-text) 8%, transparent);
 }
 
@@ -197,80 +228,87 @@ body {
 
 .stat {
   background: color-mix(in srgb, var(--app-bg) 40%, var(--app-bg-secondary));
-  border: 1px solid var(--app-stroke);
+  border: 1px solid var(--app-stroke-strong);
   border-radius: var(--app-radius-sm);
   padding: 12px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
 .label {
   color: var(--app-hint);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.12em;
   margin-bottom: 6px;
+  font-family: var(--font-gothic);
 }
 
 .value {
   color: var(--app-text);
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
-  border: 1px solid var(--app-stroke-strong);
+  border-radius: 2px;
+  border: 2px solid var(--gothic-frame);
   background: color-mix(in srgb, var(--app-text) 6%, transparent);
   padding: 6px 12px;
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.65rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
   color: var(--app-hint);
+  font-family: var(--font-gothic);
 }
 
 .chip.active {
-  color: var(--app-button-text);
-  border-color: color-mix(in srgb, var(--app-button) 55%, transparent);
-  background: color-mix(in srgb, var(--app-button) 28%, transparent);
+  color: var(--app-text);
+  border-color: var(--gothic-gold);
+  background: color-mix(in srgb, var(--gothic-gold) 18%, transparent);
 }
 
-/* Segmented nav */
+/* Segmented nav — chamfered tiles, not pills */
 .segmented {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .seg-btn {
   flex: 1 1 100px;
-  border: 1px solid transparent;
-  border-radius: var(--app-radius-sm);
-  min-height: 44px;
-  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+  border: none;
+  border-radius: 0;
+  min-height: 46px;
+  background: color-mix(in srgb, var(--app-text) 6%, transparent);
   color: var(--app-hint);
   padding: 10px 8px;
-  font-family: inherit;
+  font-family: var(--font-gothic);
   font-weight: 600;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .seg-btn:hover {
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 9%, transparent);
+  background: color-mix(in srgb, var(--app-text) 10%, transparent);
 }
 
 .seg-btn.active {
-  color: var(--app-text);
-  border-color: var(--app-stroke-strong);
-  background: color-mix(in srgb, var(--app-text) 12%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 8%, transparent);
+  color: color-mix(in srgb, var(--gothic-gold) 55%, var(--app-text));
+  background: color-mix(in srgb, var(--gothic-gold) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--gothic-gold),
+    0 0 0 1px color-mix(in srgb, var(--gothic-gold) 28%, transparent);
 }
 
 .section {
@@ -285,17 +323,20 @@ body {
 .btn {
   width: 100%;
   border: none;
-  border-radius: var(--app-radius-sm);
-  min-height: 48px;
+  border-radius: 0;
+  min-height: 50px;
   padding: 12px 16px;
   color: var(--app-button-text);
   background: var(--app-button);
-  font-family: inherit;
-  font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.02em;
+  font-family: var(--font-gothic);
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   cursor: pointer;
   margin-top: 10px;
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-button-text) 22%, transparent);
   transition: transform 0.12s ease, filter 0.15s ease, opacity 0.15s ease;
 }
 
@@ -308,14 +349,16 @@ body {
 }
 
 .btn.secondary {
-  background: color-mix(in srgb, var(--app-text) 10%, transparent);
+  background: color-mix(in srgb, var(--app-text) 12%, transparent);
   color: var(--app-text);
-  border: 1px solid var(--app-stroke-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--app-stroke-strong),
+    inset 0 0 0 2px color-mix(in srgb, var(--app-text) 5%, transparent);
 }
 
 .btn.secondary:hover {
   filter: none;
-  background: color-mix(in srgb, var(--app-text) 14%, transparent);
+  background: color-mix(in srgb, var(--app-text) 16%, transparent);
 }
 
 .btn.done {
@@ -323,8 +366,8 @@ body {
 }
 
 .btn--compact {
-  min-height: 40px;
-  font-size: 0.8rem;
+  min-height: 42px;
+  font-size: 0.72rem;
   margin-top: 8px;
 }
 
@@ -337,26 +380,30 @@ body {
 }
 
 .plan-tile {
-  border: 1px solid var(--app-stroke-strong);
-  border-radius: var(--app-radius-sm);
-  min-height: 52px;
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  border: none;
+  border-radius: 0;
+  min-height: 54px;
+  background: color-mix(in srgb, var(--app-text) 8%, transparent);
   color: var(--app-text);
   padding: 14px 12px;
-  font-family: inherit;
-  font-weight: 700;
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
+  font-family: var(--font-gothic);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   text-align: center;
   line-height: 1.25;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 
 .plan-tile:hover {
-  border-color: color-mix(in srgb, var(--app-accent) 45%, var(--app-stroke-strong));
-  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 55%, var(--app-stroke-strong)),
+    0 0 12px color-mix(in srgb, var(--gothic-gold) 12%, transparent);
+  background: color-mix(in srgb, var(--gothic-gold) 10%, transparent);
 }
 
 .plan-tile:active {
@@ -380,12 +427,13 @@ body {
 }
 
 .dev-test-label {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   color: var(--app-hint);
   margin-bottom: 8px;
+  font-family: var(--font-gothic);
 }
 
 .dev-test-grid {
@@ -395,12 +443,46 @@ body {
 }
 
 .dev-test-grid .plan-tile {
-  min-height: 40px;
+  min-height: 42px;
   padding: 8px 6px;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
 }
 
-/* Legacy plan-btn / proxy-btn (no-acc proxy section) */
+/* Country / server picker */
+.country-picker {
+  margin-top: 14px;
+  padding: 14px 12px;
+  border: 2px solid var(--gothic-frame);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--app-bg) 78%, var(--app-bg-secondary));
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 12%, transparent);
+}
+
+.country-picker-label {
+  font-family: var(--font-gothic);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--app-hint);
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.country-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.country-picker-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* Legacy plan-btn / proxy-btn */
 .plans {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -408,39 +490,89 @@ body {
   margin-top: 12px;
 }
 
-.plan-btn,
-.proxy-btn {
-  border: 1px solid var(--app-stroke-strong);
-  border-radius: var(--app-radius-sm);
+.plan-btn {
+  border: none;
+  border-radius: 0;
   min-height: 46px;
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
+  background: color-mix(in srgb, var(--app-text) 8%, transparent);
   color: var(--app-text);
   padding: 12px 10px;
-  font-family: inherit;
-  font-weight: 700;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+  font-family: var(--font-gothic);
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.15s ease;
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
 }
 
-.plan-btn:active,
+.plan-btn:active {
+  transform: scale(0.98);
+}
+
+.proxy-btn {
+  border: none;
+  border-radius: 0;
+  min-height: 68px;
+  background: color-mix(in srgb, var(--app-text) 8%, transparent);
+  color: var(--app-text);
+  padding: 10px 8px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  clip-path: var(--clip-chamfer);
+  box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.proxy-btn__code {
+  font-family: var(--font-gothic);
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.1;
+}
+
+.proxy-btn__sub {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--app-hint);
+  font-family: var(--font-body);
+}
+
 .proxy-btn:active {
   transform: scale(0.98);
 }
 
 .proxy-btn.active {
-  border-color: var(--app-accent);
-  background: color-mix(in srgb, var(--app-accent) 15%, transparent);
+  background: color-mix(in srgb, var(--gothic-gold) 14%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--gothic-gold),
+    0 0 14px color-mix(in srgb, var(--gothic-gold) 22%, transparent);
+}
+
+.proxy-btn.active .proxy-btn__sub {
+  color: color-mix(in srgb, var(--gothic-gold) 65%, var(--app-hint));
 }
 
 .link-block {
   margin-top: 14px;
   background: color-mix(in srgb, var(--app-link) 8%, var(--app-bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--app-link) 28%, var(--app-stroke));
+  border: 2px solid color-mix(in srgb, var(--app-link) 32%, var(--gothic-frame));
   border-radius: var(--app-radius-sm);
   padding: 12px 14px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-link) 12%, transparent);
 }
 
 .subscription-url {
@@ -453,7 +585,7 @@ body {
 
 .link {
   word-break: break-all;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--app-link);
 }
 
@@ -465,18 +597,20 @@ body {
 .text-input {
   width: 100%;
   margin-top: 10px;
-  border: 1px solid var(--app-stroke);
+  border: 2px solid var(--gothic-frame);
   border-radius: var(--app-radius-sm);
   background: var(--app-bg);
   color: var(--app-text);
   padding: 12px;
   outline: none;
-  font-family: inherit;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-text) 4%, transparent);
 }
 
 .text-input:focus {
-  border-color: var(--app-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 25%, transparent);
+  border-color: color-mix(in srgb, var(--gothic-gold) 45%, var(--app-accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gothic-gold) 22%, transparent);
 }
 
 .toast {
@@ -485,11 +619,12 @@ body {
   bottom: 22px;
   transform: translateX(-50%) translateY(12px);
   background: var(--app-bg-secondary);
-  border: 1px solid var(--app-stroke-strong);
+  border: 2px solid var(--gothic-frame);
   color: var(--app-text);
   border-radius: var(--app-radius-sm);
   padding: 10px 16px;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
+  font-family: var(--font-body);
   opacity: 0;
   transition: all 180ms ease;
   z-index: 20;
@@ -505,8 +640,9 @@ body {
   text-align: center;
   margin-top: 8px;
   margin-bottom: 4px;
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   color: var(--app-hint);
+  font-family: var(--font-body);
 }
 
 .app-footer a {
@@ -541,6 +677,9 @@ body {
   }
   .dev-test-grid {
     grid-template-columns: 1fr;
+  }
+  .country-picker-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

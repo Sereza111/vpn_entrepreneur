@@ -20,6 +20,23 @@ function applyTelegramChrome(tg) {
   }
 }
 
+/** Светлая тема Telegram → класс для контрастных готических рамок */
+function applyThemeVariant(tg) {
+  try {
+    const hex = tg.themeParams?.bg_color;
+    if (!hex || typeof hex !== "string") return;
+    const h = hex.replace(/^#/, "");
+    if (h.length !== 6) return;
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    document.documentElement.classList.toggle("vl-theme-light", lum > 0.52);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** PAYMENT_CHECKOUT_URL_TEMPLATE: {telegramId} {productCode} {grantDays} {username} */
 function expandPaymentCheckoutUrl(template, vars) {
   const keys = ["telegramId", "productCode", "grantDays", "username"];
@@ -152,6 +169,7 @@ async function boot() {
   tg.ready();
   tg.expand();
   applyTelegramChrome(tg);
+  applyThemeVariant(tg);
 
   const initData = tg.initData;
   if (!initData) {
@@ -315,10 +333,16 @@ async function boot() {
                    .join("")}`
               : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Нажмите «Создать прокси», когда будет доступный остаток.</div>`
           }
-          <div class="plans" id="proxyServerPickNoAcc" style="margin-top:10px">
+          <div class="country-picker" id="proxyServerPickNoAcc">
+            <div class="country-picker-label">Выберите регион</div>
+            <div class="country-picker-grid">
             ${(Array.isArray(me?.proxyServers) ? me.proxyServers : [])
-              .map((s) => `<button class="proxy-btn" data-proxy-server="${s.id}">${s.country}</button>`)
-              .join("") || `<div class="muted">Нет серверов в PROXY_SERVERS_JSON</div>`}
+              .map(
+                (s) =>
+                  `<button type="button" class="proxy-btn" data-proxy-server="${escAttr(s.id)}"><span class="proxy-btn__code">${escAttr(s.country || s.id)}</span><span class="proxy-btn__sub">${escAttr(s.id)}</span></button>`,
+              )
+              .join("") || `<div class="muted country-picker-empty">Нет серверов в PROXY_SERVERS_JSON</div>`}
+            </div>
           </div>
           <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
           <button class="btn secondary" type="button" id="proxyTestGrant1NoAcc">Тест: +1 прокси</button>
@@ -376,7 +400,7 @@ async function boot() {
     const proxyCreateBtnNoAcc = document.getElementById("proxyCreateBtnNoAcc");
     if (proxyCreateBtnNoAcc) {
       let selectedServerNoAcc = null;
-      document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((b) => {
+      document.querySelectorAll("#proxyServerPickNoAcc .country-picker-grid .proxy-btn").forEach((b) => {
         b.onclick = () => {
           document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((x) => x.classList.remove("active"));
           b.classList.add("active");
@@ -591,13 +615,16 @@ async function boot() {
                   .join("")}`
              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>`
          }
-             <div class="plans" style="margin-top:10px">
+             <div class="country-picker">
+               <div class="country-picker-label">Выберите регион</div>
+               <div class="country-picker-grid">
                ${servers
                  .map(
                    (s) =>
-                     `<button class="proxy-btn" data-proxy-server="${s.id}">${s.country || s.id}</button>`,
+                     `<button type="button" class="proxy-btn" data-proxy-server="${escAttr(s.id)}"><span class="proxy-btn__code">${escAttr(s.country || s.id)}</span><span class="proxy-btn__sub">${escAttr(s.id)}</span></button>`,
                  )
                  .join("")}
+               </div>
              </div>
              <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
       }
@@ -696,9 +723,9 @@ async function boot() {
   const proxyCreateBtn = document.getElementById("proxyCreateBtn");
   if (proxyCreateBtn) {
     let selectedServer = null;
-    document.querySelectorAll(".proxy-btn").forEach((b) => {
+    document.querySelectorAll("#section-proxy .country-picker-grid .proxy-btn").forEach((b) => {
       b.onclick = () => {
-        document.querySelectorAll(".proxy-btn").forEach((x) => x.classList.remove("active"));
+        document.querySelectorAll("#section-proxy .proxy-btn").forEach((x) => x.classList.remove("active"));
         b.classList.add("active");
         selectedServer = b.getAttribute("data-proxy-server");
       };
