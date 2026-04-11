@@ -1,25 +1,31 @@
 @echo off
-chcp 65001 >nul
-set "ROOT=%~dp0.."
-cd /d "%ROOT%"
+setlocal
+REM ASCII only: UTF-8/Cyrillic in .bat breaks cmd.exe on some Windows setups.
 
-echo Корень проекта: %CD%
-echo.
+set "HERE=%~dp0"
+cd /d "%HERE%.."
 
-python -m pip install -r "%~dp0requirements.txt"
+python -m pip install -r "%HERE%requirements.txt"
 if errorlevel 1 (
-  echo Ошибка pip. Попробуйте: py -m pip install -r "%~dp0requirements.txt"
-  pause
-  exit /b 1
+  echo pip failed. Trying py launcher...
+  py -m pip install -r "%HERE%requirements.txt"
+  if errorlevel 1 (
+    echo ERROR: pip. Run manually: python -m pip install -r import\requirements.txt
+    pause
+    exit /b 1
+  )
 )
 
-python "%~dp0xlsx_to_products_csv.py"
+python "%HERE%xlsx_to_products_csv.py"
 if errorlevel 1 (
-  echo Ошибка скрипта.
-  pause
-  exit /b 1
+  py "%HERE%xlsx_to_products_csv.py"
+  if errorlevel 1 (
+    echo ERROR: script. Run: python import\xlsx_to_products_csv.py from repo root
+    pause
+    exit /b 1
+  )
 )
 
-echo.
-echo Готово. CSV: import\products-nocobase.csv
+echo OK: import\products-nocobase.csv
 pause
+endlocal
