@@ -1,0 +1,4 @@
+﻿code,title,grantDays,productType,sortOrder,active,serverId
+vpn_30,30 дней,30,vpn_extend,10,true,
+vpn_90,90 дней,90,vpn_extend,20,true,
+vpn_180,180 дней,180,vpn_extend,30,true,
