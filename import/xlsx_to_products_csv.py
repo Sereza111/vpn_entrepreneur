@@ -29,6 +29,7 @@ NOCOBASE_IMPORT_HEADERS = [
     "title",
     "sortOrder",
     "active",
+    "serverId",
 ]
 
 
@@ -47,6 +48,7 @@ def internal_to_nocobase_import_rows(rows: list[dict[str, object]]) -> tuple[lis
             so = int(float(r.get("sortOrder", 0)))
         except (TypeError, ValueError):
             so = 0
+        sid = str(r.get("serverId") or "").strip()
         base = {
             "ID": None,
             "code": r.get("code", ""),
@@ -54,6 +56,7 @@ def internal_to_nocobase_import_rows(rows: list[dict[str, object]]) -> tuple[lis
             "productType": r.get("productType", ""),
             "title": r.get("title", ""),
             "sortOrder": so,
+            "serverId": sid if sid else None,
         }
         xlsx_rows.append({**base, "active": is_act})
         csv_rows.append({**base, "active": "True" if is_act else "False"})
