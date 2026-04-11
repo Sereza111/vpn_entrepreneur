@@ -63,6 +63,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Отступ под фиксированное нижнее «колесо» */
+body.vl-wheel-layout {
+  padding-bottom: calc(118px + env(safe-area-inset-bottom, 0));
+}
+
+body.vl-wheel-layout #root {
+  padding-bottom: 4px;
+}
+
 #root {
   max-width: 440px;
   margin: 0 auto;
@@ -122,6 +131,21 @@ body {
   margin-bottom: 12px;
   box-shadow: var(--app-card-shadow), inset 0 0 0 1px color-mix(in srgb, var(--app-text) 5%, transparent);
   animation: fadeUp 260ms ease;
+}
+
+.card--hero {
+  padding: 18px 20px 20px;
+  border-width: 2px;
+  box-shadow:
+    var(--app-card-shadow),
+    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 18%, transparent),
+    0 0 40px color-mix(in srgb, var(--gothic-gold) 6%, transparent);
+}
+
+.hero-tagline {
+  font-size: 1.02rem;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
 }
 
 .card--nav {
@@ -315,6 +339,108 @@ body {
   box-shadow:
     inset 0 0 0 1px var(--gothic-gold),
     0 0 0 1px color-mix(in srgb, var(--gothic-gold) 28%, transparent);
+}
+
+/* Нижнее «колесо» меню */
+.wheel-dock {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  width: 100%;
+  max-width: 440px;
+  padding: 0 12px max(10px, env(safe-area-inset-bottom, 0));
+  pointer-events: none;
+}
+
+.wheel-dock__plate {
+  pointer-events: auto;
+  position: relative;
+  border-radius: 32px 32px 0 0;
+  padding: 16px 10px 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--app-bg-secondary) 95%, #000),
+    color-mix(in srgb, var(--app-bg) 88%, var(--app-bg-secondary))
+  );
+  border: 2px solid var(--gothic-frame);
+  border-bottom: none;
+  box-shadow:
+    0 -12px 36px color-mix(in srgb, #000 50%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--gothic-gold) 22%, transparent);
+}
+
+.wheel-dock__rim {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  width: min(92%, 380px);
+  height: 52px;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--gothic-gold) 28%, transparent);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.wheel-dock__nodes {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 4px;
+  z-index: 1;
+}
+
+.wheel-dock__btn {
+  flex: 1 1 0;
+  max-width: 104px;
+  min-height: auto;
+  padding: 8px 4px 10px;
+  clip-path: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  transform: translateY(var(--wheel-lift, 0px));
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+  box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
+}
+
+.wheel-dock__btn:hover {
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.wheel-dock__btn.active {
+  color: color-mix(in srgb, var(--gothic-gold) 45%, var(--app-text));
+  background: color-mix(in srgb, var(--gothic-gold) 16%, transparent);
+  box-shadow:
+    inset 0 0 0 1px var(--gothic-gold),
+    0 0 16px color-mix(in srgb, var(--gothic-gold) 18%, transparent);
+}
+
+.wheel-dock__glyph {
+  font-size: 1.15rem;
+  line-height: 1;
+  opacity: 0.92;
+  font-family: var(--font-gothic);
+}
+
+.wheel-dock__label {
+  display: block;
+  max-width: 5.2em;
+  text-align: center;
+}
+
+.wheel-dock--3 .wheel-dock__btn {
+  max-width: 120px;
 }
 
 .section {
@@ -728,4 +854,7 @@ body {
   }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
+  .wheel-dock__btn {
+    transform: none;
+  }
 }

@@ -56,6 +56,60 @@ function appendAppFooter(container) {
   );
 }
 
+/** Нижняя навигация — «колесо»: дуга + свайп влево/вправо по доку */
+function wheelNavHtml(hasProxy) {
+  const rows = hasProxy
+    ? [
+        { target: "status", label: "Статус", glyph: "◇" },
+        { target: "connect", label: "Сеть", glyph: "◎" },
+        { target: "proxy", label: "Прокси", glyph: "◈" },
+        { target: "extend", label: "Срок", glyph: "⬡" },
+      ]
+    : [
+        { target: "status", label: "Статус", glyph: "◇" },
+        { target: "connect", label: "Сеть", glyph: "◎" },
+        { target: "extend", label: "Срок", glyph: "⬡" },
+      ];
+  const n = rows.length;
+  const lift =
+    n === 4 ? ["8px", "0px", "0px", "8px"] : ["8px", "2px", "8px"];
+  const btns = rows
+    .map(
+      (r, i) =>
+        `<button type="button" class="seg-btn wheel-dock__btn${i === 0 ? " active" : ""}" data-target="${r.target}" style="--wheel-lift:${lift[i]}"><span class="wheel-dock__glyph" aria-hidden="true">${r.glyph}</span><span class="wheel-dock__label">${r.label}</span></button>`,
+    )
+    .join("");
+  return `<nav class="wheel-dock wheel-dock--${n}" id="vlWheelDock" aria-label="Разделы"><div class="wheel-dock__plate"><div class="wheel-dock__rim" aria-hidden="true"></div><div class="wheel-dock__nodes">${btns}</div></div></nav>`;
+}
+
+function bindWheelSwipe(dock) {
+  if (!dock) return;
+  let x0 = 0;
+  dock.addEventListener(
+    "touchstart",
+    (e) => {
+      x0 = e.changedTouches[0].clientX;
+    },
+    { passive: true },
+  );
+  dock.addEventListener(
+    "touchend",
+    (e) => {
+      const x1 = e.changedTouches[0].clientX;
+      const dx = x1 - x0;
+      if (Math.abs(dx) < 44) return;
+      const tabs = [...dock.querySelectorAll(".wheel-dock__btn")];
+      if (!tabs.length) return;
+      let i = tabs.findIndex((b) => b.classList.contains("active"));
+      if (i < 0) i = 0;
+      if (dx < 0) i = Math.min(i + 1, tabs.length - 1);
+      else i = Math.max(i - 1, 0);
+      tabs[i]?.click();
+    },
+    { passive: true },
+  );
+}
+
 function bindVpnRenewalActions({ tg, token, me }) {
   const payCfg = me.payment || {};
   const checkoutTpl = payCfg.checkoutUrlTemplate || "";
@@ -263,14 +317,14 @@ async function boot() {
   };
 
   const head = el(
-    `<div class="card">
+    `<div class="card card--hero">
       <div class="brand">
         <div class="brand-mark brand-mark--logo" aria-hidden="true">
           <img class="brand-mark__img" src="${logoUrl}" alt="" width="48" height="48" decoding="async" />
         </div>
         <div>
           <h1 class="hero-title">VL</h1>
-          <div class="muted">Подписка и прокси в одном месте</div>
+          <div class="muted hero-tagline">Подписка и прокси в одном месте</div>
         </div>
       </div>
     </div>`,
@@ -278,18 +332,6 @@ async function boot() {
   root.appendChild(head);
 
   if (!hasAccount) {
-    const nav = el(`
-      <div class="card card--nav">
-        <div class="segmented">
-          <button class="seg-btn active" data-target="status">Статус</button>
-          <button class="seg-btn" data-target="connect">Подключение</button>
-          <button class="seg-btn" data-target="proxy">Прокси</button>
-          <button class="seg-btn" data-target="extend">Продление</button>
-        </div>
-      </div>
-    `);
-    root.appendChild(nav);
-
     root.appendChild(
       el(
         `<div class="card section is-visible" id="section-status"><p><b>Аккаунт в панели еще не привязан к вашему Telegram ID.</b></p><p class="muted">После оплаты бот создаст пользователя автоматически, либо обратитесь в поддержку.</p></div>`,
@@ -358,6 +400,9 @@ async function boot() {
       `),
     );
 
+    root.appendChild(el(wheelNavHtml(true)));
+    document.body.classList.add("vl-wheel-layout");
+
     document.querySelectorAll(".seg-btn").forEach((btn) => {
       btn.onclick = () => {
         document.querySelectorAll(".seg-btn").forEach((x) => x.classList.remove("active"));
@@ -367,6 +412,7 @@ async function boot() {
         document.getElementById(`section-${key}`)?.classList.add("is-visible");
       };
     });
+    bindWheelSwipe(document.getElementById("vlWheelDock"));
 
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
     document.getElementById("payBtn").onclick = async () => {
@@ -514,17 +560,6 @@ async function boot() {
       </div>`;
 
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
-  const nav = el(`
-    <div class="card card--nav">
-      <div class="segmented">
-        <button class="seg-btn active" data-target="status">Статус</button>
-        <button class="seg-btn" data-target="connect">Подключение</button>
-        ${hasProxy ? `<button class="seg-btn" data-target="proxy">Прокси</button>` : ""}
-        <button class="seg-btn" data-target="extend">Продление</button>
-      </div>
-    </div>
-  `);
-  root.appendChild(nav);
 
   const card = el(`<div class="card section is-visible" id="section-status">
     <div class="chip ${isActive ? "active" : ""}" style="${isPending ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.35)" : ""}">
@@ -693,6 +728,10 @@ async function boot() {
     </div>
   </div>`);
   root.appendChild(extend);
+
+  root.appendChild(el(wheelNavHtml(hasProxy)));
+  document.body.classList.add("vl-wheel-layout");
+
   bindVpnRenewalActions({ tg, token, me });
 
   document.querySelectorAll(".seg-btn").forEach((btn) => {
@@ -704,6 +743,7 @@ async function boot() {
       document.getElementById(`section-${key}`)?.classList.add("is-visible");
     };
   });
+  bindWheelSwipe(document.getElementById("vlWheelDock"));
 
   document.getElementById("copyBtn").onclick = async () => {
     try {
