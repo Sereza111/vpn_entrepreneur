@@ -74,8 +74,33 @@
 #### Импорт из Excel (`Товары.xlsx`)
 
 1. Держите актуальный файл **`Товары.xlsx`** в **корне репозитория** (рядом с `package.json`).
-2. Установите зависимость скрипта: `pip install openpyxl`.
-3. Запустите: `python import/xlsx_to_products_csv.py` — будет пересобран **`import/products-nocobase.csv`** (UTF-8 с BOM, колонки под импорт в NocoBase: `code`, `title`, `grantDays`, `productType`, `sortOrder`, `active`, `serverId`).
+2. Установите зависимость и пересоберите CSV.
+
+   **Из корня репозитория** (`бот ВПН`, там где `package.json`):
+
+   ```text
+   python -m pip install -r import/requirements.txt
+   python import/xlsx_to_products_csv.py
+   ```
+
+   Если вы уже в папке **`import`** (в приглашении cmd видно `...\бот ВПН\import>`), команды такие — **без** префикса `import\`:
+
+   ```text
+   python -m pip install -r requirements.txt
+   python xlsx_to_products_csv.py
+   ```
+
+   Или из **`import`** подняться на уровень вверх и вызвать как в первом блоке:
+
+   ```text
+   cd ..
+   python -m pip install -r import/requirements.txt
+   python import/xlsx_to_products_csv.py
+   ```
+
+   **Windows:** можно дважды щёлкнуть **`import/regenerate-products-csv.bat`** — он сам перейдёт в корень проекта и выполнит те же команды. Если команда `python` не находится, используйте `py` вместо `python`.
+
+3. После запуска пересобран **`import/products-nocobase.csv`** (UTF-8 с BOM, колонки под импорт в NocoBase: `code`, `title`, `grantDays`, `productType`, `sortOrder`, `active`, `serverId`).
 4. В NocoBase откройте коллекцию **products** → **Import** (или «Импорт данных» в вашей версии) → загрузите CSV и сопоставьте поля. Колонки экспорта вроде **`ID`**, **`Создано`**, **`Обновлено`** в CSV **не входят** — новые строки получат id в NocoBase. Если нужно **обновить** существующие тарифы по тому же `code`, используйте режим импорта с уникальным ключом **`code`** (если плагин поддерживает).
 5. Колонка **`serverId`** может быть пустой: заполните в таблице под ваши `id` из `PROXY_SERVERS_JSON` для аналитики по серверам.
 
