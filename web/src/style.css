@@ -142,6 +142,63 @@ body.vl-wheel-layout #root {
     0 0 40px color-mix(in srgb, var(--gothic-gold) 6%, transparent);
 }
 
+/* Герой: шапка + крупные VL + нижний орнамент — по смыслу твоего макета (раскладка), в стиле готики мини‑аппа */
+.card--hero-scene {
+  padding: 0;
+  overflow: hidden;
+}
+
+.hero-scene__header {
+  position: relative;
+  height: 72px;
+  overflow: hidden;
+}
+
+.hero-scene__bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 16px;
+  height: 44px;
+  background: color-mix(in srgb, #0a0a0d 72%, var(--app-bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--app-text) 12%, transparent);
+  clip-path: var(--clip-chamfer);
+  opacity: 0.92;
+}
+
+.hero-scene__vl {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  font-family: var(--font-gothic);
+  font-weight: 700;
+  font-size: clamp(3.5rem, 18vw, 5.25rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--app-text) 88%, transparent);
+  opacity: 0.22;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hero-scene__content {
+  padding: 4px 20px 14px;
+}
+
+.hero-scene__wave-wrap {
+  margin-top: -4px;
+  padding: 0 8px 10px;
+  color: color-mix(in srgb, var(--gothic-gold) 42%, var(--app-text));
+}
+
+.hero-scene__wave-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 88px;
+}
+
 .hero-tagline {
   font-size: 1.02rem;
   letter-spacing: 0.02em;
