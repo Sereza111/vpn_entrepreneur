@@ -190,14 +190,21 @@ export async function syncProxyInstanceIssued({
 }
 
 function normalizeProductRow(row) {
-  const grantDays = Number(row.grantDays ?? row.vpnDays ?? row.days ?? 0);
+  const r = row && typeof row === "object" ? row : {};
+  const codeRaw = r.code ?? r.Code;
+  const titleRaw = r.title ?? r.Title ?? r.name ?? r.Name;
+  const grantDaysRaw = r.grantDays ?? r.GrantDays ?? r.vpnDays ?? r.days;
+  const productTypeRaw = r.productType ?? r.ProductType;
+  const sortOrderRaw = r.sortOrder ?? r.SortOrder;
+  const activeRaw = r.active ?? r.Active ?? r.isActive;
+  const grantDays = Number(grantDaysRaw ?? 0);
   return {
-    code: String(row.code || row.id || "").trim() || `id_${row.id}`,
-    title: String(row.title || row.name || row.code || "План").trim(),
+    code: String(codeRaw || r.id || "").trim() || `id_${r.id}`,
+    title: String(titleRaw || codeRaw || "План").trim(),
     grantDays: Number.isFinite(grantDays) ? grantDays : 0,
-    productType: String(row.productType || "vpn_extend").trim(),
-    sortOrder: Number(row.sortOrder ?? 0),
-    active: row.active !== false && row.isActive !== false,
+    productType: String(productTypeRaw || "vpn_extend").trim(),
+    sortOrder: Number(sortOrderRaw ?? 0),
+    active: activeRaw !== false && r.isActive !== false,
   };
 }
 
