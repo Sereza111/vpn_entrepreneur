@@ -133,7 +133,33 @@ export async function syncCustomerSnapshot({ telegramId, username }) {
 }
 
 /**
+ * Опционально: привязка тарифа к серверу (id из PROXY_SERVERS_JSON) — для графиков дохода по серверам.
+ */
+async function resolveServerIdFromProduct(productCode) {
+  const code = String(productCode || "").trim();
+  if (!code) return null;
+  try {
+    let rows = extractList(
+      await nbList("products", {
+        filter: { code },
+        pageSize: 10,
+      }),
+    );
+    if (!rows.length) {
+      rows = extractList(await nbList("products", { pageSize: 200 }));
+    }
+    const row = rows.find((r) => String(r.code ?? r.Code ?? "").trim() === code);
+    const sid = row?.serverId ?? row?.ServerId;
+    if (sid != null && String(sid).trim()) return String(sid).trim();
+  } catch (e) {
+    console.error("[nocobase] resolveServerIdFromProduct:", e?.message || e);
+  }
+  return null;
+}
+
+/**
  * Paid order row (Phase A). Does not block provisioning if NocoBase fails.
+ * Доп. поля для аналитики: feeAmount, netAmount, serverId (см. docs/NOCOBASE.md) — добавьте колонки в коллекции `orders`.
  */
 export async function syncPaymentOrder(payload) {
   if (!nocobaseEnabled()) return;
@@ -144,19 +170,41 @@ export async function syncPaymentOrder(payload) {
       telegramId: tid,
       username: payload.username,
     });
-    await nbCreate("orders", {
+
+    let serverId =
+      payload.serverId != null && String(payload.serverId).trim()
+        ? String(payload.serverId).trim()
+        : "";
+    if (!serverId && payload.productCode) {
+      serverId = (await resolveServerIdFromProduct(String(payload.productCode))) || "";
+    }
+
+    const amount = payload.amount != null ? Number(payload.amount) : null;
+    const feeAmount = payload.feeAmount != null ? Number(payload.feeAmount) : null;
+    let netAmount = payload.netAmount != null ? Number(payload.netAmount) : null;
+    if ((netAmount == null || !Number.isFinite(netAmount)) && Number.isFinite(amount) && Number.isFinite(feeAmount)) {
+      netAmount = amount - feeAmount;
+    }
+
+    const values = {
       telegramId: tid,
       status: "paid",
       extendDays: Number(payload.extendDays || 0),
       addDeviceSlots: Number(payload.addDeviceSlots || 0),
-      amount: payload.amount != null ? Number(payload.amount) : null,
+      amount: Number.isFinite(amount) ? amount : null,
       currency: payload.currency != null ? String(payload.currency) : null,
       externalPaymentId:
         payload.externalPaymentId != null ? String(payload.externalPaymentId) : null,
       productCode: payload.productCode != null ? String(payload.productCode) : null,
       paidAt: new Date().toISOString(),
       source: String(payload.source || "payment_webhook"),
-    });
+    };
+
+    if (Number.isFinite(feeAmount)) values.feeAmount = feeAmount;
+    if (Number.isFinite(netAmount)) values.netAmount = netAmount;
+    if (serverId) values.serverId = serverId;
+
+    await nbCreate("orders", values);
   } catch (e) {
     console.error("[nocobase] syncPaymentOrder:", e?.message || e);
   }

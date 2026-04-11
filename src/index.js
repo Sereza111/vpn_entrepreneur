@@ -522,7 +522,9 @@ app.post("/api/test/proxy/grant", authMiddleware, async (req, res) => {
 /**
  * Webhook провайдера оплаты. Заголовок: x-webhook-secret = PAYMENT_WEBHOOK_SECRET.
  * Тело (JSON): telegramId (обяз.), extendDays или planDays, опционально addDeviceSlots,
- * amount, currency, externalPaymentId|paymentId, productCode, username.
+ * amount, currency, externalPaymentId|paymentId, productCode, username,
+ * feeAmount (комиссия платёжки), netAmount (чистая выручка; иначе считается amount−feeAmount),
+ * serverId (привязка к серверу; иначе берётся из products.serverId по productCode).
  * Провайдер должен дергать этот URL после успешной оплаты; дальше — запись order в NocoBase и XUI provision.
  */
 app.post("/api/webhooks/payment", async (req, res) => {
@@ -544,6 +546,9 @@ app.post("/api/webhooks/payment", async (req, res) => {
     paymentId,
     productCode,
     username,
+    feeAmount,
+    netAmount,
+    serverId,
   } = req.body || {};
   const days = Number(extendDays || planDays || 0);
   const slots = Number(addDeviceSlots || 0);
@@ -568,6 +573,9 @@ app.post("/api/webhooks/payment", async (req, res) => {
       externalPaymentId: externalPaymentId ?? paymentId,
       productCode,
       username,
+      feeAmount,
+      netAmount,
+      serverId,
       source: "payment_webhook",
     });
     res.json({ ok: true });

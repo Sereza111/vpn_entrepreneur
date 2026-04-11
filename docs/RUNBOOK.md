@@ -46,7 +46,7 @@
 
 `POST {PUBLIC_BASE_URL}/api/webhooks/payment`  
 Заголовок: `x-webhook-secret: <PAYMENT_WEBHOOK_SECRET>`  
-Тело JSON: минимум `telegramId`, `extendDays` или `planDays`, опционально `addDeviceSlots`, `amount`, `currency`, `paymentId`/`externalPaymentId`, `productCode`, `username`.
+Тело JSON: минимум `telegramId`, `extendDays` или `planDays`, опционально `addDeviceSlots`, `amount`, `currency`, `paymentId`/`externalPaymentId`, `productCode`, `username`, опционально `feeAmount`, `netAmount`, `serverId` (см. [NOCOBASE.md](./NOCOBASE.md)).
 
 Пример `curl` (подставьте URL и секрет):
 
@@ -54,7 +54,7 @@
 curl -sS -X POST "https://your-bot-host/api/webhooks/payment" \
   -H "Content-Type: application/json" \
   -H "x-webhook-secret: YOUR_SECRET" \
-  -d '{"telegramId":123456789,"extendDays":30,"amount":299,"currency":"RUB","paymentId":"test-1","productCode":"vpn_30"}'
+  -d '{"telegramId":123456789,"extendDays":30,"amount":299,"currency":"RUB","feeAmount":9,"paymentId":"test-1","productCode":"vpn_30","serverId":"nl1"}'
 ```
 
 Ожидание: HTTP 200, `{"ok":true}`; в NocoBase появляется заказ (если NocoBase включён).
