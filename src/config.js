@@ -41,6 +41,11 @@ export const config = {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
+  /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
+  payment: {
+    checkoutUrlTemplate: (process.env.PAYMENT_CHECKOUT_URL_TEMPLATE || "").trim(),
+    defaultProductCode: (process.env.PAYMENT_DEFAULT_PRODUCT_CODE || "vpn_30").trim(),
+  },
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||

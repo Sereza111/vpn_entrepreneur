@@ -10,6 +10,98 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
+function applyTelegramChrome(tg) {
+  try {
+    const p = tg.themeParams;
+    if (p?.secondary_bg_color && tg.setHeaderColor) tg.setHeaderColor(p.secondary_bg_color);
+    if (p?.bg_color && tg.setBackgroundColor) tg.setBackgroundColor(p.bg_color);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** PAYMENT_CHECKOUT_URL_TEMPLATE: {telegramId} {productCode} {grantDays} {username} */
+function expandPaymentCheckoutUrl(template, vars) {
+  const keys = ["telegramId", "productCode", "grantDays", "username"];
+  let out = String(template);
+  for (const k of keys) {
+    const val = vars[k] ?? "";
+    out = out.split(`{${k}}`).join(encodeURIComponent(String(val)));
+  }
+  return out;
+}
+
+function appendAppFooter(container) {
+  container.appendChild(
+    el(
+      `<div class="app-footer"><a href="https://t.me/VL_VPNbot" target="_blank" rel="noopener noreferrer">@VL_VPNbot</a></div>`,
+    ),
+  );
+}
+
+function bindVpnRenewalActions({ tg, token, me }) {
+  const payCfg = me.payment || {};
+  const checkoutTpl = payCfg.checkoutUrlTemplate || "";
+  const testOn = payCfg.testGrantEnabled;
+  const username = me.subscriptionStatus?.username || "";
+  const tid = me.telegramId;
+
+  const runTestGrant = async (days) => {
+    await api("/api/test/grant", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ days: Number(days) }),
+    });
+    showToast(`Тестово продлено на ${days} дней`);
+    setTimeout(() => window.location.reload(), 600);
+  };
+
+  const bindGrid = (rootEl, testOnly) => {
+    if (!rootEl) return;
+    rootEl.querySelectorAll(".plan-tile[data-days]").forEach((b) => {
+      b.onclick = async () => {
+        const days = b.getAttribute("data-days");
+        const code =
+          b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vpn_30";
+        if (testOnly) {
+          try {
+            await runTestGrant(days);
+          } catch (e) {
+            showToast(`Ошибка: ${e.message}`);
+          }
+          return;
+        }
+        if (checkoutTpl) {
+          const url = expandPaymentCheckoutUrl(checkoutTpl, {
+            telegramId: tid,
+            productCode: code,
+            grantDays: days,
+            username,
+          });
+          if (!/^https?:\/\//i.test(url)) {
+            showToast("Некорректный шаблон оплаты (нужен полный URL с https://)");
+            return;
+          }
+          tg.openLink(url);
+          return;
+        }
+        if (testOn) {
+          try {
+            await runTestGrant(days);
+          } catch (e) {
+            showToast(`Ошибка: ${e.message}`);
+          }
+        } else {
+          showToast("Оплата скоро будет доступна. Напишите в поддержку.");
+        }
+      };
+    });
+  };
+
+  bindGrid(document.getElementById("vpnPlanGrid"), false);
+  bindGrid(document.getElementById("devTestVpnPlans"), true);
+}
+
 function el(html) {
   const d = document.createElement("div");
   d.innerHTML = html.trim();
@@ -59,6 +151,7 @@ async function boot() {
   }
   tg.ready();
   tg.expand();
+  applyTelegramChrome(tg);
 
   const initData = tg.initData;
   if (!initData) {
@@ -162,7 +255,7 @@ async function boot() {
 
   if (!hasAccount) {
     const nav = el(`
-      <div class="card">
+      <div class="card card--nav">
         <div class="segmented">
           <button class="seg-btn active" data-target="status">Статус</button>
           <button class="seg-btn" data-target="connect">Подключение</button>
@@ -182,7 +275,7 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-connect">
-          <h3 class="value" style="margin:0 0 6px">Подключение</h3>
+          <h2 class="section-title">Подключение</h2>
           <p class="muted">После оплаты доступ к VPN выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
           <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
         </div>
@@ -192,7 +285,7 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-extend">
-          <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
+          <h2 class="section-title">Продление подписки</h2>
           <p class="muted">Выберите удобный способ: оплата или связь с оператором.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Поддержка</button>
@@ -203,7 +296,7 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-proxy">
-          <h3 class="value" style="margin:0 0 6px">Прокси</h3>
+          <h2 class="section-title">Прокси</h2>
           <div class="muted">Доступно прокси: <b>${Number(me?.proxy?.remaining || 0)}</b></div>
           <div class="muted" style="margin-top:4px">Выдано: ${Number(me?.proxy?.used || 0)} / ${Number(me?.proxy?.total || 0)}</div>
           ${
@@ -247,6 +340,26 @@ async function boot() {
 
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
     document.getElementById("payBtn").onclick = async () => {
+      const pay = me.payment || {};
+      const tpl = pay.checkoutUrlTemplate || "";
+      if (tpl) {
+        const url = expandPaymentCheckoutUrl(tpl, {
+          telegramId: me.telegramId,
+          productCode: pay.defaultProductCode || "vpn_30",
+          grantDays: 30,
+          username: "",
+        });
+        if (!/^https?:\/\//i.test(url)) {
+          showToast("Некорректный шаблон оплаты (нужен http/https)");
+          return;
+        }
+        tg.openLink(url);
+        return;
+      }
+      if (!pay.testGrantEnabled) {
+        showToast("Оплата скоро будет доступна. Напишите в поддержку.");
+        return;
+      }
       try {
         await api("/api/test/grant", {
           method: "POST",
@@ -337,6 +450,7 @@ async function boot() {
       };
     }
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
+    appendAppFooter(root);
     return;
   }
 
@@ -371,7 +485,7 @@ async function boot() {
 
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
   const nav = el(`
-    <div class="card">
+    <div class="card card--nav">
       <div class="segmented">
         <button class="seg-btn active" data-target="status">Статус</button>
         <button class="seg-btn" data-target="connect">Подключение</button>
@@ -427,7 +541,7 @@ async function boot() {
   const isXuiPrimary = me.subscriptionPrimarySource === "xui";
 
   const connect = el(`<div class="card section" id="section-connect">
-    <h3 class="value" style="margin:0 0 6px">Подключение VPN</h3>
+    <h2 class="section-title">Подключение VPN</h2>
     <p class="muted">Скопируйте подписку или откройте ссылку напрямую в клиенте.</p>
     ${
       isXuiPrimary
@@ -436,7 +550,7 @@ async function boot() {
     }
     <div class="link-block">
       <div class="label">Ссылка подписки</div>
-      <div class="link" id="subUrl">${sub}</div>
+      <div class="subscription-url" id="subUrl">${sub}</div>
     </div>
     <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку"}</button>
     <div class="muted" style="margin-top:8px">Если клиент уже есть в панели (ваш Telegram) — ссылка обновится без нового клиента. Новый клиент создаётся только при первом выдавании.</div>
@@ -450,7 +564,7 @@ async function boot() {
     const servers = Array.isArray(me.proxyServers) ? me.proxyServers : [];
     const items = Array.isArray(p.items) ? p.items : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
-      <h3 class="value" style="margin:0 0 6px">Прокси</h3>
+      <h2 class="section-title">Прокси</h2>
       <p class="muted">SOCKS5 и HTTP прокси (отдельная услуга).</p>
 
       ${
@@ -498,28 +612,44 @@ async function boot() {
           (a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0),
         )
       : null;
-  const planButtonsHtml = vpnFromNb
+  const payCfg = me.payment || {};
+  const checkoutTpl = payCfg.checkoutUrlTemplate || "";
+  const testGrantOn = payCfg.testGrantEnabled;
+
+  const planTilesHtml = vpnFromNb
     ? vpnFromNb
         .map(
           (p) =>
-            `<button class="plan-btn" data-days="${Number(p.grantDays)}" data-product-code="${escAttr(p.code)}">${escAttr(p.title)}</button>`,
+            `<button type="button" class="plan-tile" data-days="${Number(p.grantDays)}" data-product-code="${escAttr(p.code)}">${escAttr(p.title)}</button>`,
         )
         .join("")
-    : `<button class="plan-btn" data-days="30">30 дней</button>
-    <button class="plan-btn" data-days="90">90 дней</button>
-    <button class="plan-btn" data-days="180">180 дней</button>`;
+    : `<button type="button" class="plan-tile" data-days="30" data-product-code="vpn_30">30 дней</button>
+    <button type="button" class="plan-tile" data-days="90" data-product-code="vpn_90">90 дней</button>
+    <button type="button" class="plan-tile" data-days="180" data-product-code="vpn_180">180 дней</button>`;
+
+  const devTestBlock =
+    checkoutTpl && testGrantOn
+      ? `<div class="dev-test-row" id="devTestVpnPlans"><div class="dev-test-label">Тест без оплаты</div><div class="dev-test-grid">${planTilesHtml}</div></div>`
+      : "";
 
   const extend = el(`<div class="card section" id="section-extend">
-    <h3 class="value" style="margin:0 0 6px">Продление подписки</h3>
+    <h2 class="section-title">Продление подписки</h2>
     <p class="muted">Выберите план. После оплаты срок обновится автоматически.</p>
     ${
       vpnFromNb
-        ? `<p class="muted" style="margin-top:6px;line-height:1.45">Тарифы загружаются из NocoBase (каталог <code>products</code>).</p>`
+        ? `<p class="muted" style="margin-top:8px;line-height:1.45">Тарифы из NocoBase (<code>products</code>).</p>`
         : ""
     }
-    <div class="plans">
-      ${planButtonsHtml}
+    ${
+      checkoutTpl
+        ? `<p class="muted" style="margin-top:8px;line-height:1.45">Откроется страница оплаты; после успешной оплаты доступ обновится автоматически.</p>`
+        : ""
+    }
+    <div class="plan-grid" id="vpnPlanGrid">
+      ${planTilesHtml}
     </div>
+    ${devTestBlock}
+    <div class="actions-stack">
     ${
       isXuiPrimary
         ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (IP лимит)</button>
@@ -527,8 +657,10 @@ async function boot() {
         : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
+    </div>
   </div>`);
   root.appendChild(extend);
+  bindVpnRenewalActions({ tg, token, me });
 
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.onclick = () => {
@@ -648,22 +780,6 @@ async function boot() {
       }
     };
   }
-  document.querySelectorAll(".plan-btn[data-days]").forEach((b) => {
-    b.onclick = async () => {
-      const days = b.getAttribute("data-days");
-      try {
-        await api("/api/test/grant", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ days: Number(days) }),
-        });
-        showToast(`Тестово продлено на ${days} дней`);
-        setTimeout(() => window.location.reload(), 600);
-      } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
-      }
-    };
-  });
   const addDev = document.getElementById("addDeviceBtn");
   if (addDev) {
     addDev.onclick = async () => {
@@ -683,6 +799,8 @@ async function boot() {
   document.getElementById("supportBtn").onclick = () => {
     tg.openTelegramLink("https://t.me/VL_VPNbot");
   };
+
+  appendAppFooter(root);
 
   // "Спидометр": считаем скорость как прирост usedTrafficBytes за интервал.
   // Никаких внешних speedtest — только то, что реально прошло через подписку.

@@ -311,6 +311,7 @@ async function loadMe(telegramId) {
   }
 
   return {
+    telegramId,
     remnawaveUser: null,
     subscriptionUrl: primary,
     subscriptionPrimarySource,
@@ -319,6 +320,11 @@ async function loadMe(telegramId) {
     proxy: proxyPayload,
     proxyServers: proxyServers.map((s) => ({ id: s.id, country: s.country })),
     catalog,
+    payment: {
+      checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
+      defaultProductCode: config.payment.defaultProductCode || "vpn_30",
+      testGrantEnabled: config.testGrantEnabled,
+    },
   };
 }
 
@@ -513,6 +519,12 @@ app.post("/api/test/proxy/grant", authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * Webhook провайдера оплаты. Заголовок: x-webhook-secret = PAYMENT_WEBHOOK_SECRET.
+ * Тело (JSON): telegramId (обяз.), extendDays или planDays, опционально addDeviceSlots,
+ * amount, currency, externalPaymentId|paymentId, productCode, username.
+ * Провайдер должен дергать этот URL после успешной оплаты; дальше — запись order в NocoBase и XUI provision.
+ */
 app.post("/api/webhooks/payment", async (req, res) => {
   if (!config.paymentWebhookSecret) {
     return res.status(503).json({ error: "webhook_disabled" });
