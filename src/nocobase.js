@@ -275,6 +275,19 @@ export async function fetchCatalogProducts() {
   }
 }
 
+function subscriptionBrandingActive(v) {
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0) return false;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "false" || s === "0" || s === "no" || s === "нет") return false;
+    if (s === "true" || s === "1" || s === "yes" || s === "да") return true;
+    return s.length > 0;
+  }
+  if (v == null) return true;
+  return v !== false;
+}
+
 function normalizeSubscriptionBrandingRow(row) {
   const r = row && typeof row === "object" ? row : {};
   const title =
@@ -282,6 +295,7 @@ function normalizeSubscriptionBrandingRow(row) {
     r.SubscriptionTitle ??
     r.subscription_title ??
     r.title;
+  const rawActive = r.active ?? r.Active ?? r.isActive;
   return {
     subscriptionTitle: String(title || "").trim(),
     supportUrl: String(
@@ -293,7 +307,7 @@ function normalizeSubscriptionBrandingRow(row) {
     announcement: String(
       r.announcement ?? r.Announcement ?? "",
     ).trim(),
-    active: r.active !== false && r.Active !== false && r.isActive !== false,
+    active: subscriptionBrandingActive(rawActive),
   };
 }
 

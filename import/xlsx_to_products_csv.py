@@ -25,6 +25,41 @@ OUT_BRANDING_XLSX = ROOT / "import" / "nocobase-subscription_branding.xlsx"
 
 BRANDING_SHEET = "subscription_branding"
 
+
+def _normalize_subscription_branding_cell(header: str, value: object) -> object:
+    """
+    В xlsx ячейка с логическим TRUE/FALSE имеет тип boolean. Если в NocoBase поле active — строка,
+    импорт падает: «Invalid value, expected string». Пишем текст «true»/«false» — совместимо со
+    строкой и обычно с типом «булево».
+    """
+    if (header or "").strip() != "active":
+        return value
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int) and not isinstance(value, bool):
+        if value == 1:
+            return "true"
+        if value == 0:
+            return "false"
+    if isinstance(value, float):
+        if value == 1.0:
+            return "true"
+        if value == 0.0:
+            return "false"
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in ("", "none"):
+            return None
+        if s in ("true", "1", "yes", "да", "истина"):
+            return "true"
+        if s in ("false", "0", "no", "нет", "ложь"):
+            return "false"
+        return value.strip()
+    return str(value)
+
+
 # Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
 NOCOBASE_IMPORT_HEADERS = [
     "ID",
@@ -123,6 +158,10 @@ def export_subscription_branding(wb: object) -> int:
         if not r:
             continue
         vals = row_values(r)
+        vals = [
+            _normalize_subscription_branding_cell(fn, v)
+            for fn, v in zip(fieldnames, vals)
+        ]
         if all(v is None or (isinstance(v, str) and not v.strip()) for v in vals):
             continue
         data_rows.append(vals)
