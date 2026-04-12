@@ -204,7 +204,7 @@
 
 1. Коллекция **`infra_costs`** → поля по таблице выше; при необходимости **`serverId`** совпадает с `id` в `PROXY_SERVERS_JSON`.
 2. Надёжный импорт: **Экспорт → Excel** пустой таблицы → скопируйте **первую строку** заголовков в свой файл → заполните данные → импорт в эту коллекцию.
-3. Пример строк: [`import/infra_costs.example.csv`](../import/infra_costs.example.csv). Готовый **Excel** с **полной** первой строкой как у экспорта NocoBase (`ID`, `role`, `label`, …, `notes`): [`import/infra_costs-import-template.xlsx`](../import/infra_costs-import-template.xlsx). Если мастер импорта пишет «заголовки не найдены» — первая строка файла должна **точно совпадать** с **Экспорт → Excel** из вашей коллекции (все колонки, тот же порядок); пустые `ID` / `serverId` для новых строк — нормально.
+3. Пример строк: [`import/infra_costs.example.csv`](../import/infra_costs.example.csv). Готовый **Excel**: [`import/infra_costs-import-template.xlsx`](../import/infra_costs-import-template.xlsx) — первая строка в том же **порядке**, что у эталона из NocoBase (в типичном случае: `ID`, `role`, `label`, `currency`, `amount`, `period`, `effectiveFrom`, `notes`, `serverId`, `provider`; у вас порядок может отличаться — скопируйте строку 1 из **Экспорт → Excel**). Если «заголовки не найдены» — совпадают ли **имена и порядок** колонок с мастером импорта.
 
 **Доход (`orders`) вручную или задним числом**
 

@@ -1,4 +1,4 @@
-ID,role,label,currency,amount,period,effectiveFrom,serverId,provider,notes
-,bypass,Обход · VPS NL,RUB,890,monthly,2026-01-01,,selectel,ID ВМ в панели провайдера
-,exit,Выход · транзит,USD,12,monthly,2026-01-01,,hetzner,
-,proxy_host,Площадка прокси nl1,RUB,450,monthly,2026-01-01,nl1,yandex,Совпадает serverId из PROXY_SERVERS_JSON
+ID,role,label,currency,amount,period,effectiveFrom,notes,serverId,provider
+,bypass,Обход · VPS NL,RUB,890,monthly,2026-01-01,ID ВМ в биллинге,,selectel
+,exit,Выход · транзит,USD,12,monthly,2026-01-01,,,hetzner
+,proxy_host,Площадка прокси nl1,RUB,450,monthly,2026-04-01,Совпадает с PROXY_SERVERS_JSON,nl1,yandex
