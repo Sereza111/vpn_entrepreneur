@@ -204,7 +204,7 @@
 
 1. Коллекция **`infra_costs`** → поля по таблице выше; при необходимости **`serverId`** совпадает с `id` в `PROXY_SERVERS_JSON`.
 2. Надёжный импорт: **Экспорт → Excel** пустой таблицы → скопируйте **первую строку** заголовков в свой файл → заполните данные → импорт в эту коллекцию.
-3. Пример строк (подгоните заголовки под ваш экспорт): [`import/infra_costs.example.csv`](../import/infra_costs.example.csv).
+3. Пример строк (подгоните заголовки под ваш экспорт): [`import/infra_costs.example.csv`](../import/infra_costs.example.csv). Готовый **Excel** под типичный набор полей (`role`, `label`, `currency`, `amount`, `period`, `effectiveFrom`): [`import/infra_costs-import-template.xlsx`](../import/infra_costs-import-template.xlsx).
 
 **Доход (`orders`) вручную или задним числом**
 
