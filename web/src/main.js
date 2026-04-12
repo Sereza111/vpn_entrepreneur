@@ -10,6 +10,83 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
+/** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
+function countryCodeToFlagEmoji(countryCode) {
+  const c = String(countryCode || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+  if (c.length !== 2) return "🌐";
+  const base = 0x1f1e6 - 0x41;
+  try {
+    return String.fromCodePoint(c.charCodeAt(0) + base, c.charCodeAt(1) + base);
+  } catch {
+    return "🌐";
+  }
+}
+
+/** Русское имя страны по коду; explicitLabel из PROXY_SERVERS_JSON имеет приоритет. */
+function displayCountryName(countryCode, explicitLabel) {
+  const manual = String(explicitLabel || "").trim();
+  if (manual) return manual;
+  const cc = String(countryCode || "").trim().toUpperCase();
+  if (cc.length === 2 && typeof Intl !== "undefined" && Intl.DisplayNames) {
+    try {
+      const n = new Intl.DisplayNames(["ru-RU"], { type: "region" }).of(cc);
+      if (n) return n;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (cc) return cc;
+  return "Регион";
+}
+
+function formatProxyRegionHtml(it, servers) {
+  const srv = Array.isArray(servers) ? servers.find((x) => x.id === it.serverId) : null;
+  const code = String(it.country || srv?.country || "").trim();
+  const flag = countryCodeToFlagEmoji(code);
+  const name = escAttr(displayCountryName(code, srv?.label || ""));
+  return `<span class="proxy-item-region" aria-hidden="true">${flag}<span class="proxy-item-region__name">${name}</span></span>`;
+}
+
+function proxyServerPickButtonsHtml(servers) {
+  const list = Array.isArray(servers) ? servers : [];
+  if (!list.length) {
+    return `<div class="muted country-picker-empty">Нет серверов в PROXY_SERVERS_JSON</div>`;
+  }
+  return list
+    .map((s) => {
+      const id = escAttr(s.id);
+      const codeRaw = String(s.country || "").trim().toUpperCase() || String(s.id || "");
+      const flag = countryCodeToFlagEmoji(s.country);
+      const name = escAttr(displayCountryName(s.country, s.label));
+      const code = escAttr(codeRaw);
+      return `<button type="button" class="proxy-btn" data-proxy-server="${id}" aria-label="${name}">
+        <span class="proxy-btn__row">
+          <span class="proxy-btn__flag">${flag}</span>
+          <span class="proxy-btn__text">
+            <span class="proxy-btn__name">${name}</span>
+            <span class="proxy-btn__meta"><span class="proxy-btn__code">${code}</span> · ${id}</span>
+          </span>
+        </span>
+      </button>`;
+    })
+    .join("");
+}
+
+function vpnPlanTileHtml(p) {
+  const days = Number(p.grantDays);
+  const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
+  const code = escAttr(p.code || "");
+  const title = escAttr(p.title || (safeDays ? `${safeDays} дней` : "Тариф"));
+  const meta = escAttr(safeDays ? `${safeDays} дн. · VPN` : "VPN · уточните срок в NocoBase");
+  return `<button type="button" class="plan-tile" data-days="${safeDays}" data-product-code="${code}">
+    <span class="plan-tile__title">${title}</span>
+    <span class="plan-tile__meta">${meta}</span>
+  </button>`;
+}
+
 function applyTelegramChrome(tg) {
   try {
     const p = tg.themeParams;
@@ -381,7 +458,7 @@ async function boot() {
                    .map(
                      (it, i) => `
                        <div class="link-block" style="margin-top:10px">
-                         <div class="label">#${i + 1} • ${it.country || "—"}</div>
+                         <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, me?.proxyServers || [])}</div>
                          <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
                          <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
                        </div>
@@ -390,15 +467,19 @@ async function boot() {
                    .join("")}`
               : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Нажмите «Создать прокси», когда будет доступный остаток.</div>`
           }
-          <div class="country-picker" id="proxyServerPickNoAcc">
-            <div class="country-picker-label">Выберите регион</div>
-            <div class="country-picker-grid">
-            ${(Array.isArray(me?.proxyServers) ? me.proxyServers : [])
-              .map(
-                (s) =>
-                  `<button type="button" class="proxy-btn" data-proxy-server="${escAttr(s.id)}"><span class="proxy-btn__code">${escAttr(s.country || s.id)}</span><span class="proxy-btn__sub">${escAttr(s.id)}</span></button>`,
-              )
-              .join("") || `<div class="muted country-picker-empty">Нет серверов в PROXY_SERVERS_JSON</div>`}
+          <div class="proxy-service-card">
+            <div class="proxy-service-card__head">
+              <span class="proxy-service-card__glyph" aria-hidden="true">◈</span>
+              <div>
+                <div class="proxy-service-card__title">Прокси</div>
+                <div class="proxy-service-card__sub">Новый доступ SOCKS5 / HTTP</div>
+              </div>
+            </div>
+            <div class="country-picker" id="proxyServerPickNoAcc">
+              <div class="country-picker-label">Страна / площадка</div>
+              <div class="country-picker-grid country-picker-grid--rows">
+                ${proxyServerPickButtonsHtml(me?.proxyServers)}
+              </div>
             </div>
           </div>
           <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
@@ -691,7 +772,7 @@ async function boot() {
                   .map(
                     (it, i) => `
                       <div class="link-block" style="margin-top:10px">
-                        <div class="label">#${i + 1} • ${it.country || "—"}</div>
+                        <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, servers)}</div>
                         <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
                         <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
                       </div>
@@ -700,15 +781,19 @@ async function boot() {
                   .join("")}`
              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>`
          }
-             <div class="country-picker">
-               <div class="country-picker-label">Выберите регион</div>
-               <div class="country-picker-grid">
-               ${servers
-                 .map(
-                   (s) =>
-                     `<button type="button" class="proxy-btn" data-proxy-server="${escAttr(s.id)}"><span class="proxy-btn__code">${escAttr(s.country || s.id)}</span><span class="proxy-btn__sub">${escAttr(s.id)}</span></button>`,
-                 )
-                 .join("")}
+             <div class="proxy-service-card">
+               <div class="proxy-service-card__head">
+                 <span class="proxy-service-card__glyph" aria-hidden="true">◈</span>
+                 <div>
+                   <div class="proxy-service-card__title">Прокси</div>
+                   <div class="proxy-service-card__sub">Выберите площадку и создайте доступ</div>
+                 </div>
+               </div>
+               <div class="country-picker">
+                 <div class="country-picker-label">Страна / площадка</div>
+                 <div class="country-picker-grid country-picker-grid--rows">
+                   ${proxyServerPickButtonsHtml(servers)}
+                 </div>
                </div>
              </div>
              <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
@@ -729,15 +814,14 @@ async function boot() {
   const testGrantOn = payCfg.testGrantEnabled;
 
   const planTilesHtml = vpnFromNb
-    ? vpnFromNb
-        .map(
-          (p) =>
-            `<button type="button" class="plan-tile" data-days="${Number(p.grantDays)}" data-product-code="${escAttr(p.code)}">${escAttr(p.title)}</button>`,
-        )
-        .join("")
-    : `<button type="button" class="plan-tile" data-days="30" data-product-code="vpn_30">30 дней</button>
-    <button type="button" class="plan-tile" data-days="90" data-product-code="vpn_90">90 дней</button>
-    <button type="button" class="plan-tile" data-days="180" data-product-code="vpn_180">180 дней</button>`;
+    ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
+    : [
+        { grantDays: 30, title: "30 дней", code: "vpn_30" },
+        { grantDays: 90, title: "90 дней", code: "vpn_90" },
+        { grantDays: 180, title: "180 дней", code: "vpn_180" },
+      ]
+        .map((p) => vpnPlanTileHtml(p))
+        .join("");
 
   const devTestBlock =
     checkoutTpl && testGrantOn
@@ -746,19 +830,28 @@ async function boot() {
 
   const extend = el(`<div class="card section" id="section-extend">
     <h2 class="section-title">Продление подписки</h2>
-    <p class="muted">Выберите план. После оплаты срок обновится автоматически.</p>
-    ${
-      vpnFromNb
-        ? `<p class="muted" style="margin-top:8px;line-height:1.45">Тарифы из NocoBase (<code>products</code>).</p>`
-        : ""
-    }
     ${
       checkoutTpl
-        ? `<p class="muted" style="margin-top:8px;line-height:1.45">Откроется страница оплаты; после успешной оплаты доступ обновится автоматически.</p>`
+        ? `<p class="muted" style="margin-top:6px;line-height:1.45">После оплаты срок обновится автоматически.</p>`
+        : `<p class="muted" style="margin-top:6px;line-height:1.45">Выберите срок доступа VPN.</p>`
+    }
+    ${
+      vpnFromNb
+        ? `<p class="muted" style="margin-top:6px;font-size:0.78rem;line-height:1.45">Тарифы из NocoBase (<code>products</code>).</p>`
         : ""
     }
-    <div class="plan-grid" id="vpnPlanGrid">
-      ${planTilesHtml}
+    <div class="vpn-renew-card">
+      <div class="vpn-renew-card__head">
+        <span class="vpn-renew-card__glyph" aria-hidden="true">◎</span>
+        <div class="vpn-renew-card__head-text">
+          <span class="vpn-renew-card__kind">VPN</span>
+          <span class="vpn-renew-card__sub">Продление подписки</span>
+        </div>
+      </div>
+      <div class="store-field-label">Период</div>
+      <div class="plan-grid plan-grid--vpn" id="vpnPlanGrid">
+        ${planTilesHtml}
+      </div>
     </div>
     ${devTestBlock}
     <div class="actions-stack">

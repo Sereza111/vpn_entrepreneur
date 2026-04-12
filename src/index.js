@@ -325,7 +325,11 @@ async function loadMe(telegramId) {
     subscriptionStatus,
     subscriptionUi,
     proxy: proxyPayload,
-    proxyServers: proxyServers.map((s) => ({ id: s.id, country: s.country })),
+    proxyServers: proxyServers.map((s) => ({
+      id: s.id,
+      country: s.country,
+      label: s.label || "",
+    })),
     catalog,
     payment: {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",

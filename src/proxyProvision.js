@@ -18,6 +18,8 @@ export function parseProxyServers(envValue) {
     .map((s) => ({
       id: String(s?.id || "").trim(),
       country: String(s?.country || "").trim(),
+      /** Подпись в мини-аппе (если пусто — имя страны по коду через Intl на клиенте). */
+      label: String(s?.label || s?.name || "").trim(),
       host: String(s?.host || "").trim(),
       socksPort: Number(s?.socksPort ?? 1080),
       httpPort: Number(s?.httpPort ?? 3128),

@@ -568,24 +568,156 @@ body.vl-wheel-layout #root {
   margin-top: 14px;
 }
 
+.plan-grid--vpn {
+  margin-top: 8px;
+}
+
+/* VPN renewal block (карточка «магазина») */
+.vpn-renew-card {
+  margin-top: 14px;
+  padding: 14px 12px 16px;
+  border: 2px solid var(--gothic-frame);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--app-bg) 82%, var(--app-bg-secondary));
+  clip-path: var(--clip-chamfer);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 14%, transparent),
+    0 4px 20px color-mix(in srgb, var(--app-text) 6%, transparent);
+}
+
+.vpn-renew-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--app-stroke);
+}
+
+.vpn-renew-card__glyph {
+  font-size: 1.35rem;
+  line-height: 1;
+  opacity: 0.85;
+  color: color-mix(in srgb, var(--gothic-gold) 70%, var(--app-text));
+}
+
+.vpn-renew-card__head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vpn-renew-card__kind {
+  font-family: var(--font-gothic);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gothic-gold);
+}
+
+.vpn-renew-card__sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--app-text);
+  letter-spacing: 0.02em;
+}
+
+.store-field-label {
+  font-family: var(--font-gothic);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--app-hint);
+  margin-bottom: 6px;
+}
+
+/* Прокси: карточка выбора площадки */
+.proxy-service-card {
+  margin-top: 14px;
+}
+
+.proxy-service-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.proxy-service-card__glyph {
+  font-size: 1.2rem;
+  line-height: 1;
+  color: color-mix(in srgb, var(--gothic-gold) 65%, var(--app-text));
+}
+
+.proxy-service-card__title {
+  font-family: var(--font-gothic);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.proxy-service-card__sub {
+  font-size: 0.72rem;
+  color: var(--app-hint);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.proxy-item-region {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.proxy-item-region__name {
+  font-weight: 600;
+}
+
 .plan-tile {
   border: none;
   border-radius: 0;
-  min-height: 54px;
+  min-height: 58px;
   background: color-mix(in srgb, var(--app-text) 8%, transparent);
   color: var(--app-text);
-  padding: 14px 12px;
-  font-family: var(--font-gothic);
+  padding: 12px 12px;
+  font-family: var(--font-body);
   font-weight: 600;
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-align: center;
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
   line-height: 1.25;
   cursor: pointer;
   clip-path: var(--clip-chamfer);
   box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+}
+
+.plan-tile__title {
+  font-family: var(--font-gothic);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.plan-tile__meta {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-hint);
 }
 
 .plan-tile:hover {
@@ -665,6 +797,10 @@ body.vl-wheel-layout #root {
   gap: 8px;
 }
 
+.country-picker-grid--rows {
+  grid-template-columns: 1fr;
+}
+
 .country-picker-empty {
   grid-column: 1 / -1;
   text-align: center;
@@ -704,10 +840,10 @@ body.vl-wheel-layout #root {
 .proxy-btn {
   border: none;
   border-radius: 0;
-  min-height: 68px;
+  min-height: 0;
   background: color-mix(in srgb, var(--app-text) 8%, transparent);
   color: var(--app-text);
-  padding: 10px 8px;
+  padding: 12px 12px;
   font-family: var(--font-body);
   font-weight: 600;
   font-size: inherit;
@@ -717,27 +853,51 @@ body.vl-wheel-layout #root {
   clip-path: var(--clip-chamfer);
   box-shadow: inset 0 0 0 1px var(--app-stroke-strong);
   transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.proxy-btn__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.proxy-btn__flag {
+  font-size: 1.85rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.proxy-btn__text {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
   gap: 3px;
+  min-width: 0;
+}
+
+.proxy-btn__name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.proxy-btn__meta {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-hint);
+  font-family: var(--font-body);
 }
 
 .proxy-btn__code {
   font-family: var(--font-gothic);
-  font-size: 1.08rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  line-height: 1.1;
-}
-
-.proxy-btn__sub {
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--app-hint);
-  font-family: var(--font-body);
+  letter-spacing: 0.12em;
 }
 
 .proxy-btn:active {
@@ -751,7 +911,7 @@ body.vl-wheel-layout #root {
     0 0 14px color-mix(in srgb, var(--gothic-gold) 22%, transparent);
 }
 
-.proxy-btn.active .proxy-btn__sub {
+.proxy-btn.active .proxy-btn__meta {
   color: color-mix(in srgb, var(--gothic-gold) 65%, var(--app-hint));
 }
 
