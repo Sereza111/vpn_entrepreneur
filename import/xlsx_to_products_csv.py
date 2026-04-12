@@ -60,6 +60,32 @@ def _normalize_subscription_branding_cell(header: str, value: object) -> object:
     return str(value)
 
 
+def _ensure_id_column_first(
+    fieldnames: list[str], data_rows: list[list[object]]
+) -> tuple[list[str], list[list[object]]]:
+    """
+    Мастер импорта NocoBase ждёт первым заголовок **ID** (как в «Экспорт → Excel»).
+    Если в строке 1 листа первая ячейка пустая или колонку не скопировали — добавляем пустой ID.
+    """
+    fn = list(fieldnames)
+    rows = [list(r) for r in data_rows]
+    if not fn:
+        return fn, rows
+    if fn[0] == "ID":
+        return fn, rows
+    if "ID" in fn:
+        i = fn.index("ID")
+        new_fn = ["ID"] + [h for j, h in enumerate(fn) if j != i]
+        rows = [[r[i]] + [r[j] for j in range(len(r)) if j != i] for r in rows]
+        return new_fn, rows
+    for j, h in enumerate(fn):
+        if h.lower() == "id":
+            new_fn = ["ID"] + [x for k, x in enumerate(fn) if k != j]
+            rows = [[r[j]] + [r[k] for k in range(len(r)) if k != j] for r in rows]
+            return new_fn, rows
+    return ["ID"] + fn, [[None] + r for r in rows]
+
+
 # Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
 NOCOBASE_IMPORT_HEADERS = [
     "ID",
@@ -165,6 +191,8 @@ def export_subscription_branding(wb: object) -> int:
         if all(v is None or (isinstance(v, str) and not v.strip()) for v in vals):
             continue
         data_rows.append(vals)
+
+    fieldnames, data_rows = _ensure_id_column_first(fieldnames, data_rows)
 
     OUT_BRANDING_CSV.parent.mkdir(parents=True, exist_ok=True)
     with OUT_BRANDING_CSV.open("w", encoding="utf-8-sig", newline="") as f:
