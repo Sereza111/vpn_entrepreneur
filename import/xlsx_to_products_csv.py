@@ -3,7 +3,8 @@
 Читает Товары.xlsx в корне репозитория и пишет файлы для импорта в NocoBase:
 
 - import/products-nocobase.csv / .xlsx — лист **активный при сохранении** (как раньше: обычно «Data» с товарами).
-- import/nocobase-subscription_branding.csv / .xlsx — лист **subscription_branding** (не путать с «Товарами»).
+- import/nocobase-subscription_branding.csv / .xlsx — ключи полей API, лист **Sheet1** (без колонки ID).
+- import/nocobase-subscription_branding-RU-titles.xlsx — те же данные, заголовки как типичные **подписи** полей в UI (для маппинга импорта NocoBase).
 
 Зависимость: pip install openpyxl
 
@@ -22,16 +23,26 @@ OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
 # Имя с префиксом коллекции — чтобы в NocoBase не перепутали с импортом «Товары» (там другие заголовки).
 OUT_BRANDING_CSV = ROOT / "import" / "nocobase-subscription_branding.csv"
 OUT_BRANDING_XLSX = ROOT / "import" / "nocobase-subscription_branding.xlsx"
+OUT_BRANDING_XLSX_RU = ROOT / "import" / "nocobase-subscription_branding-RU-titles.xlsx"
 
 BRANDING_SHEET = "subscription_branding"
 
-BRANDING_NOCOBASE_HEADERS = [
-    "ID",
+# Ключи полей в API бота / внутренние имена в NocoBase (должны совпадать с именами полей коллекции).
+BRANDING_FIELD_KEYS = [
     "subscriptionTitle",
     "supportUrl",
     "profileUrl",
     "announcement",
     "active",
+]
+
+# Подписи как в типичной русской админке — если импорт не мапит по ключам, попробуйте этот файл.
+BRANDING_RU_TITLES = [
+    "Заголовок подписки",
+    "URL поддержки",
+    "URL профиля",
+    "Объявление",
+    "Активен",
 ]
 
 # Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
@@ -156,7 +167,6 @@ def export_subscription_branding(wb: object) -> int:
 
         data_rows.append(
             {
-                "ID": None,
                 "subscriptionTitle": title,
                 "supportUrl": cell(i_sup),
                 "profileUrl": cell(i_prof),
@@ -167,37 +177,43 @@ def export_subscription_branding(wb: object) -> int:
 
     OUT_BRANDING_CSV.parent.mkdir(parents=True, exist_ok=True)
     with OUT_BRANDING_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=BRANDING_NOCOBASE_HEADERS)
+        w = csv.DictWriter(f, fieldnames=BRANDING_FIELD_KEYS)
         w.writeheader()
         for row in data_rows:
-            w.writerow({k: row.get(k) for k in BRANDING_NOCOBASE_HEADERS})
+            w.writerow({k: row.get(k) for k in BRANDING_FIELD_KEYS})
 
     from openpyxl import Workbook
 
-    wb_out = Workbook()
-    wso = wb_out.active
-    wso.title = "subscription_branding"
-    wso.append(BRANDING_NOCOBASE_HEADERS)
-    for row in data_rows:
-        wso.append(
-            [
-                row["ID"],
-                row["subscriptionTitle"],
-                row["supportUrl"],
-                row["profileUrl"],
-                row["announcement"],
-                row["active"] == "True",
-            ]
-        )
-    wb_out.save(OUT_BRANDING_XLSX)
+    def _write_branding_workbook(path: Path, headers: list[str]) -> None:
+        wb_out = Workbook()
+        wso = wb_out.active
+        # Первый лист Sheet1 — так часто ожидают внешние импортеры; не «subscription_branding».
+        wso.title = "Sheet1"
+        wso.append(headers)
+        for row in data_rows:
+            wso.append(
+                [
+                    row["subscriptionTitle"],
+                    row["supportUrl"],
+                    row["profileUrl"],
+                    row["announcement"],
+                    row["active"] == "True",
+                ]
+            )
+        wb_out.save(path)
+
+    _write_branding_workbook(OUT_BRANDING_XLSX, BRANDING_FIELD_KEYS)
+    _write_branding_workbook(OUT_BRANDING_XLSX_RU, BRANDING_RU_TITLES)
 
     print(f"OK -> {OUT_BRANDING_CSV} ({len(data_rows)} rows)")
-    print(f"OK -> {OUT_BRANDING_XLSX} ({len(data_rows)} rows)")
+    print(f"OK -> {OUT_BRANDING_XLSX} ({len(data_rows)} rows, keys + Sheet1)")
+    print(f"OK -> {OUT_BRANDING_XLSX_RU} ({len(data_rows)} rows, RU titles + Sheet1)")
     print(
-        ">>> NocoBase: import",
-        OUT_BRANDING_XLSX.name,
-        "ONLY into collection subscription_branding.",
-        "If the UI expects code / grantDays — you opened Import under Products (wrong block).",
+        ">>> NocoBase: import into collection subscription_branding only.",
+        "Try",
+        OUT_BRANDING_XLSX_RU.name,
+        "if cells stay empty (map columns to fields in import wizard).",
+        "If you see code / grantDays - wrong collection (Products).",
     )
     return len(data_rows)
 
