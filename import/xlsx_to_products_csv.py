@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Читает Товары.xlsx в корне репозитория и пишет два файла для NocoBase:
+Читает Товары.xlsx в корне репозитория и пишет файлы для импорта в NocoBase:
 
-- import/products-nocobase.csv  (UTF-8 с BOM)
-- import/products-nocobase.xlsx  (то же содержимое, если удобнее грузить Excel)
+- import/products-nocobase.csv / .xlsx — лист **активный при сохранении** (как раньше: обычно «Data» с товарами).
+- import/subscription_branding-nocobase.csv / .xlsx — лист с именем **subscription_branding** (брендинг подписки).
 
 Зависимость: pip install openpyxl
 
@@ -19,6 +19,19 @@ ROOT = Path(__file__).resolve().parents[1]
 XLSX = ROOT / "Товары.xlsx"
 OUT_CSV = ROOT / "import" / "products-nocobase.csv"
 OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
+OUT_BRANDING_CSV = ROOT / "import" / "subscription_branding-nocobase.csv"
+OUT_BRANDING_XLSX = ROOT / "import" / "subscription_branding-nocobase.xlsx"
+
+BRANDING_SHEET = "subscription_branding"
+
+BRANDING_NOCOBASE_HEADERS = [
+    "ID",
+    "subscriptionTitle",
+    "supportUrl",
+    "profileUrl",
+    "announcement",
+    "active",
+]
 
 # Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
 NOCOBASE_IMPORT_HEADERS = [
@@ -63,6 +76,125 @@ def internal_to_nocobase_import_rows(rows: list[dict[str, object]]) -> tuple[lis
     return xlsx_rows, csv_rows
 
 
+def _find_sheet(wb: object, title: str) -> object | None:
+    want = title.strip().lower()
+    for ws in wb.worksheets:
+        if str(ws.title).strip().lower() == want:
+            return ws
+    return None
+
+
+def export_subscription_branding(wb: object) -> int:
+    """Лист subscription_branding → CSV/XLSX для NocoBase. Возвращает число строк данных."""
+    ws = _find_sheet(wb, BRANDING_SHEET)
+    if ws is None:
+        print(f"(нет листа «{BRANDING_SHEET}» в Товары.xlsx — пропуск брендинга)")
+        return 0
+
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        print(f"Лист «{BRANDING_SHEET}» пуст")
+        return 0
+
+    header = [str(c).strip() if c is not None else "" for c in rows[0]]
+    lowered = [h.lower() for h in header]
+
+    def idx(*cands: str) -> int | None:
+        for cand in cands:
+            c = cand.lower()
+            if c in lowered:
+                return lowered.index(c)
+        return None
+
+    def idx_fuzzy(*needles: str) -> int | None:
+        for j, h in enumerate(header):
+            hl = h.lower()
+            for n in needles:
+                if n.lower() in hl:
+                    return j
+        return None
+
+    i_title = idx("subscriptiontitle") or idx_fuzzy("заголовок подписки", "subscriptiontitle")
+    if i_title is None:
+        i_title = idx("title")
+    i_sup = idx("supporturl") or idx_fuzzy("url поддержки", "поддержк")
+    i_prof = idx("profileurl") or idx_fuzzy("url профиля", "профил")
+    i_ann = idx("announcement") or idx_fuzzy("объявлен")
+    i_act = idx("active")
+
+    if i_title is None:
+        print(
+            f"Лист «{BRANDING_SHEET}»: нет колонки subscriptionTitle (или title / «Заголовок»).",
+            file=sys.stderr,
+        )
+        print("Заголовки:", header, file=sys.stderr)
+        return 0
+
+    data_rows: list[dict[str, object]] = []
+    for r in rows[1:]:
+        if not r or all(v is None or str(v).strip() == "" for v in r):
+            continue
+        def cell(i: int | None) -> str:
+            if i is None or i >= len(r):
+                return ""
+            v = r[i]
+            if v is None:
+                return ""
+            return str(v).strip()
+
+        title = cell(i_title)
+        if not title:
+            continue
+        active = True
+        if i_act is not None:
+            v = r[i_act] if i_act < len(r) else None
+            if isinstance(v, bool):
+                active = v
+            elif v is not None:
+                active = str(v).strip().lower() in ("1", "true", "yes", "да")
+
+        data_rows.append(
+            {
+                "ID": None,
+                "subscriptionTitle": title,
+                "supportUrl": cell(i_sup),
+                "profileUrl": cell(i_prof),
+                "announcement": cell(i_ann),
+                "active": "True" if active else "False",
+            }
+        )
+
+    OUT_BRANDING_CSV.parent.mkdir(parents=True, exist_ok=True)
+    with OUT_BRANDING_CSV.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=BRANDING_NOCOBASE_HEADERS)
+        w.writeheader()
+        for row in data_rows:
+            w.writerow({k: row.get(k) for k in BRANDING_NOCOBASE_HEADERS})
+
+    from openpyxl import Workbook
+
+    wb_out = Workbook()
+    wso = wb_out.active
+    wso.title = "subscription_branding"
+    wso.append(BRANDING_NOCOBASE_HEADERS)
+    for row in data_rows:
+        wso.append(
+            [
+                row["ID"],
+                row["subscriptionTitle"],
+                row["supportUrl"],
+                row["profileUrl"],
+                row["announcement"],
+                row["active"] == "True",
+            ]
+        )
+    wb_out.save(OUT_BRANDING_XLSX)
+
+    print(f"OK -> {OUT_BRANDING_CSV} ({len(data_rows)} rows)")
+    print(f"OK -> {OUT_BRANDING_XLSX} ({len(data_rows)} rows)")
+    return len(data_rows)
+
+
 def write_products_xlsx(path: Path, import_rows: list[dict[str, object]]) -> None:
     from openpyxl import Workbook
 
@@ -88,7 +220,15 @@ def main() -> int:
         return 1
 
     wb = openpyxl.load_workbook(XLSX, data_only=True)
-    ws = wb.active
+    # Товары: лист «Data», если есть (как в типичном Товары.xlsx), иначе активный лист.
+    ws = _find_sheet(wb, "data") or wb.active
+    if str(ws.title).strip().lower() == BRANDING_SHEET:
+        print(
+            "Активный лист — subscription_branding. Откройте в Excel лист с товарами (обычно «Data»), "
+            "сохраните файл и запустите скрипт снова.",
+            file=sys.stderr,
+        )
+        return 1
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         print("Пустой лист", file=sys.stderr)
@@ -192,6 +332,8 @@ def main() -> int:
 
     print(f"OK -> {OUT_CSV} ({len(out_rows)} rows)")
     print(f"OK -> {OUT_XLSX} ({len(out_rows)} rows)")
+
+    export_subscription_branding(wb)
     return 0
 
 
