@@ -3,8 +3,8 @@
 Читает Товары.xlsx в корне репозитория и пишет файлы для импорта в NocoBase:
 
 - import/products-nocobase.csv / .xlsx — лист **активный при сохранении** (как раньше: обычно «Data» с товарами).
-- import/nocobase-subscription_branding.csv / .xlsx — ключи полей API, лист **Sheet1** (без колонки ID).
-- import/nocobase-subscription_branding-RU-titles.xlsx — те же данные, заголовки как типичные **подписи** полей в UI (для маппинга импорта NocoBase).
+- import/nocobase-subscription_branding.csv / .xlsx — первая колонка **ID** (пусто = новая запись), далее ключи полей, лист **Sheet1**.
+- import/nocobase-subscription_branding-RU-titles.xlsx — то же, подписи полей по-русски (кроме **ID**).
 
 Зависимость: pip install openpyxl
 
@@ -27,8 +27,9 @@ OUT_BRANDING_XLSX_RU = ROOT / "import" / "nocobase-subscription_branding-RU-titl
 
 BRANDING_SHEET = "subscription_branding"
 
-# Ключи полей в API бота / внутренние имена в NocoBase (должны совпадать с именами полей коллекции).
+# NocoBase часто требует колонку ID первой (пустая при создании записи).
 BRANDING_FIELD_KEYS = [
+    "ID",
     "subscriptionTitle",
     "supportUrl",
     "profileUrl",
@@ -36,8 +37,8 @@ BRANDING_FIELD_KEYS = [
     "active",
 ]
 
-# Подписи как в типичной русской админке — если импорт не мапит по ключам, попробуйте этот файл.
 BRANDING_RU_TITLES = [
+    "ID",
     "Заголовок подписки",
     "URL поддержки",
     "URL профиля",
@@ -167,6 +168,7 @@ def export_subscription_branding(wb: object) -> int:
 
         data_rows.append(
             {
+                "ID": None,
                 "subscriptionTitle": title,
                 "supportUrl": cell(i_sup),
                 "profileUrl": cell(i_prof),
@@ -193,6 +195,7 @@ def export_subscription_branding(wb: object) -> int:
         for row in data_rows:
             wso.append(
                 [
+                    row["ID"],
                     row["subscriptionTitle"],
                     row["supportUrl"],
                     row["profileUrl"],

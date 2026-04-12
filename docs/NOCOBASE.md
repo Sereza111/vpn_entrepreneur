@@ -153,7 +153,7 @@
 
 2. После запуска создаются файлы:
    - **`import/products-nocobase.csv`** (UTF-8 с BOM) и **`import/products-nocobase.xlsx`**;
-   - при наличии листа **`subscription_branding`**: **`import/nocobase-subscription_branding.csv`**, **`.xlsx`** (ключи полей, первый лист **Sheet1**) и **`nocobase-subscription_branding-RU-titles.xlsx`** (заголовки как русские **подписи** полей — если импорт не заполняет ячейки, используйте этот файл и на шаге импорта **сопоставьте каждый столбец с полем**).
+   - при наличии листа **`subscription_branding`**: **`import/nocobase-subscription_branding.csv`**, **`.xlsx`** и **`nocobase-subscription_branding-RU-titles.xlsx`**. Во всех файлах **первая колонка — `ID`** (оставьте пустой для новых строк): иначе импорт NocoBase может ответить «Ожидаемые заголовки: ID». Первый лист Excel — **Sheet1**.
 
 3. В NocoBase: **Импортировать** → для **Товаров** выберите `products-nocobase.*`, для **subscription_branding** — сначала **`nocobase-subscription_branding-RU-titles.xlsx`**, при успехе можно дальше жить на `.csv` / ключах. Сопоставьте столбцы с полями коллекций. Чтобы не плодить дубли тарифов, используйте **обновление по `code`**.
 
