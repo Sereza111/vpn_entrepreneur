@@ -3,8 +3,7 @@
 Читает Товары.xlsx в корне репозитория и пишет файлы для импорта в NocoBase:
 
 - import/products-nocobase.csv / .xlsx — лист **активный при сохранении** (как раньше: обычно «Data» с товарами).
-- import/nocobase-subscription_branding.csv / .xlsx — первая колонка **ID** (пусто = новая запись), далее ключи полей, лист **Sheet1**.
-- import/nocobase-subscription_branding-RU-titles.xlsx — то же, подписи полей по-русски (кроме **ID**).
+- import/nocobase-subscription_branding.csv / .xlsx — **копия листа** `subscription_branding` из Товары.xlsx: строка 1 = те же заголовки, что в Excel (как у товаров — без угадывания имён полей).
 
 Зависимость: pip install openpyxl
 
@@ -23,28 +22,8 @@ OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
 # Имя с префиксом коллекции — чтобы в NocoBase не перепутали с импортом «Товары» (там другие заголовки).
 OUT_BRANDING_CSV = ROOT / "import" / "nocobase-subscription_branding.csv"
 OUT_BRANDING_XLSX = ROOT / "import" / "nocobase-subscription_branding.xlsx"
-OUT_BRANDING_XLSX_RU = ROOT / "import" / "nocobase-subscription_branding-RU-titles.xlsx"
 
 BRANDING_SHEET = "subscription_branding"
-
-# NocoBase часто требует колонку ID первой (пустая при создании записи).
-BRANDING_FIELD_KEYS = [
-    "ID",
-    "subscriptionTitle",
-    "supportUrl",
-    "profileUrl",
-    "announcement",
-    "active",
-]
-
-BRANDING_RU_TITLES = [
-    "ID",
-    "Заголовок подписки",
-    "URL поддержки",
-    "URL профиля",
-    "Объявление",
-    "Активен",
-]
 
 # Импорт в NocoBase ожидает те же заголовки, что в «Экспорт Excel» из UI (не имена полей API).
 NOCOBASE_IMPORT_HEADERS = [
@@ -98,7 +77,11 @@ def _find_sheet(wb: object, title: str) -> object | None:
 
 
 def export_subscription_branding(wb: object) -> int:
-    """Лист subscription_branding → CSV/XLSX для NocoBase. Возвращает число строк данных."""
+    """
+    Лист subscription_branding → CSV/XLSX без переименования колонок:
+    строка 1 в Excel = строка 1 в файлах импорта (как у «Товаров»).
+    Скопируйте первую строку из «Экспорт Excel» / шаблона импорта NocoBase для коллекции subscription_branding.
+    """
     ws = _find_sheet(wb, BRANDING_SHEET)
     if ws is None:
         print(f"(нет листа «{BRANDING_SHEET}» в Товары.xlsx — пропуск брендинга)")
@@ -109,113 +92,63 @@ def export_subscription_branding(wb: object) -> int:
         print(f"Лист «{BRANDING_SHEET}» пуст")
         return 0
 
-    header = [str(c).strip() if c is not None else "" for c in rows[0]]
-    lowered = [h.lower() for h in header]
+    raw0 = list(rows[0])
+    pairs: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for j, c in enumerate(raw0):
+        h = str(c).strip() if c is not None else ""
+        if not h or h in seen:
+            continue
+        seen.add(h)
+        pairs.append((h, j))
 
-    def idx(*cands: str) -> int | None:
-        for cand in cands:
-            c = cand.lower()
-            if c in lowered:
-                return lowered.index(c)
-        return None
-
-    def idx_fuzzy(*needles: str) -> int | None:
-        for j, h in enumerate(header):
-            hl = h.lower()
-            for n in needles:
-                if n.lower() in hl:
-                    return j
-        return None
-
-    i_title = idx("subscriptiontitle") or idx_fuzzy("заголовок подписки", "subscriptiontitle")
-    if i_title is None:
-        i_title = idx("title")
-    i_sup = idx("supporturl") or idx_fuzzy("url поддержки", "поддержк")
-    i_prof = idx("profileurl") or idx_fuzzy("url профиля", "профил")
-    i_ann = idx("announcement") or idx_fuzzy("объявлен")
-    i_act = idx("active")
-
-    if i_title is None:
+    if not pairs:
         print(
-            f"Лист «{BRANDING_SHEET}»: нет колонки subscriptionTitle (или title / «Заголовок»).",
+            f"Лист «{BRANDING_SHEET}»: в первой строке нет ни одного заголовка колонки.",
             file=sys.stderr,
         )
-        print("Заголовки:", header, file=sys.stderr)
         return 0
 
-    data_rows: list[dict[str, object]] = []
+    fieldnames = [h for h, _ in pairs]
+
+    def row_values(r: tuple) -> list[object]:
+        out: list[object] = []
+        for _, j in pairs:
+            v = r[j] if j < len(r) else None
+            out.append(v)
+        return out
+
+    data_rows: list[list[object]] = []
     for r in rows[1:]:
-        if not r or all(v is None or str(v).strip() == "" for v in r):
+        if not r:
             continue
-        def cell(i: int | None) -> str:
-            if i is None or i >= len(r):
-                return ""
-            v = r[i]
-            if v is None:
-                return ""
-            return str(v).strip()
-
-        title = cell(i_title)
-        if not title:
+        vals = row_values(r)
+        if all(v is None or (isinstance(v, str) and not v.strip()) for v in vals):
             continue
-        active = True
-        if i_act is not None:
-            v = r[i_act] if i_act < len(r) else None
-            if isinstance(v, bool):
-                active = v
-            elif v is not None:
-                active = str(v).strip().lower() in ("1", "true", "yes", "да")
-
-        data_rows.append(
-            {
-                "ID": None,
-                "subscriptionTitle": title,
-                "supportUrl": cell(i_sup),
-                "profileUrl": cell(i_prof),
-                "announcement": cell(i_ann),
-                "active": "True" if active else "False",
-            }
-        )
+        data_rows.append(vals)
 
     OUT_BRANDING_CSV.parent.mkdir(parents=True, exist_ok=True)
     with OUT_BRANDING_CSV.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=BRANDING_FIELD_KEYS)
-        w.writeheader()
-        for row in data_rows:
-            w.writerow({k: row.get(k) for k in BRANDING_FIELD_KEYS})
+        w = csv.writer(f)
+        w.writerow(fieldnames)
+        for vals in data_rows:
+            w.writerow(vals)
 
     from openpyxl import Workbook
 
-    def _write_branding_workbook(path: Path, headers: list[str]) -> None:
-        wb_out = Workbook()
-        wso = wb_out.active
-        # Первый лист Sheet1 — так часто ожидают внешние импортеры; не «subscription_branding».
-        wso.title = "Sheet1"
-        wso.append(headers)
-        for row in data_rows:
-            wso.append(
-                [
-                    row["ID"],
-                    row["subscriptionTitle"],
-                    row["supportUrl"],
-                    row["profileUrl"],
-                    row["announcement"],
-                    row["active"] == "True",
-                ]
-            )
-        wb_out.save(path)
+    wb_out = Workbook()
+    wso = wb_out.active
+    wso.title = "Sheet1"
+    wso.append(fieldnames)
+    for vals in data_rows:
+        wso.append(vals)
+    wb_out.save(OUT_BRANDING_XLSX)
 
-    _write_branding_workbook(OUT_BRANDING_XLSX, BRANDING_FIELD_KEYS)
-    _write_branding_workbook(OUT_BRANDING_XLSX_RU, BRANDING_RU_TITLES)
-
-    print(f"OK -> {OUT_BRANDING_CSV} ({len(data_rows)} rows)")
-    print(f"OK -> {OUT_BRANDING_XLSX} ({len(data_rows)} rows, keys + Sheet1)")
-    print(f"OK -> {OUT_BRANDING_XLSX_RU} ({len(data_rows)} rows, RU titles + Sheet1)")
+    print(f"OK -> {OUT_BRANDING_CSV} ({len(data_rows)} data rows, columns: {', '.join(fieldnames)})")
+    print(f"OK -> {OUT_BRANDING_XLSX} (same)")
     print(
-        ">>> NocoBase: import into collection subscription_branding only.",
-        "Try",
-        OUT_BRANDING_XLSX_RU.name,
-        "if cells stay empty (map columns to fields in import wizard).",
+        ">>> NocoBase: import only into collection subscription_branding.",
+        "Row 1 of file = row 1 of Товары.xlsx sheet (copy from NocoBase Excel export).",
         "If you see code / grantDays - wrong collection (Products).",
     )
     return len(data_rows)
