@@ -1,0 +1,3 @@
+telegramId,status,extendDays,addDeviceSlots,amount,currency,feeAmount,netAmount,serverId,externalPaymentId,productCode,paidAt,source
+123456789,paid,30,0,299,RUB,9,290,nl1,historical-001,vpn_30,2026-01-15T12:00:00.000Z,manual_import
+987654321,paid,90,0,790,RUB,24,766,,historical-002,vpn_90,2026-02-01T10:30:00.000Z,manual_import
