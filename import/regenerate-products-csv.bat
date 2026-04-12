@@ -26,6 +26,6 @@ if errorlevel 1 (
   )
 )
 
-echo OK: import\products-nocobase.* + import\subscription_branding-nocobase.* (if sheet exists)
+echo OK: import\products-nocobase.* + import\nocobase-subscription_branding.* (if sheet exists)
 pause
 endlocal

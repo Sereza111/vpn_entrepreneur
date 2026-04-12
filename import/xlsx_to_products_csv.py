@@ -3,7 +3,7 @@
 Читает Товары.xlsx в корне репозитория и пишет файлы для импорта в NocoBase:
 
 - import/products-nocobase.csv / .xlsx — лист **активный при сохранении** (как раньше: обычно «Data» с товарами).
-- import/subscription_branding-nocobase.csv / .xlsx — лист с именем **subscription_branding** (брендинг подписки).
+- import/nocobase-subscription_branding.csv / .xlsx — лист **subscription_branding** (не путать с «Товарами»).
 
 Зависимость: pip install openpyxl
 
@@ -19,8 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 XLSX = ROOT / "Товары.xlsx"
 OUT_CSV = ROOT / "import" / "products-nocobase.csv"
 OUT_XLSX = ROOT / "import" / "products-nocobase.xlsx"
-OUT_BRANDING_CSV = ROOT / "import" / "subscription_branding-nocobase.csv"
-OUT_BRANDING_XLSX = ROOT / "import" / "subscription_branding-nocobase.xlsx"
+# Имя с префиксом коллекции — чтобы в NocoBase не перепутали с импортом «Товары» (там другие заголовки).
+OUT_BRANDING_CSV = ROOT / "import" / "nocobase-subscription_branding.csv"
+OUT_BRANDING_XLSX = ROOT / "import" / "nocobase-subscription_branding.xlsx"
 
 BRANDING_SHEET = "subscription_branding"
 
@@ -192,6 +193,12 @@ def export_subscription_branding(wb: object) -> int:
 
     print(f"OK -> {OUT_BRANDING_CSV} ({len(data_rows)} rows)")
     print(f"OK -> {OUT_BRANDING_XLSX} ({len(data_rows)} rows)")
+    print(
+        ">>> NocoBase: import",
+        OUT_BRANDING_XLSX.name,
+        "ONLY into collection subscription_branding.",
+        "If the UI expects code / grantDays — you opened Import under Products (wrong block).",
+    )
     return len(data_rows)
 
 
