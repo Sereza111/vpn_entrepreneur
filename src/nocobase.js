@@ -274,3 +274,68 @@ export async function fetchCatalogProducts() {
     return [];
   }
 }
+
+function normalizeSubscriptionBrandingRow(row) {
+  const r = row && typeof row === "object" ? row : {};
+  const title =
+    r.subscriptionTitle ??
+    r.SubscriptionTitle ??
+    r.subscription_title ??
+    r.title;
+  return {
+    subscriptionTitle: String(title || "").trim(),
+    supportUrl: String(
+      r.supportUrl ?? r.SupportUrl ?? r.support_url ?? "",
+    ).trim(),
+    profileUrl: String(
+      r.profileUrl ?? r.ProfileUrl ?? r.profile_url ?? "",
+    ).trim(),
+    announcement: String(
+      r.announcement ?? r.Announcement ?? "",
+    ).trim(),
+    active: r.active !== false && r.Active !== false && r.isActive !== false,
+  };
+}
+
+let brandingCache = { at: 0, value: null };
+
+/**
+ * Тексты для подписки (как в 3X-UI «Заголовок», support URL и т.д.) — для мини-аппа и remark клиента.
+ * Первая активная строка коллекции subscription_branding (или с максимальным id).
+ */
+export async function fetchSubscriptionBranding() {
+  if (!nocobaseEnabled()) return null;
+  const now = Date.now();
+  if (brandingCache.at > 0 && now - brandingCache.at < 45_000) {
+    return brandingCache.value;
+  }
+  try {
+    const json = await nbList("subscriptionBranding", { pageSize: 50 });
+    const raw = extractList(json);
+    const withId = raw
+      .map((row) => ({
+        id: Number(row.id ?? 0),
+        n: normalizeSubscriptionBrandingRow(row),
+      }))
+      .sort((a, b) => b.id - a.id);
+    const pick =
+      withId.find((x) => x.n.active && x.n.subscriptionTitle)?.n ||
+      withId.find((x) => x.n.active)?.n ||
+      withId[0]?.n ||
+      null;
+    const value = pick
+      ? {
+          subscriptionTitle: pick.subscriptionTitle,
+          supportUrl: pick.supportUrl,
+          profileUrl: pick.profileUrl,
+          announcement: pick.announcement,
+        }
+      : null;
+    brandingCache = { at: now, value };
+    return value;
+  } catch (e) {
+    console.error("[nocobase] fetchSubscriptionBranding:", e?.message || e);
+    brandingCache = { at: now, value: null };
+    return null;
+  }
+}

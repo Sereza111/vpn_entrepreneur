@@ -36,6 +36,8 @@ export const config = {
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
+    /** Шаблон имени узла в VPN-клиенте (фрагмент после # в VLESS). Плейсхолдеры: {subscriptionTitle} {telegramId} {username} */
+    clientRemarkTemplate: (process.env.XUI_CLIENT_REMARK_TEMPLATE || "").trim(),
   },
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
@@ -61,6 +63,9 @@ export const config = {
       products: process.env.NOCOBASE_COLLECTION_PRODUCTS || "products",
       proxyInstances:
         process.env.NOCOBASE_COLLECTION_PROXY_INSTANCES || "proxy_instances",
+      subscriptionBranding:
+        process.env.NOCOBASE_COLLECTION_SUBSCRIPTION_BRANDING ||
+        "subscription_branding",
     },
   },
 };

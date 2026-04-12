@@ -213,24 +213,27 @@ export async function addClientToInbound({
   totalGB = 0,
   expiryTime = 0,
   limitIp = 0,
+  remark = "",
 }) {
   if (!inboundId) throw new Error("xui_inbound_id_required");
   const creds = generateClientCreds({ telegramId });
 
   // 3X-UI expects settings as a JSON string containing { clients: [...] }
+  const clientRow = {
+    id: creds.id,
+    email: creds.email,
+    enable: true,
+    limitIp,
+    totalGB,
+    expiryTime,
+    tgId: String(telegramId),
+    subId: creds.subId,
+  };
+  const r = String(remark || "").trim();
+  if (r) clientRow.remark = r;
+
   const settings = {
-    clients: [
-      {
-        id: creds.id,
-        email: creds.email,
-        enable: true,
-        limitIp,
-        totalGB,
-        expiryTime,
-        tgId: String(telegramId),
-        subId: creds.subId,
-      },
-    ],
+    clients: [clientRow],
   };
 
   const res = await xuiFetch("/panel/api/inbounds/addClient", {

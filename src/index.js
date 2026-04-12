@@ -299,6 +299,7 @@ async function loadMe(telegramId) {
   };
 
   let catalog = { source: "fallback", products: [] };
+  let subscriptionUi = null;
   if (nocobase.nocobaseEnabled()) {
     try {
       const products = await nocobase.fetchCatalogProducts();
@@ -307,6 +308,11 @@ async function loadMe(telegramId) {
       }
     } catch {
       // не ломаем /api/me
+    }
+    try {
+      subscriptionUi = await nocobase.fetchSubscriptionBranding();
+    } catch {
+      subscriptionUi = null;
     }
   }
 
@@ -317,6 +323,7 @@ async function loadMe(telegramId) {
     subscriptionPrimarySource,
     xui: xuiPayload,
     subscriptionStatus,
+    subscriptionUi,
     proxy: proxyPayload,
     proxyServers: proxyServers.map((s) => ({ id: s.id, country: s.country })),
     catalog,
@@ -335,11 +342,57 @@ function calcNewDeviceLimit(currentLimit, addSlots) {
   return Math.max(1, base + Number(addSlots || 0));
 }
 
+/** Имя узла в клиенте (часть после # в VLESS и строка в списке серверов). */
+function buildXuiClientRemark(telegramId, username, branding) {
+  const title = String(branding?.subscriptionTitle || "").trim();
+  const tpl = String(config.xui.clientRemarkTemplate || "").trim();
+  const u = username ? String(username).replace(/^@/, "") : "";
+  const vars = {
+    subscriptionTitle: title || "VL",
+    telegramId: String(telegramId),
+    username: u ? `@${u}` : "",
+  };
+  let out = tpl;
+  if (out) {
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.split(`{${k}}`).join(v);
+    }
+    out = out.trim();
+  } else {
+    out = title ? `${title} · ${telegramId}` : `VL · ${telegramId}`;
+  }
+  return out.slice(0, 120);
+}
+
+/** Подтягивает NocoBase → поле remark клиента 3X-UI (обновляет подписку в приложении после sync). */
+async function syncXuiClientRemarkIfNeeded(telegramId, username) {
+  if (!Number(config.xui.inboundId)) return;
+  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
+  const want = buildXuiClientRemark(telegramId, username, branding);
+  if (!want) return;
+  const found = await xui
+    .findClientInInbound({
+      inboundId: config.xui.inboundId,
+      telegramId,
+    })
+    .catch(() => null);
+  if (!found?.client) return;
+  const cur = String(found.client.remark ?? found.client.Remark ?? "").trim();
+  if (cur === want) return;
+  const clientId = String(found.client.id || found.client.ID || "").trim();
+  if (!clientId) return;
+  await xui.updateClientInInbound({
+    inboundId: config.xui.inboundId,
+    clientId,
+    client: { ...found.client, remark: want },
+  });
+}
+
 /**
  * Создаёт клиента в 3X-UI (если нет) и привязывает subId в боте.
  * @returns {"already_linked"|"reused"|"created"}
  */
-async function xuiProvisionCore(telegramId, { force }) {
+async function xuiProvisionCore(telegramId, { force, username }) {
   const tid = Number(telegramId);
   if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
     throw new Error("xui_not_configured");
@@ -347,8 +400,14 @@ async function xuiProvisionCore(telegramId, { force }) {
   if (!config.xui.inboundId) {
     throw new Error("xui_inbound_id_required");
   }
+  const runRemarkSync = () =>
+    syncXuiClientRemarkIfNeeded(tid, username).catch((e) =>
+      console.warn("[xui] remark sync:", e?.message || e),
+    );
+
   const existing = await xuiStore.getXuiLinkByTelegramId(tid);
   if (existing && !force) {
+    await runRemarkSync();
     return "already_linked";
   }
 
@@ -372,19 +431,25 @@ async function xuiProvisionCore(telegramId, { force }) {
         telegramId: tid,
         xuiUrlOrToken: effective,
       });
+      await runRemarkSync();
       return "reused";
     }
   }
 
+  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
+  const remark = buildXuiClientRemark(tid, username, branding);
+
   const created = await xui.addClientToInbound({
     inboundId: config.xui.inboundId,
     telegramId: tid,
+    remark,
   });
 
   await xuiStore.linkXuiSubscription({
     telegramId: tid,
     xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
   });
+  await runRemarkSync();
   return "created";
 }
 
@@ -439,7 +504,8 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
     const force = Boolean(req.body?.force);
-    const r = await xuiProvisionCore(tid, { force });
+    const username = req.tgSession?.u ?? null;
+    const r = await xuiProvisionCore(tid, { force, username });
     const data = await loadMe(tid);
     if (r === "already_linked") {
       return res.json({ ok: true, alreadyLinked: true, ...data });
@@ -563,7 +629,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
     if (days < 1 && slots < 1) {
       return res.status(400).json({ error: "nothing_to_apply" });
     }
-    await xuiProvisionCore(tid, { force: true });
+    await xuiProvisionCore(tid, { force: true, username: username ?? null });
     void nocobase.syncPaymentOrder({
       telegramId: tid,
       extendDays: days,
@@ -594,7 +660,8 @@ app.post("/api/test/grant", authMiddleware, async (req, res) => {
   }
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    await xuiProvisionCore(tid, { force: true });
+    const username = req.tgSession?.u ?? null;
+    await xuiProvisionCore(tid, { force: true, username });
     const data = await loadMe(tid);
     return res.json({ ok: true, ...data });
   } catch (e) {
@@ -612,8 +679,9 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
   }
   try {
     // Ensure client exists / link is present, then bump limitIp.
-    await xuiProvisionCore(Number(req.tgSession.sub || req.tgSession.tg), { force: true });
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const username = req.tgSession?.u ?? null;
+    await xuiProvisionCore(tid, { force: true, username });
     const r = await xui.incrementClientLimitIp({
       inboundId: config.xui.inboundId,
       telegramId: tid,

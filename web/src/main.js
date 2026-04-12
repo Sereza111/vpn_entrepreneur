@@ -614,12 +614,47 @@ async function boot() {
 
   const isXuiPrimary = me.subscriptionPrimarySource === "xui";
 
+  const su = me.subscriptionUi;
+  const hasSubscriptionUi =
+    su &&
+    (su.announcement || su.supportUrl || su.profileUrl || su.subscriptionTitle);
+  const uiExtras = hasSubscriptionUi
+    ? `<div class="subscription-ui-extras" style="margin-top:12px">
+          ${
+            su.subscriptionTitle
+              ? `<div class="label">Подпись узла в клиенте</div><p class="muted" style="margin:0 0 10px;line-height:1.45">${escAttr(su.subscriptionTitle)}</p>`
+              : ""
+          }
+          ${
+            su.announcement
+              ? `<div class="label">Объявление</div><p class="muted" style="margin:0 0 10px;line-height:1.45;white-space:pre-wrap">${escAttr(su.announcement)}</p>`
+              : ""
+          }
+          ${
+            su.supportUrl
+              ? `<p class="muted" style="margin:0 0 6px"><a class="link" href="${escAttr(su.supportUrl)}" target="_blank" rel="noopener noreferrer">Поддержка</a></p>`
+              : ""
+          }
+          ${
+            su.profileUrl
+              ? `<p class="muted" style="margin:0"><a class="link" href="${escAttr(su.profileUrl)}" target="_blank" rel="noopener noreferrer">Сайт / профиль</a></p>`
+              : ""
+          }
+        </div>`
+    : "";
+
   const connect = el(`<div class="card section" id="section-connect">
     <h2 class="section-title">Подключение VPN</h2>
     <p class="muted">Скопируйте подписку или откройте ссылку напрямую в клиенте.</p>
     ${
       isXuiPrimary
         ? `<p class="muted" style="margin-top:8px;line-height:1.45">На втором устройстве (ПК) добавляйте <b>подписку по URL</b> / «обновить подписку», а не «импорт из буфера как YAML/конфиг» — иначе клиент пытается разобрать base64 как YAML и показывает ошибку про <code>vless</code>.</p>`
+        : ""
+    }
+    ${uiExtras}
+    ${
+      hasSubscriptionUi
+        ? `<p class="muted" style="margin-top:10px;line-height:1.45">После смены текстов в NocoBase нажмите <b>Обновить ссылку (XUI)</b>, затем в VPN-клиенте — обновить подписку.</p>`
         : ""
     }
     <div class="link-block">
