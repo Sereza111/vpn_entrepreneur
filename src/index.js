@@ -395,7 +395,12 @@ function buildXuiClientRemark(telegramId, username, branding) {
     for (const [k, v] of Object.entries(vars)) {
       out = out.split(`{${k}}`).join(v);
     }
-    out = out.trim();
+    // Если плейсхолдер оказался пустым (например {username}),
+    // убираем висящие разделители в конце: "-", "|", "·", ":" и т.п.
+    out = out
+      .replace(/\s+/g, " ")
+      .replace(/\s*[-|·•:]+\s*$/u, "")
+      .trim();
   } else {
     out = title || "VL";
   }
