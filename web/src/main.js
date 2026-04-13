@@ -87,6 +87,23 @@ function vpnPlanTileHtml(p) {
   </button>`;
 }
 
+function compactSubscriptionUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw || raw === "—") return "—";
+  if (raw.length <= 54) return raw;
+  return `${raw.slice(0, 30)}...${raw.slice(-16)}`;
+}
+
+function proxyPurchaseTileHtml(days, label) {
+  const safeDays = Number(days);
+  const title = escAttr(label);
+  const meta = escAttr(`${safeDays} дн. · 1 прокси`);
+  return `<button type="button" class="plan-tile plan-tile--proxy" data-proxy-days="${safeDays}">
+    <span class="plan-tile__title">${title}</span>
+    <span class="plan-tile__meta">${meta}</span>
+  </button>`;
+}
+
 function applyTelegramChrome(tg) {
   try {
     const p = tg.themeParams;
@@ -187,67 +204,65 @@ function bindWheelSwipe(dock) {
   );
 }
 
-function bindVpnRenewalActions({ tg, token, me }) {
+function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
   const checkoutTpl = payCfg.checkoutUrlTemplate || "";
-  const testOn = payCfg.testGrantEnabled;
   const username = me.subscriptionStatus?.username || "";
   const tid = me.telegramId;
 
-  const runTestGrant = async (days) => {
-    await api("/api/test/grant", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ days: Number(days) }),
+  const openCheckout = ({ productCode, grantDays }) => {
+    if (!checkoutTpl) {
+      showToast("Оплата скоро будет доступна. Напишите в поддержку.");
+      return false;
+    }
+    const url = expandPaymentCheckoutUrl(checkoutTpl, {
+      telegramId: tid,
+      productCode,
+      grantDays,
+      username,
     });
-    showToast(`Тестово продлено на ${days} дней`);
-    setTimeout(() => window.location.reload(), 600);
+    if (!/^https?:\/\//i.test(url)) {
+      showToast("Некорректный шаблон оплаты (нужен полный URL с https://)");
+      return false;
+    }
+    tg.openLink(url);
+    return true;
   };
 
-  const bindGrid = (rootEl, testOnly) => {
+  const bindGrid = (rootEl) => {
     if (!rootEl) return;
     rootEl.querySelectorAll(".plan-tile[data-days]").forEach((b) => {
       b.onclick = async () => {
         const days = b.getAttribute("data-days");
         const code =
           b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vpn_30";
-        if (testOnly) {
-          try {
-            await runTestGrant(days);
-          } catch (e) {
-            showToast(`Ошибка: ${e.message}`);
-          }
-          return;
-        }
-        if (checkoutTpl) {
-          const url = expandPaymentCheckoutUrl(checkoutTpl, {
-            telegramId: tid,
-            productCode: code,
-            grantDays: days,
-            username,
-          });
-          if (!/^https?:\/\//i.test(url)) {
-            showToast("Некорректный шаблон оплаты (нужен полный URL с https://)");
-            return;
-          }
-          tg.openLink(url);
-          return;
-        }
-        if (testOn) {
-          try {
-            await runTestGrant(days);
-          } catch (e) {
-            showToast(`Ошибка: ${e.message}`);
-          }
-        } else {
-          showToast("Оплата скоро будет доступна. Напишите в поддержку.");
-        }
+        openCheckout({ productCode: code, grantDays: days });
       };
     });
   };
 
-  bindGrid(document.getElementById("vpnPlanGrid"), false);
-  bindGrid(document.getElementById("devTestVpnPlans"), true);
+  const bindProxyPurchaseGrid = (rootEl, selectedServerGetter) => {
+    if (!rootEl) return;
+    rootEl.querySelectorAll(".plan-tile[data-proxy-days]").forEach((b) => {
+      b.onclick = () => {
+        const days = Number(b.getAttribute("data-proxy-days") || 0);
+        const serverId = String(selectedServerGetter?.() || "").trim();
+        if (!serverId) return showToast("Сначала выберите площадку прокси");
+        openCheckout({
+          productCode: `proxy_${serverId}_${days}`,
+          grantDays: days,
+        });
+      };
+    });
+  };
+
+  bindGrid(document.getElementById("vpnPlanGrid"));
+  bindProxyPurchaseGrid(document.getElementById("proxyPlanGrid"), () =>
+    document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
+  );
+  bindProxyPurchaseGrid(document.getElementById("proxyPlanGridNoAcc"), () =>
+    document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
+  );
 }
 
 function el(html) {
@@ -437,10 +452,10 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-extend">
-          <h2 class="section-title">Продление подписки</h2>
-          <p class="muted">Выберите удобный способ: оплата или связь с оператором.</p>
+          <h2 class="section-title">Покупка VPN</h2>
+          <p class="muted">Выберите тариф и оплатите доступ.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
-          <button class="btn secondary" type="button" id="supportBtnNoAcc">Поддержка</button>
+          <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
         </div>
       `),
     );
@@ -481,10 +496,13 @@ async function boot() {
                 ${proxyServerPickButtonsHtml(me?.proxyServers)}
               </div>
             </div>
+            <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
+            <div class="plan-grid plan-grid--proxy" id="proxyPlanGridNoAcc">
+              ${proxyPurchaseTileHtml(7, "Прокси на неделю")}
+              ${proxyPurchaseTileHtml(30, "Прокси на месяц")}
+            </div>
           </div>
           <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
-          <button class="btn secondary" type="button" id="proxyTestGrant1NoAcc">Тест: +1 прокси</button>
-          <button class="btn secondary" type="button" id="proxyTestGrant5NoAcc">Тест: +5 прокси</button>
           <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
       `),
@@ -522,21 +540,7 @@ async function boot() {
         tg.openLink(url);
         return;
       }
-      if (!pay.testGrantEnabled) {
-        showToast("Оплата скоро будет доступна. Напишите в поддержку.");
-        return;
-      }
-      try {
-        await api("/api/test/grant", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ days: 30 }),
-        });
-        showToast("Тестово выдано на 30 дней");
-        setTimeout(() => window.location.reload(), 600);
-      } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
-      }
+      showToast("Оплата скоро будет доступна. Напишите в поддержку.");
     };
     document.getElementById("refreshProxyBtn").onclick = () => window.location.reload();
     const proxyCreateBtnNoAcc = document.getElementById("proxyCreateBtnNoAcc");
@@ -552,7 +556,7 @@ async function boot() {
       proxyCreateBtnNoAcc.onclick = async () => {
         try {
           const rem = Number(me?.proxy?.remaining || 0);
-          if (rem < 1) return showToast("Лимит закончился: нажмите «Тест: +1 прокси»");
+          if (rem < 1) return showToast("Лимит прокси закончился: сначала купите тариф прокси");
           if (!selectedServerNoAcc) return showToast("Выберите страну");
           proxyCreateBtnNoAcc.disabled = true;
           proxyCreateBtnNoAcc.textContent = "Создаём...";
@@ -579,43 +583,9 @@ async function boot() {
         }
       };
     }
-    const proxyTestGrant1NoAcc = document.getElementById("proxyTestGrant1NoAcc");
-    if (proxyTestGrant1NoAcc) {
-      proxyTestGrant1NoAcc.onclick = async () => {
-        try {
-          proxyTestGrant1NoAcc.disabled = true;
-          await api("/api/test/proxy/grant", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ count: 1, days: 30 }),
-          });
-          showToast("Выдано +1 прокси (тест)");
-          setTimeout(() => window.location.reload(), 600);
-        } catch (e) {
-          showToast(`Ошибка: ${e.message}`);
-          proxyTestGrant1NoAcc.disabled = false;
-        }
-      };
-    }
-    const proxyTestGrant5NoAcc = document.getElementById("proxyTestGrant5NoAcc");
-    if (proxyTestGrant5NoAcc) {
-      proxyTestGrant5NoAcc.onclick = async () => {
-        try {
-          proxyTestGrant5NoAcc.disabled = true;
-          await api("/api/test/proxy/grant", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ count: 5, days: 30 }),
-          });
-          showToast("Выдано +5 прокси (тест)");
-          setTimeout(() => window.location.reload(), 600);
-        } catch (e) {
-          showToast(`Ошибка: ${e.message}`);
-          proxyTestGrant5NoAcc.disabled = false;
-        }
-      };
-    }
-    document.getElementById("supportBtnNoAcc").onclick = () => tg.openTelegramLink("https://t.me/VL_VPNbot");
+    const supportHrefNoAcc = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
+    document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
+    bindVpnRenewalActions({ tg, me });
     appendAppFooter(root);
     return;
   }
@@ -726,7 +696,7 @@ async function boot() {
 
   const connect = el(`<div class="card section" id="section-connect">
     <h2 class="section-title">Подключение VPN</h2>
-    <p class="muted">Скопируйте подписку или откройте ссылку напрямую в клиенте.</p>
+    <p class="muted">Нажмите «Скопировать ссылку» и добавьте подписку в VPN-клиенте по URL.</p>
     ${
       isXuiPrimary
         ? `<p class="muted" style="margin-top:8px;line-height:1.45">На втором устройстве (ПК) добавляйте <b>подписку по URL</b> / «обновить подписку», а не «импорт из буфера как YAML/конфиг» — иначе клиент пытается разобрать base64 как YAML и показывает ошибку про <code>vless</code>.</p>`
@@ -735,15 +705,14 @@ async function boot() {
     ${uiExtras}
     ${
       hasSubscriptionUi
-        ? `<p class="muted" style="margin-top:10px;line-height:1.45">После смены текстов в NocoBase нажмите <b>Обновить ссылку (XUI)</b>, затем в VPN-клиенте — обновить подписку.</p>`
+        ? `<p class="muted" style="margin-top:10px;line-height:1.45">После изменения параметров нажмите <b>Обновить ссылку (XUI)</b>, затем обновите подписку в VPN-клиенте.</p>`
         : ""
     }
-    <div class="link-block">
-      <div class="label">Ссылка подписки</div>
-      <div class="subscription-url" id="subUrl">${sub}</div>
+    <div class="link-block link-block--compact">
+      <div class="label">URL подписки</div>
+      <div class="subscription-url" id="subUrl" title="${escAttr(sub)}">${compactSubscriptionUrl(sub)}</div>
     </div>
     <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку"}</button>
-    <div class="muted" style="margin-top:8px">Если клиент уже есть в панели (ваш Telegram) — ссылка обновится без нового клиента. Новый клиент создаётся только при первом выдавании.</div>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
@@ -755,15 +724,11 @@ async function boot() {
     const items = Array.isArray(p.items) ? p.items : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
       <h2 class="section-title">Прокси</h2>
-      <p class="muted">SOCKS5 и HTTP прокси (отдельная услуга).</p>
+      <p class="muted">SOCKS5 и HTTP прокси. Выберите площадку и тариф перед оплатой.</p>
 
       ${
         `<div class="muted" style="margin-top:8px">
            Доступно: <b>${Number(p.remaining || 0)}</b> / Куплено: <b>${Number(p.total || 0)}</b>
-         </div>
-         <div class="plans" style="margin-top:10px">
-           <button class="plan-btn" type="button" id="proxyTestGrant1">Тест: +1 прокси</button>
-           <button class="plan-btn" type="button" id="proxyTestGrant5">Тест: +5 прокси</button>
          </div>
          ${
            items.length
@@ -795,6 +760,11 @@ async function boot() {
                    ${proxyServerPickButtonsHtml(servers)}
                  </div>
                </div>
+              <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
+              <div class="plan-grid plan-grid--proxy" id="proxyPlanGrid">
+                ${proxyPurchaseTileHtml(7, "Прокси на неделю")}
+                ${proxyPurchaseTileHtml(30, "Прокси на месяц")}
+              </div>
              </div>
              <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
       }
@@ -811,7 +781,6 @@ async function boot() {
       : null;
   const payCfg = me.payment || {};
   const checkoutTpl = payCfg.checkoutUrlTemplate || "";
-  const testGrantOn = payCfg.testGrantEnabled;
 
   const planTilesHtml = vpnFromNb
     ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
@@ -823,13 +792,8 @@ async function boot() {
         .map((p) => vpnPlanTileHtml(p))
         .join("");
 
-  const devTestBlock =
-    checkoutTpl && testGrantOn
-      ? `<div class="dev-test-row" id="devTestVpnPlans"><div class="dev-test-label">Тест без оплаты</div><div class="dev-test-grid">${planTilesHtml}</div></div>`
-      : "";
-
   const extend = el(`<div class="card section" id="section-extend">
-    <h2 class="section-title">Продление подписки</h2>
+    <h2 class="section-title">Покупка VPN</h2>
     ${
       checkoutTpl
         ? `<p class="muted" style="margin-top:6px;line-height:1.45">После оплаты срок обновится автоматически.</p>`
@@ -853,7 +817,6 @@ async function boot() {
         ${planTilesHtml}
       </div>
     </div>
-    ${devTestBlock}
     <div class="actions-stack">
     ${
       isXuiPrimary
@@ -869,7 +832,7 @@ async function boot() {
   root.appendChild(el(wheelNavHtml(hasProxy)));
   document.body.classList.add("vl-wheel-layout");
 
-  bindVpnRenewalActions({ tg, token, me });
+  bindVpnRenewalActions({ tg, me });
 
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.onclick = () => {
@@ -933,43 +896,6 @@ async function boot() {
     };
   }
 
-  const proxyTestGrant1 = document.getElementById("proxyTestGrant1");
-  if (proxyTestGrant1) {
-    proxyTestGrant1.onclick = async () => {
-      try {
-        proxyTestGrant1.disabled = true;
-        await api("/api/test/proxy/grant", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ count: 1, days: 30 }),
-        });
-        showToast("Выдано +1 прокси (тест)");
-        setTimeout(() => window.location.reload(), 600);
-      } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
-        proxyTestGrant1.disabled = false;
-      }
-    };
-  }
-  const proxyTestGrant5 = document.getElementById("proxyTestGrant5");
-  if (proxyTestGrant5) {
-    proxyTestGrant5.onclick = async () => {
-      try {
-        proxyTestGrant5.disabled = true;
-        await api("/api/test/proxy/grant", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ count: 5, days: 30 }),
-        });
-        showToast("Выдано +5 прокси (тест)");
-        setTimeout(() => window.location.reload(), 600);
-      } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
-        proxyTestGrant5.disabled = false;
-      }
-    };
-  }
-
   const provBtn = document.getElementById("xuiProvisionBtn");
   if (provBtn) {
     provBtn.onclick = async () => {
@@ -1006,8 +932,9 @@ async function boot() {
       }
     };
   }
+  const supportHref = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
   document.getElementById("supportBtn").onclick = () => {
-    tg.openTelegramLink("https://t.me/VL_VPNbot");
+    tg.openLink(supportHref);
   };
 
   appendAppFooter(root);

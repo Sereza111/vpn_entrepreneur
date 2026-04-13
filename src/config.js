@@ -38,6 +38,8 @@ export const config = {
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
     /** Шаблон имени узла в VPN-клиенте (фрагмент после # в VLESS). Плейсхолдеры: {subscriptionTitle} {telegramId} {username} */
     clientRemarkTemplate: (process.env.XUI_CLIENT_REMARK_TEMPLATE || "").trim(),
+    /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */
+    clientDisplaySuffix: String(process.env.XUI_CLIENT_DISPLAY_SUFFIX || "🌐").trim(),
   },
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",

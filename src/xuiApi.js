@@ -173,12 +173,13 @@ export function stableXuiEmailFromTelegramId(telegramId) {
   const zw0 = "\u200B";
   const zw1 = "\u200C";
   const mark = "\u2063";
+  const suffix = String(config.xui.clientDisplaySuffix || "🌐").trim() || "🌐";
   let payload = "";
   for (const ch of hashHex) {
     const n = Number.parseInt(ch, 16);
     payload += n.toString(2).padStart(4, "0").replaceAll("0", zw0).replaceAll("1", zw1);
   }
-  return `${mark}${payload}`;
+  return `${suffix}${mark}${payload}`;
 }
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */
