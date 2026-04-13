@@ -167,12 +167,18 @@ export function stableXuiEmailFromTelegramId(telegramId) {
     .createHash("sha256")
     .update(`xui-email:${tid}`)
     .digest("hex")
-    .slice(0, 15);
-  // Делаем только цифры (без букв), чтобы VPN-клиенты не показывали "u_abcd...".
-  // Поле email в 3X-UI техническое, но часть клиентов рисует его в UI.
-  const asNum = Number.parseInt(hashHex, 16);
-  const digits = String(Number.isFinite(asNum) ? asNum % 10_000_000_000 : 0).padStart(10, "0");
-  return digits;
+    .slice(0, 16);
+  // Часть клиентов показывает `email` рядом с remark. Чтобы не светить хвосты (tg_/u_/цифры),
+  // кодируем стабильный id в zero-width символы: визуально строка пустая, но остаётся уникальной.
+  const zw0 = "\u200B";
+  const zw1 = "\u200C";
+  const mark = "\u2063";
+  let payload = "";
+  for (const ch of hashHex) {
+    const n = Number.parseInt(ch, 16);
+    payload += n.toString(2).padStart(4, "0").replaceAll("0", zw0).replaceAll("1", zw1);
+  }
+  return `${mark}${payload}`;
 }
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */

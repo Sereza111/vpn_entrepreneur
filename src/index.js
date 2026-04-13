@@ -418,8 +418,9 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
   const curEmail = String(found.client.email || "").trim();
   const wantEmail = xui.stableXuiEmailFromTelegramId(telegramId);
   const needsRemarkUpdate = Boolean(want) && cur !== want;
+  const looksLegacyNumeric = /^\d{8,}$/.test(curEmail);
   const needsEmailSanitize =
-    (curEmail.startsWith("tg_") || curEmail.startsWith("u_")) &&
+    (curEmail.startsWith("tg_") || curEmail.startsWith("u_") || looksLegacyNumeric) &&
     curEmail !== wantEmail;
   if (!needsRemarkUpdate && !needsEmailSanitize) return;
   const clientId = String(found.client.id || found.client.ID || "").trim();
