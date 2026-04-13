@@ -161,24 +161,48 @@ function normalizeClientsFromInbound(inbound) {
   return [];
 }
 
-export function stableXuiEmailFromTelegramId(telegramId) {
+function xuiEmailHashHex(telegramId, len = 16) {
   const tid = String(telegramId || "").trim();
-  const hashHex = crypto
+  return crypto
     .createHash("sha256")
     .update(`xui-email:${tid}`)
     .digest("hex")
-    .slice(0, 16);
+    .slice(0, len);
+}
+
+function invisiblePayloadFromHash(hashHex) {
   // Часть клиентов показывает `email` рядом с remark. Чтобы не светить хвосты (tg_/u_/цифры),
   // кодируем стабильный id в zero-width символы: визуально строка пустая, но остаётся уникальной.
   const zw0 = "\u200B";
   const zw1 = "\u200C";
-  const mark = "\u2063";
-  const suffix = String(config.xui.clientDisplaySuffix || "🌐").trim() || "🌐";
   let payload = "";
   for (const ch of hashHex) {
     const n = Number.parseInt(ch, 16);
     payload += n.toString(2).padStart(4, "0").replaceAll("0", zw0).replaceAll("1", zw1);
   }
+  return payload;
+}
+
+function legacyEmailCandidatesFromTelegramId(telegramId) {
+  const tid = String(telegramId || "").trim();
+  const h12 = xuiEmailHashHex(tid, 12);
+  const h15 = xuiEmailHashHex(tid, 15);
+  const asNum = Number.parseInt(h15, 16);
+  const digits = String(Number.isFinite(asNum) ? asNum % 10_000_000_000 : 0).padStart(10, "0");
+  const mark = "\u2063";
+  const payload = invisiblePayloadFromHash(xuiEmailHashHex(tid, 16));
+  return [
+    `tg_${tid}`,
+    `u_${h12}`,
+    digits,
+    `${mark}${payload}`, // old zero-width format without visible suffix
+  ];
+}
+
+export function stableXuiEmailFromTelegramId(telegramId) {
+  const mark = "\u2063";
+  const payload = invisiblePayloadFromHash(xuiEmailHashHex(telegramId, 16));
+  const suffix = String(config.xui.clientDisplaySuffix || "🌐").trim() || "🌐";
   return `${suffix}${mark}${payload}`;
 }
 
@@ -190,9 +214,12 @@ export async function findClientInInbound({ inboundId, telegramId }) {
   const clients = normalizeClientsFromInbound(inb);
   const tid = String(telegramId);
   const emailStable = stableXuiEmailFromTelegramId(telegramId);
+  const legacyEmails = new Set(legacyEmailCandidatesFromTelegramId(telegramId));
   const pick =
     clients.find((c) => String(c?.tgId || "") === tid) ||
     clients.find((c) => String(c?.email || "") === emailStable) ||
+    clients.find((c) => legacyEmails.has(String(c?.email || ""))) ||
+    clients.find((c) => String(c?.remark || c?.Remark || "").includes(tid)) ||
     clients.find((c) => String(c?.email || "").startsWith(`${emailStable}_`)) ||
     null;
   if (!pick) return null;
