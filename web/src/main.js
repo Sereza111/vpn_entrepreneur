@@ -696,18 +696,8 @@ async function boot() {
 
   const connect = el(`<div class="card section" id="section-connect">
     <h2 class="section-title">Подключение VPN</h2>
-    <p class="muted">Нажмите «Скопировать ссылку» и добавьте подписку в VPN-клиенте по URL.</p>
-    ${
-      isXuiPrimary
-        ? `<p class="muted" style="margin-top:8px;line-height:1.45">На втором устройстве (ПК) добавляйте <b>подписку по URL</b> / «обновить подписку», а не «импорт из буфера как YAML/конфиг» — иначе клиент пытается разобрать base64 как YAML и показывает ошибку про <code>vless</code>.</p>`
-        : ""
-    }
+    <p class="muted">Скопируйте URL и импортируйте подписку в клиент.</p>
     ${uiExtras}
-    ${
-      hasSubscriptionUi
-        ? `<p class="muted" style="margin-top:10px;line-height:1.45">После изменения параметров нажмите <b>Обновить ссылку (XUI)</b>, затем обновите подписку в VPN-клиенте.</p>`
-        : ""
-    }
     <div class="link-block link-block--compact">
       <div class="label">URL подписки</div>
       <div class="subscription-url" id="subUrl" title="${escAttr(sub)}">${compactSubscriptionUrl(sub)}</div>
