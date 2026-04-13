@@ -246,12 +246,7 @@ app.post("/api/auth/telegram", (req, res) => {
 
 async function loadMe(telegramId) {
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
-  const xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
-  const xuiPublicUrl =
-    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
-
-  const primary = xuiPublicUrl || null;
-  const subscriptionPrimarySource = "xui";
+  let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
@@ -269,6 +264,25 @@ async function loadMe(telegramId) {
         const email =
           String(found.client.email || "").trim() ||
           xui.stableXuiEmailFromTelegramId(telegramId);
+        // Если локальная привязка потерялась (redeploy/чистка data), но клиент в XUI живой —
+        // восстановим ссылку автоматически, чтобы пользователь не "покупал заново".
+        if (!xuiLink) {
+          const recoveredSubId =
+            String(found.client.subId || "").trim() ||
+            String(
+              await xui.getClientSubIdFromInbound({
+                inboundId: config.xui.inboundId,
+                telegramId,
+                email,
+              }),
+            ).trim();
+          if (recoveredSubId) {
+            xuiLink = await xuiStore.linkXuiSubscription({
+              telegramId,
+              xuiUrlOrToken: recoveredSubId,
+            });
+          }
+        }
         const trJson = await xui.getClientTrafficsByEmail(email);
         const t = trJson?.obj ?? trJson?.response ?? trJson;
         const up = Number(t?.up ?? 0);
@@ -301,6 +315,11 @@ async function loadMe(telegramId) {
       // не ломаем /api/me, если панель временно недоступна
     }
   }
+
+  const xuiPublicUrl =
+    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
+  const primary = xuiPublicUrl || null;
+  const subscriptionPrimarySource = "xui";
 
   const xuiPayload = xuiLink
     ? { linked: true, subscriptionUrl: xuiPublicUrl }
