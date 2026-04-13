@@ -8,6 +8,10 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      # Персистентное хранилище привязок подписок (data/xui-links.json),
+      # чтобы после redeploy связи Telegram ↔ XUI не терялись.
+      - ./data:/app/data
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
