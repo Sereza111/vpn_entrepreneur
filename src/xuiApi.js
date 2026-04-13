@@ -163,13 +163,16 @@ function normalizeClientsFromInbound(inbound) {
 
 export function stableXuiEmailFromTelegramId(telegramId) {
   const tid = String(telegramId || "").trim();
-  const hash = crypto
+  const hashHex = crypto
     .createHash("sha256")
     .update(`xui-email:${tid}`)
     .digest("hex")
-    .slice(0, 12);
-  // Не светим Telegram ID в email клиента: часть VPN-клиентов показывает это имя.
-  return `u_${hash}`;
+    .slice(0, 15);
+  // Делаем только цифры (без букв), чтобы VPN-клиенты не показывали "u_abcd...".
+  // Поле email в 3X-UI техническое, но часть клиентов рисует его в UI.
+  const asNum = Number.parseInt(hashHex, 16);
+  const digits = String(Number.isFinite(asNum) ? asNum % 10_000_000_000 : 0).padStart(10, "0");
+  return digits;
 }
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */
