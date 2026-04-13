@@ -162,7 +162,14 @@ function normalizeClientsFromInbound(inbound) {
 }
 
 export function stableXuiEmailFromTelegramId(telegramId) {
-  return `tg_${String(telegramId)}`;
+  const tid = String(telegramId || "").trim();
+  const hash = crypto
+    .createHash("sha256")
+    .update(`xui-email:${tid}`)
+    .digest("hex")
+    .slice(0, 12);
+  // Не светим Telegram ID в email клиента: часть VPN-клиентов показывает это имя.
+  return `u_${hash}`;
 }
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */

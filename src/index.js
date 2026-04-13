@@ -397,7 +397,7 @@ function buildXuiClientRemark(telegramId, username, branding) {
     }
     out = out.trim();
   } else {
-    out = title ? `${title} · ${telegramId}` : `VL · ${telegramId}`;
+    out = title || "VL";
   }
   return out.slice(0, 120);
 }
@@ -407,7 +407,6 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
   if (!Number(config.xui.inboundId)) return;
   const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
   const want = buildXuiClientRemark(telegramId, username, branding);
-  if (!want) return;
   const found = await xui
     .findClientInInbound({
       inboundId: config.xui.inboundId,
@@ -416,13 +415,20 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
     .catch(() => null);
   if (!found?.client) return;
   const cur = String(found.client.remark ?? found.client.Remark ?? "").trim();
-  if (cur === want) return;
+  const curEmail = String(found.client.email || "").trim();
+  const wantEmail = xui.stableXuiEmailFromTelegramId(telegramId);
+  const needsRemarkUpdate = Boolean(want) && cur !== want;
+  const needsEmailSanitize = curEmail.startsWith("tg_") && curEmail !== wantEmail;
+  if (!needsRemarkUpdate && !needsEmailSanitize) return;
   const clientId = String(found.client.id || found.client.ID || "").trim();
   if (!clientId) return;
+  const patch = { ...found.client };
+  if (needsRemarkUpdate) patch.remark = want;
+  if (needsEmailSanitize) patch.email = wantEmail;
   await xui.updateClientInInbound({
     inboundId: config.xui.inboundId,
     clientId,
-    client: { ...found.client, remark: want },
+    client: patch,
   });
 }
 
