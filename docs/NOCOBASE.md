@@ -71,6 +71,18 @@
 
 Бот отдаёт в `/api/me` поле `catalog`: при наличии активных строк с `productType=vpn_extend` и `grantDays>0` кнопки «Продление» строятся из NocoBase; иначе — запасной вариант 30/90/180 дней.
 
+Рекомендуемый минимальный набор SKU:
+
+| code | productType | grantDays | title | active | serverId |
+|------|-------------|-----------|-------|--------|----------|
+| vpn_7 | vpn_extend | 7 | 7 дней | true | *(пусто)* |
+| vpn_30 | vpn_extend | 30 | 30 дней | true | *(пусто)* |
+| vpn_90 | vpn_extend | 90 | 90 дней | true | *(пусто)* |
+| proxy_nl1_7 | proxy_access | 7 | Proxy NL · 7 дней | true | nl1 |
+| proxy_nl1_30 | proxy_access | 30 | Proxy NL · 30 дней | true | nl1 |
+
+Примечание: в текущем UI карточки VPN читаются из `productType=vpn_extend`; proxy‑коды используются в checkout/webhook (`productCode`) и аналитике.
+
 ### subscription_branding (подпись подписки в VPN-клиенте)
 
 Поля из NocoBase **сами по себе не попадают** в Happ / v2rayN / Hiddify: клиент читает **ответ подписки с 3X-UI**. Чтобы название узла в списке серверов совпадало с «Заголовком подписки» из вашей таблицы, бот при выдаче XUI-клиента пишет в панель поле **`remark`** (и при необходимости обновляет его).
@@ -300,6 +312,20 @@
 - **Не хранить** в NocoBase: пароли прокси, приватные SSH-ключи, `subId`/полные subscription URL с секретами, JWT-секреты бота.
 - В **proxy_instances** допускается только **username** + метаданные; пароль остаётся в `data/proxy-links.json` на сервере бота (или будущем секрет-хранилище).
 - Роли NocoBase: саппорт без экспорта чувствительных полей; API-ключ бота — только create/list на нужных таблицах.
+
+### Минимальные права API key для бота
+
+Выдайте API key (или роль пользователя) с доступом только к нужным действиям:
+
+| Коллекция | list | create | update |
+|-----------|------|--------|--------|
+| customers | yes | yes | yes |
+| orders | yes | yes | yes |
+| products | yes | no | no |
+| proxy_instances | yes | yes | no |
+| subscription_branding | yes | no | no |
+
+Если используете логин/пароль вместо API key, ограничения задавайте через роль этого аккаунта.
 
 ## 7. Проверка
 

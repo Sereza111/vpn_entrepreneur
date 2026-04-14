@@ -1,4 +1,7 @@
 ﻿ID,code,Целое число,productType,title,sortOrder,active,serverId
+,vpn_7,7,vpn_extend,7 дней,5,True,
 ,vpn_30,30,vpn_extend,30 дней,10,True,
 ,vpn_90,90,vpn_extend,90 дней,20,True,
 ,vpn_180,180,vpn_extend,180 дней,30,True,
+,proxy_nl1_7,7,proxy_access,Proxy NL · 7 дней,100,True,nl1
+,proxy_nl1_30,30,proxy_access,Proxy NL · 30 дней,110,True,nl1
