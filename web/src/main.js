@@ -207,11 +207,28 @@ function bindWheelSwipe(dock) {
 function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
   const checkoutTpl = payCfg.checkoutUrlTemplate || "";
+  const testOn = Boolean(payCfg.testGrantEnabled);
   const username = me.subscriptionStatus?.username || "";
   const tid = me.telegramId;
 
-  const openCheckout = ({ productCode, grantDays }) => {
+  const runFallbackGrant = async (days) => {
+    const token = window.__vlToken || "";
+    if (!token) throw new Error("auth_token_missing");
+    await api("/api/test/grant", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ days: Number(days) }),
+    });
+    showToast(`Подписка продлена на ${days} дней`);
+    setTimeout(() => window.location.reload(), 700);
+  };
+
+  const openCheckout = async ({ productCode, grantDays }) => {
     if (!checkoutTpl) {
+      if (testOn) {
+        await runFallbackGrant(grantDays);
+        return true;
+      }
       showToast("Оплата скоро будет доступна. Напишите в поддержку.");
       return false;
     }
@@ -236,7 +253,11 @@ function bindVpnRenewalActions({ tg, me }) {
         const days = b.getAttribute("data-days");
         const code =
           b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vpn_30";
-        openCheckout({ productCode: code, grantDays: days });
+        try {
+          await openCheckout({ productCode: code, grantDays: days });
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+        }
       };
     });
   };
@@ -244,14 +265,18 @@ function bindVpnRenewalActions({ tg, me }) {
   const bindProxyPurchaseGrid = (rootEl, selectedServerGetter) => {
     if (!rootEl) return;
     rootEl.querySelectorAll(".plan-tile[data-proxy-days]").forEach((b) => {
-      b.onclick = () => {
+      b.onclick = async () => {
         const days = Number(b.getAttribute("data-proxy-days") || 0);
         const serverId = String(selectedServerGetter?.() || "").trim();
         if (!serverId) return showToast("Сначала выберите площадку прокси");
-        openCheckout({
-          productCode: `proxy_${serverId}_${days}`,
-          grantDays: days,
-        });
+        try {
+          await openCheckout({
+            productCode: `proxy_${serverId}_${days}`,
+            grantDays: days,
+          });
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+        }
       };
     });
   };
@@ -359,6 +384,7 @@ async function boot() {
       body: JSON.stringify({ initData }),
     });
     token = auth.token;
+    window.__vlToken = token;
   } catch (e) {
     document.getElementById("splash")?.remove();
     showError("Авторизация: " + e.message);
@@ -540,7 +566,21 @@ async function boot() {
         tg.openLink(url);
         return;
       }
-      showToast("Оплата скоро будет доступна. Напишите в поддержку.");
+      if (!pay.testGrantEnabled) {
+        showToast("Оплата скоро будет доступна. Напишите в поддержку.");
+        return;
+      }
+      try {
+        await api("/api/test/grant", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ days: 30 }),
+        });
+        showToast("Подписка продлена на 30 дней");
+        setTimeout(() => window.location.reload(), 700);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
     };
     document.getElementById("refreshProxyBtn").onclick = () => window.location.reload();
     const proxyCreateBtnNoAcc = document.getElementById("proxyCreateBtnNoAcc");
