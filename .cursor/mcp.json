@@ -2,11 +2,9 @@
   "mcpServers": {
     "nocobase-http": {
       "url": "http://72.56.240.35:10200/api/mcp",
-      "env": {
-        "NOCOBASE_URL": "http://72.56.240.35:10200"
-      },
       "headers": {
-        "Authorization": "Bearer ${NOCOBASE_API_TOKEN}"
+        "Authorization": "Bearer ${NOCOBASE_API_TOKEN}",
+        "Accept": "text/event-stream"
       }
     }
   }
