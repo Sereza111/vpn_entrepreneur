@@ -900,7 +900,31 @@ async function boot() {
         showToast("Готово. Обновляем...");
         setTimeout(() => window.location.reload(), 700);
       } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
+        // Fallback: если provision не удался, пробуем /api/me — там есть авто-восстановление привязки.
+        try {
+          const me2 = await api("/api/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (me2?.xui?.linked && me2?.subscriptionUrl) {
+            showToast("Ссылка восстановлена. Обновляем...");
+            setTimeout(() => window.location.reload(), 700);
+            return;
+          }
+        } catch {
+          // ignored
+        }
+
+        const msg = String(e?.message || "");
+        if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
+          showToast("XUI не настроен на сервере (панель/инбаунд)");
+        } else if (msg.includes("xui_login_failed")) {
+          showToast("Не удалось войти в XUI: проверь URL/логин/пароль/WebBasePath");
+        } else if (msg.includes("xui_add_client")) {
+          showToast("XUI не создал клиента. Проверь inbound и логи панели");
+        } else {
+          showToast(`Ошибка: ${msg || "не удалось обновить ссылку"}`);
+        }
+      } finally {
         provBtn.disabled = false;
         provBtn.textContent = xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку";
       }
