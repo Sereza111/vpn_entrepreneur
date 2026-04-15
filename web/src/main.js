@@ -195,10 +195,10 @@ function bindWheelSwipe(dock) {
 
 function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
-  const sendInvoiceToChat = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
+  const openInvoiceInMiniApp = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
     const token = window.__vlToken || "";
     if (!token) throw new Error("auth_token_missing");
-    await api("/api/payments/telegram/invoice", {
+    const r = await api("/api/payments/telegram/invoice-link", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -208,7 +208,13 @@ function bindVpnRenewalActions({ tg, me }) {
         serverId: serverId || undefined,
       }),
     });
-    showToast("Счёт отправлен в чат с ботом.");
+    const link = String(r?.invoiceLink || "").trim();
+    if (!link) throw new Error("invoice_link_missing");
+    if (typeof tg.openInvoice === "function") {
+      tg.openInvoice(link);
+    } else {
+      tg.openLink(link);
+    }
   };
 
   const bindGrid = (rootEl) => {
@@ -219,7 +225,7 @@ function bindVpnRenewalActions({ tg, me }) {
         const code =
           b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vps_30";
         try {
-          await sendInvoiceToChat({ productCode: code, grantDays: days });
+          await openInvoiceInMiniApp({ productCode: code, grantDays: days });
         } catch (e) {
           showToast(`Ошибка: ${e.message}`);
         }
@@ -235,7 +241,7 @@ function bindVpnRenewalActions({ tg, me }) {
         const serverId = String(selectedServerGetter?.() || "").trim();
         if (!serverId) return showToast("Сначала выберите площадку прокси");
         try {
-          await sendInvoiceToChat({
+          await openInvoiceInMiniApp({
             productCode: `proxy_${serverId}_${days}`,
             grantDays: days,
             serviceType: "proxy",
@@ -528,7 +534,10 @@ async function boot() {
             serviceType: "vps",
           }),
         });
-        showToast("Счёт отправлен в чат с ботом.");
+        const link = String(r?.invoiceLink || "").trim();
+        if (!link) throw new Error("invoice_link_missing");
+        if (typeof tg.openInvoice === "function") tg.openInvoice(link);
+        else tg.openLink(link);
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
       }

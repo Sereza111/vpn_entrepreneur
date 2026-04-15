@@ -536,6 +536,12 @@ async function xuiProvisionCore(telegramId, { force, username }) {
 }
 
 function parseTelegramPaymentPayload(raw) {
+  const shortKey = String(raw || "").trim();
+  if (shortKey.startsWith("p:")) {
+    const saved = paymentPayloadStore.get(shortKey);
+    if (!saved) return null;
+    return saved;
+  }
   try {
     const obj = JSON.parse(String(raw || ""));
     if (!obj || typeof obj !== "object") return null;
@@ -561,6 +567,7 @@ function parseTelegramPaymentPayload(raw) {
 }
 
 const processedPayments = new Set();
+const paymentPayloadStore = new Map();
 
 function makePaymentDedupKey(sp) {
   return String(
@@ -568,6 +575,15 @@ function makePaymentDedupKey(sp) {
       sp?.telegram_payment_charge_id ||
       "",
   ).trim();
+}
+
+function savePaymentPayload(data) {
+  const id = `p:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  paymentPayloadStore.set(id, data);
+  setTimeout(() => {
+    paymentPayloadStore.delete(id);
+  }, 24 * 60 * 60 * 1000).unref?.();
+  return id;
 }
 
 app.get("/api/me", authMiddleware, async (req, res) => {
@@ -902,7 +918,7 @@ async function sendTelegramInvoiceForSelection({
   const desc = normalized.serviceType === "proxy"
     ? `Оплата доступа к прокси\nТариф: ${normalized.days} дней (${normalized.productCode})`
     : `Оплата доступа к VPS Premium\nТариф: ${normalized.days} дней (${normalized.productCode})`;
-  const payload = JSON.stringify({
+  const payloadData = {
     kind: "telegram_payment",
     telegramId,
     username: username || null,
@@ -912,7 +928,8 @@ async function sendTelegramInvoiceForSelection({
     serverId: normalized.serverId,
     proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
     at: Date.now(),
-  });
+  };
+  const payload = savePaymentPayload(payloadData);
   await bot.api.sendInvoice(
     chatId,
     title,
@@ -922,6 +939,56 @@ async function sendTelegramInvoiceForSelection({
     [{ label: `${normalized.days} дней`, amount: amountMinor }],
     { provider_token: config.payment.telegramProviderToken },
   );
+}
+
+async function createTelegramInvoiceLinkForSelection({
+  telegramId,
+  username = null,
+  selected,
+}) {
+  const normalized = buildInvoiceSelection(selected);
+  const amountMinor = Number(config.payment.telegramTestPriceMinor || 9900);
+  const titlePrefix = config.payment.mode === "test"
+    ? "VPS Premium — тестовый платёж"
+    : "VPS Premium — оплата";
+  const title = `${titlePrefix} · ${normalized.days} дней`;
+  const desc = normalized.serviceType === "proxy"
+    ? `Оплата доступа к прокси\nТариф: ${normalized.days} дней (${normalized.productCode})`
+    : `Оплата доступа к VPS Premium\nТариф: ${normalized.days} дней (${normalized.productCode})`;
+  const payloadData = {
+    kind: "telegram_payment",
+    telegramId,
+    username: username || null,
+    days: normalized.days,
+    productCode: normalized.productCode,
+    serviceType: normalized.serviceType,
+    serverId: normalized.serverId,
+    proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
+    at: Date.now(),
+  };
+  const payload = savePaymentPayload(payloadData);
+  const endpoint = `https://api.telegram.org/bot${config.botToken}/createInvoiceLink`;
+  const resp = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title,
+      description: desc,
+      payload,
+      provider_token: config.payment.telegramProviderToken,
+      currency: config.payment.telegramCurrency,
+      prices: [{ label: `${normalized.days} дней`, amount: amountMinor }],
+    }),
+  });
+  const json = await resp.json().catch(() => null);
+  if (!resp.ok || !json?.ok || !json?.result) {
+    const msg = json?.description || `telegram_create_invoice_link_failed_${resp.status}`;
+    throw new Error(msg);
+  }
+  return {
+    invoiceLink: String(json.result),
+    normalized,
+  };
 }
 
 async function sendTelegramInvoiceFromCtx(ctx, selected = null) {
@@ -968,20 +1035,30 @@ app.post("/api/payments/telegram/invoice", authMiddleware, async (req, res) => {
   }
 });
 
+app.post("/api/payments/telegram/invoice-link", authMiddleware, async (req, res) => {
+  if (!config.payment.telegramProviderToken) {
+    return res.status(503).json({ error: "telegram_payments_disabled" });
+  }
+  const telegramId = Number(req.tgSession.sub || req.tgSession.tg);
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  try {
+    const r = await createTelegramInvoiceLinkForSelection({
+      telegramId,
+      username: req.tgSession?.u ?? null,
+      selected: req.body || {},
+    });
+    return res.json({ ok: true, invoiceLink: r.invoiceLink, selection: r.normalized });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
-  if (config.payment.telegramProviderToken) {
-    kb.text(
-      config.payment.mode === "test" ? "Тестовые тарифы" : "Тарифы оплаты",
-      "paymenu_open",
-    );
-  }
   await ctx.reply(
-    config.payment.telegramProviderToken
-      ? config.payment.mode === "test"
-        ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты нажми «Тестовые тарифы» и выбери период."
-        : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nОплата везде единая: нажми «Тарифы оплаты» и выбери период."
-      : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
+    "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
     { reply_markup: kb },
   );
 });
