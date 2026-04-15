@@ -532,6 +532,21 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   return "created";
 }
 
+function parseTelegramPaymentPayload(raw) {
+  try {
+    const obj = JSON.parse(String(raw || ""));
+    if (!obj || typeof obj !== "object") return null;
+    const telegramId = Number(obj.telegramId);
+    const days = Number(obj.days);
+    const productCode = String(obj.productCode || "").trim() || config.payment.telegramTestProductCode;
+    if (!Number.isFinite(telegramId) || telegramId < 1) return null;
+    if (!Number.isFinite(days) || days < 1) return null;
+    return { telegramId, days, productCode };
+  } catch {
+    return null;
+  }
+}
+
 app.get("/api/me", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
@@ -777,10 +792,95 @@ const bot = new Bot(config.botToken);
 
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
+  if (config.payment.telegramProviderToken) {
+    kb.text("Тестовый платёж", "/paytest");
+  }
   await ctx.reply(
-    "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
+    config.payment.telegramProviderToken
+      ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты можно нажать кнопку «Тестовый платёж»."
+      : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
     { reply_markup: kb },
   );
+});
+
+bot.command("paytest", async (ctx) => {
+  if (!config.payment.telegramProviderToken) {
+    await ctx.reply("Тестовый провайдер платежей не настроен (нет TG_PAYMENT_PROVIDER_TOKEN).");
+    return;
+  }
+  const telegramId = Number(ctx.from?.id || 0);
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    await ctx.reply("Не удалось определить Telegram ID.");
+    return;
+  }
+  const days = Number(config.payment.telegramTestDays || 30);
+  const productCode = config.payment.telegramTestProductCode || "vps_30";
+  const payload = JSON.stringify({
+    kind: "telegram_test_payment",
+    telegramId,
+    days,
+    productCode,
+    at: Date.now(),
+  });
+  await ctx.api.sendInvoice(
+    ctx.chat.id,
+    config.payment.telegramTestTitle,
+    config.payment.telegramTestDescription,
+    payload,
+    config.payment.telegramCurrency,
+    [{ label: `${days} дней`, amount: Number(config.payment.telegramTestPriceMinor || 9900) }],
+    { provider_token: config.payment.telegramProviderToken },
+  );
+});
+
+bot.on("pre_checkout_query", async (ctx) => {
+  try {
+    const payload = parseTelegramPaymentPayload(ctx.preCheckoutQuery?.invoice_payload);
+    if (!payload) {
+      await ctx.answerPreCheckoutQuery(false, {
+        error_message: "Некорректные параметры платежа. Попробуйте снова.",
+      });
+      return;
+    }
+    await ctx.answerPreCheckoutQuery(true);
+  } catch {
+    await ctx.answerPreCheckoutQuery(false, {
+      error_message: "Платёж временно недоступен. Попробуйте позже.",
+    });
+  }
+});
+
+bot.on("message:successful_payment", async (ctx) => {
+  const sp = ctx.message?.successful_payment;
+  if (!sp) return;
+  const payload = parseTelegramPaymentPayload(sp.invoice_payload);
+  if (!payload) {
+    await ctx.reply("Платёж получен, но payload не распознан. Напишите в поддержку.");
+    return;
+  }
+  const username = ctx.from?.username || null;
+  try {
+    await xuiProvisionCore(payload.telegramId, { force: true, username });
+    void nocobase.syncPaymentOrder({
+      telegramId: payload.telegramId,
+      extendDays: payload.days,
+      addDeviceSlots: 0,
+      amount: Number(sp.total_amount || 0) / 100,
+      currency: sp.currency,
+      externalPaymentId:
+        sp.provider_payment_charge_id || sp.telegram_payment_charge_id || null,
+      productCode: payload.productCode,
+      username,
+      source: "telegram_successful_payment",
+    });
+    await ctx.reply(
+      `Платёж успешно получен. Доступ к VPS Premium активирован на ${payload.days} дней.`,
+    );
+  } catch (e) {
+    await ctx.reply(
+      `Платёж получен, но выдача не завершилась автоматически: ${String(e?.message || e)}.\nНапишите в поддержку, мы уже видим оплату.`,
+    );
+  }
 });
 
 if (config.publicBaseUrl) {

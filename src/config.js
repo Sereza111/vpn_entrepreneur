@@ -49,6 +49,16 @@ export const config = {
   payment: {
     checkoutUrlTemplate: (process.env.PAYMENT_CHECKOUT_URL_TEMPLATE || "").trim(),
     defaultProductCode: (process.env.PAYMENT_DEFAULT_PRODUCT_CODE || "vps_30").trim(),
+    telegramProviderToken: (process.env.TG_PAYMENT_PROVIDER_TOKEN || "").trim(),
+    telegramCurrency: (process.env.TG_PAYMENT_CURRENCY || "RUB").trim().toUpperCase(),
+    telegramTestPriceMinor: Math.max(1, Number(process.env.TG_PAYMENT_TEST_PRICE_MINOR || 9900)),
+    telegramTestDays: Math.max(1, Number(process.env.TG_PAYMENT_TEST_DAYS || 30)),
+    telegramTestProductCode: (process.env.TG_PAYMENT_TEST_PRODUCT_CODE || "vps_30").trim(),
+    telegramTestTitle: (process.env.TG_PAYMENT_TEST_TITLE || "VPS Premium — тестовый платёж").trim(),
+    telegramTestDescription: (
+      process.env.TG_PAYMENT_TEST_DESCRIPTION ||
+      "Тестовая оплата доступа к VPS Premium через Telegram Payments"
+    ).trim(),
   },
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:
