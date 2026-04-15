@@ -62,6 +62,7 @@ export const config = {
       process.env.TG_PAYMENT_TEST_DESCRIPTION ||
       "Тестовая оплата доступа к VPS Premium через Telegram Payments"
     ).trim(),
+    priceMapJson: String(process.env.TG_PAYMENT_PRICE_MAP_JSON || "").trim(),
   },
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:

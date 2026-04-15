@@ -80,7 +80,9 @@ function vpnPlanTileHtml(p) {
   const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
   const code = escAttr(p.code || "");
   const title = escAttr(p.title || (safeDays ? `${safeDays} дней` : "Тариф"));
-  const meta = escAttr(safeDays ? `${safeDays} дн. · VPS Premium` : "VPS Premium · уточните срок в NocoBase");
+  const priceMinor = Number(p.priceMinor || 0);
+  const priceLabel = priceMinor > 0 ? `${(priceMinor / 100).toFixed(0)} ₽` : "цена по запросу";
+  const meta = escAttr(safeDays ? `${safeDays} дн. · ${priceLabel}` : `VPS Premium · ${priceLabel}`);
   return `<button type="button" class="plan-tile" data-days="${safeDays}" data-product-code="${code}">
     <span class="plan-tile__title">${title}</span>
     <span class="plan-tile__meta">${meta}</span>
@@ -94,10 +96,11 @@ function compactSubscriptionUrl(url) {
   return `${raw.slice(0, 30)}...${raw.slice(-16)}`;
 }
 
-function proxyPurchaseTileHtml(days, label) {
+function proxyPurchaseTileHtml(days, label, priceMinor = 0) {
   const safeDays = Number(days);
   const title = escAttr(label);
-  const meta = escAttr(`${safeDays} дн. · 1 прокси`);
+  const priceLabel = priceMinor > 0 ? `${(priceMinor / 100).toFixed(0)} ₽` : "цена по запросу";
+  const meta = escAttr(`${safeDays} дн. · ${priceLabel}`);
   return `<button type="button" class="plan-tile plan-tile--proxy" data-proxy-days="${safeDays}">
     <span class="plan-tile__title">${title}</span>
     <span class="plan-tile__meta">${meta}</span>
@@ -497,8 +500,8 @@ async function boot() {
             </div>
             <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
             <div class="plan-grid plan-grid--proxy" id="proxyPlanGridNoAcc">
-              ${proxyPurchaseTileHtml(7, "Прокси на неделю")}
-              ${proxyPurchaseTileHtml(30, "Прокси на месяц")}
+              ${proxyPurchaseTileHtml(7, "Прокси на неделю", proxyPrice7)}
+              ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
             </div>
           </div>
           <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
@@ -620,6 +623,9 @@ async function boot() {
       </div>`;
 
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
+  const priceMap = me?.payment?.prices || {};
+  const proxyPrice7 = Number(priceMap.proxy_7 || 0);
+  const proxyPrice30 = Number(priceMap.proxy_30 || 0);
 
   const card = el(`<div class="card section is-visible" id="section-status">
     <div class="chip ${isActive ? "active" : ""}" style="${isPending ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.35)" : ""}">
@@ -752,8 +758,8 @@ async function boot() {
                </div>
               <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
               <div class="plan-grid plan-grid--proxy" id="proxyPlanGrid">
-                ${proxyPurchaseTileHtml(7, "Прокси на неделю")}
-                ${proxyPurchaseTileHtml(30, "Прокси на месяц")}
+                ${proxyPurchaseTileHtml(7, "Прокси на неделю", proxyPrice7)}
+                ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
               </div>
              </div>
              <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
@@ -775,9 +781,9 @@ async function boot() {
   const planTilesHtml = vpnFromNb
     ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
     : [
-        { grantDays: 30, title: "30 дней", code: "vps_30" },
-        { grantDays: 90, title: "90 дней", code: "vps_90" },
-        { grantDays: 180, title: "180 дней", code: "vps_180" },
+        { grantDays: 30, title: "30 дней", code: "vps_30", priceMinor: Number(priceMap.vps_30 || 0) },
+        { grantDays: 90, title: "90 дней", code: "vps_90", priceMinor: Number(priceMap.vps_90 || 0) },
+        { grantDays: 180, title: "180 дней", code: "vps_180", priceMinor: Number(priceMap.vps_180 || 0) },
       ]
         .map((p) => vpnPlanTileHtml(p))
         .join("");

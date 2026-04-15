@@ -20,6 +20,52 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
 const whPath = "/telegram/webhook";
 
+const DEFAULT_PRICE_MAP_MINOR = {
+  vps_7: 14900,
+  vps_30: 39900,
+  vps_90: 99000,
+  vps_180: 179000,
+  proxy_7: 24900,
+  proxy_30: 79900,
+};
+
+function parsePriceMapFromConfig(raw) {
+  if (!raw) return { ...DEFAULT_PRICE_MAP_MINOR };
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== "object") return { ...DEFAULT_PRICE_MAP_MINOR };
+    const out = { ...DEFAULT_PRICE_MAP_MINOR };
+    for (const [k, v] of Object.entries(obj)) {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 1) continue;
+      out[String(k).trim().toLowerCase()] = Math.floor(n);
+    }
+    return out;
+  } catch {
+    return { ...DEFAULT_PRICE_MAP_MINOR };
+  }
+}
+
+const PAYMENT_PRICE_MAP_MINOR = parsePriceMapFromConfig(config.payment.priceMapJson);
+
+function resolvePlanPriceMinor(selection = {}) {
+  const code = String(selection.productCode || "").trim().toLowerCase();
+  const days = Number(selection.days || selection.grantDays || 0);
+  const serviceType = String(selection.serviceType || "").trim().toLowerCase();
+  if (code && Number.isFinite(PAYMENT_PRICE_MAP_MINOR[code])) {
+    return PAYMENT_PRICE_MAP_MINOR[code];
+  }
+  if (serviceType === "proxy") {
+    const key = days > 0 ? `proxy_${Math.floor(days)}` : "proxy_30";
+    if (Number.isFinite(PAYMENT_PRICE_MAP_MINOR[key])) return PAYMENT_PRICE_MAP_MINOR[key];
+  }
+  if (days > 0) {
+    const key = `vps_${Math.floor(days)}`;
+    if (Number.isFinite(PAYMENT_PRICE_MAP_MINOR[key])) return PAYMENT_PRICE_MAP_MINOR[key];
+  }
+  return Number(config.payment.telegramTestPriceMinor || 9900);
+}
+
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -365,7 +411,17 @@ async function loadMe(telegramId, username = null) {
     try {
       const products = await nocobase.fetchCatalogProducts();
       if (Array.isArray(products) && products.length) {
-        catalog = { source: "nocobase", products };
+        catalog = {
+          source: "nocobase",
+          products: products.map((p) => ({
+            ...p,
+            priceMinor: resolvePlanPriceMinor({
+              productCode: p.code,
+              days: p.grantDays,
+              serviceType: String(p.productType || "").trim() === "proxy_access" ? "proxy" : "vps",
+            }),
+          })),
+        };
       }
     } catch {
       // не ломаем /api/me
@@ -396,7 +452,9 @@ async function loadMe(telegramId, username = null) {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
       defaultProductCode: config.payment.defaultProductCode || "vps_30",
       mode: config.payment.mode,
+      currency: config.payment.telegramCurrency || "RUB",
       telegramInvoiceEnabled: Boolean(config.payment.telegramProviderToken),
+      prices: PAYMENT_PRICE_MAP_MINOR,
       testGrantEnabled: config.testGrantEnabled,
       allowTestTools: config.payment.mode === "test" && config.testGrantEnabled,
     },
@@ -880,7 +938,13 @@ async function sendTelegramPaymentMenu(ctx) {
   const plans = await getTelegramPlanOptions();
   const kb = new InlineKeyboard();
   for (const p of plans.slice(0, 8)) {
-    kb.text(p.title, `paymenu:${p.days}:${p.code}`).row();
+    const amountMinor = resolvePlanPriceMinor({
+      productCode: p.code,
+      days: p.days,
+      serviceType: p.serviceType,
+    });
+    const amountRub = (Number(amountMinor) / 100).toFixed(0);
+    kb.text(`${p.title} · ${amountRub} ₽`, `paymenu:${p.days}:${p.code}`).row();
   }
   await ctx.reply("Выберите тариф для оплаты:", { reply_markup: kb });
 }
@@ -910,7 +974,7 @@ async function sendTelegramInvoiceForSelection({
   selected,
 }) {
   const normalized = buildInvoiceSelection(selected);
-  const amountMinor = Number(config.payment.telegramTestPriceMinor || 9900);
+  const amountMinor = resolvePlanPriceMinor(normalized);
   const titlePrefix = config.payment.mode === "test"
     ? "VPS Premium — тестовый платёж"
     : "VPS Premium — оплата";
@@ -947,7 +1011,7 @@ async function createTelegramInvoiceLinkForSelection({
   selected,
 }) {
   const normalized = buildInvoiceSelection(selected);
-  const amountMinor = Number(config.payment.telegramTestPriceMinor || 9900);
+  const amountMinor = resolvePlanPriceMinor(normalized);
   const titlePrefix = config.payment.mode === "test"
     ? "VPS Premium — тестовый платёж"
     : "VPS Premium — оплата";
