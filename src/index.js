@@ -790,7 +790,47 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
 
 const bot = new Bot(config.botToken);
 
-async function sendTelegramTestInvoice(ctx) {
+async function getTelegramTestPlanOptions() {
+  const fallback = [
+    { days: 7, code: "vps_7", title: "7 дней" },
+    { days: 30, code: "vps_30", title: "30 дней" },
+    { days: 90, code: "vps_90", title: "90 дней" },
+    { days: 180, code: "vps_180", title: "180 дней" },
+  ];
+  try {
+    const rows = await nocobase.fetchCatalogProducts();
+    const list = Array.isArray(rows)
+      ? rows
+          .map((p) => ({
+            days: Number(p.grantDays || 0),
+            code: String(p.code || "").trim() || `vps_${Number(p.grantDays || 0)}`,
+            title: String(p.title || "").trim() || `${Number(p.grantDays || 0)} дней`,
+            sortOrder: Number(p.sortOrder || 0),
+          }))
+          .filter((p) => Number.isFinite(p.days) && p.days > 0)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+      : [];
+    if (list.length) return list;
+  } catch {
+    // ignore and use fallback
+  }
+  return fallback;
+}
+
+async function sendTelegramTestPaymentMenu(ctx) {
+  if (!config.payment.telegramProviderToken) {
+    await ctx.reply("Тестовый провайдер платежей не настроен (нет TG_PAYMENT_PROVIDER_TOKEN).");
+    return;
+  }
+  const plans = await getTelegramTestPlanOptions();
+  const kb = new InlineKeyboard();
+  for (const p of plans.slice(0, 8)) {
+    kb.text(`Тест ${p.title}`, `paytest:${p.days}:${p.code}`).row();
+  }
+  await ctx.reply("Выберите тестовый тариф для оплаты:", { reply_markup: kb });
+}
+
+async function sendTelegramTestInvoice(ctx, selected = null) {
   if (!config.payment.telegramProviderToken) {
     await ctx.reply("Тестовый провайдер платежей не настроен (нет TG_PAYMENT_PROVIDER_TOKEN).");
     return;
@@ -800,8 +840,10 @@ async function sendTelegramTestInvoice(ctx) {
     await ctx.reply("Не удалось определить Telegram ID.");
     return;
   }
-  const days = Number(config.payment.telegramTestDays || 30);
-  const productCode = config.payment.telegramTestProductCode || "vps_30";
+  const days = Number(selected?.days || config.payment.telegramTestDays || 30);
+  const productCode = String(
+    selected?.productCode || config.payment.telegramTestProductCode || "vps_30",
+  ).trim();
   const payload = JSON.stringify({
     kind: "telegram_test_payment",
     telegramId,
@@ -812,8 +854,8 @@ async function sendTelegramTestInvoice(ctx) {
   try {
     await ctx.api.sendInvoice(
       ctx.chat.id,
-      config.payment.telegramTestTitle,
-      config.payment.telegramTestDescription,
+      `${config.payment.telegramTestTitle} · ${days} дней`,
+      `${config.payment.telegramTestDescription}\nТариф: ${days} дней (${productCode})`,
       payload,
       config.payment.telegramCurrency,
       [{ label: `${days} дней`, amount: Number(config.payment.telegramTestPriceMinor || 9900) }],
@@ -828,23 +870,36 @@ async function sendTelegramTestInvoice(ctx) {
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
   if (config.payment.telegramProviderToken) {
-    kb.text("Тестовый платёж", "paytest");
+    kb.text("Тестовые тарифы", "paytest_menu");
   }
   await ctx.reply(
     config.payment.telegramProviderToken
-      ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты можно нажать кнопку «Тестовый платёж»."
+      ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты нажми «Тестовые тарифы» и выбери период."
       : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
     { reply_markup: kb },
   );
 });
 
 bot.command("paytest", async (ctx) => {
-  await sendTelegramTestInvoice(ctx);
+  await sendTelegramTestPaymentMenu(ctx);
 });
 
-bot.callbackQuery("paytest", async (ctx) => {
+bot.callbackQuery("paytest_menu", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await sendTelegramTestInvoice(ctx);
+  await sendTelegramTestPaymentMenu(ctx);
+});
+
+bot.callbackQuery(/^paytest:(\d+):(.+)$/i, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const data = String(ctx.callbackQuery?.data || "");
+  const m = /^paytest:(\d+):(.+)$/i.exec(data);
+  const days = Number(m?.[1] || 0);
+  const productCode = String(m?.[2] || "").trim() || "vps_30";
+  if (!Number.isFinite(days) || days < 1) {
+    await ctx.reply("Некорректный тариф. Откройте меню ещё раз: /paytest");
+    return;
+  }
+  await sendTelegramTestInvoice(ctx, { days, productCode });
 });
 
 bot.on("pre_checkout_query", async (ctx) => {
