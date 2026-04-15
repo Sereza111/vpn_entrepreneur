@@ -790,20 +790,7 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
 
 const bot = new Bot(config.botToken);
 
-bot.command("start", async (ctx) => {
-  const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
-  if (config.payment.telegramProviderToken) {
-    kb.text("Тестовый платёж", "/paytest");
-  }
-  await ctx.reply(
-    config.payment.telegramProviderToken
-      ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты можно нажать кнопку «Тестовый платёж»."
-      : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
-    { reply_markup: kb },
-  );
-});
-
-bot.command("paytest", async (ctx) => {
+async function sendTelegramTestInvoice(ctx) {
   if (!config.payment.telegramProviderToken) {
     await ctx.reply("Тестовый провайдер платежей не настроен (нет TG_PAYMENT_PROVIDER_TOKEN).");
     return;
@@ -822,15 +809,42 @@ bot.command("paytest", async (ctx) => {
     productCode,
     at: Date.now(),
   });
-  await ctx.api.sendInvoice(
-    ctx.chat.id,
-    config.payment.telegramTestTitle,
-    config.payment.telegramTestDescription,
-    payload,
-    config.payment.telegramCurrency,
-    [{ label: `${days} дней`, amount: Number(config.payment.telegramTestPriceMinor || 9900) }],
-    { provider_token: config.payment.telegramProviderToken },
+  try {
+    await ctx.api.sendInvoice(
+      ctx.chat.id,
+      config.payment.telegramTestTitle,
+      config.payment.telegramTestDescription,
+      payload,
+      config.payment.telegramCurrency,
+      [{ label: `${days} дней`, amount: Number(config.payment.telegramTestPriceMinor || 9900) }],
+      { provider_token: config.payment.telegramProviderToken },
+    );
+  } catch (e) {
+    const msg = String(e?.description || e?.message || e);
+    await ctx.reply(`Не удалось отправить тестовый счёт: ${msg}`);
+  }
+}
+
+bot.command("start", async (ctx) => {
+  const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
+  if (config.payment.telegramProviderToken) {
+    kb.text("Тестовый платёж", "paytest");
+  }
+  await ctx.reply(
+    config.payment.telegramProviderToken
+      ? "Открой мини-приложение: там статус подписки и доступ к VPS Premium.\n\nДля теста оплаты можно нажать кнопку «Тестовый платёж»."
+      : "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
+    { reply_markup: kb },
   );
+});
+
+bot.command("paytest", async (ctx) => {
+  await sendTelegramTestInvoice(ctx);
+});
+
+bot.callbackQuery("paytest", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await sendTelegramTestInvoice(ctx);
 });
 
 bot.on("pre_checkout_query", async (ctx) => {
