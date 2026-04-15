@@ -1,0 +1,13 @@
+[Unit]
+Description=Run geosite updater every 6 hours
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=6h
+AccuracySec=5m
+RandomizedDelaySec=10m
+Persistent=true
+Unit=geosite-update.service
+
+[Install]
+WantedBy=timers.target

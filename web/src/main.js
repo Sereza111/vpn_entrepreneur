@@ -80,7 +80,7 @@ function vpnPlanTileHtml(p) {
   const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
   const code = escAttr(p.code || "");
   const title = escAttr(p.title || (safeDays ? `${safeDays} дней` : "Тариф"));
-  const meta = escAttr(safeDays ? `${safeDays} дн. · VPN` : "VPN · уточните срок в NocoBase");
+  const meta = escAttr(safeDays ? `${safeDays} дн. · VPS Premium` : "VPS Premium · уточните срок в NocoBase");
   return `<button type="button" class="plan-tile" data-days="${safeDays}" data-product-code="${code}">
     <span class="plan-tile__title">${title}</span>
     <span class="plan-tile__meta">${meta}</span>
@@ -145,7 +145,7 @@ function expandPaymentCheckoutUrl(template, vars) {
 function appendAppFooter(container) {
   container.appendChild(
     el(
-      `<div class="app-footer"><a href="https://t.me/VL_VPNbot" target="_blank" rel="noopener noreferrer">@VL_VPNbot</a></div>`,
+      `<div class="app-footer"><a href="https://t.me/VL_VPNbot" target="_blank" rel="noopener noreferrer">Поддержка</a></div>`,
     ),
   );
 }
@@ -252,7 +252,7 @@ function bindVpnRenewalActions({ tg, me }) {
       b.onclick = async () => {
         const days = b.getAttribute("data-days");
         const code =
-          b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vpn_30";
+          b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vps_30";
         try {
           await openCheckout({ productCode: code, grantDays: days });
         } catch (e) {
@@ -469,7 +469,7 @@ async function boot() {
       el(`
         <div class="card section" id="section-connect">
           <h2 class="section-title">Подключение</h2>
-          <p class="muted">После оплаты доступ к VPN выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
+          <p class="muted">После оплаты доступ к VPS Premium выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
           <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
         </div>
       `),
@@ -478,8 +478,8 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-extend">
-          <h2 class="section-title">Покупка VPN</h2>
-          <p class="muted">Выберите тариф и оплатите доступ.</p>
+          <h2 class="section-title">Покупка VPS Premium</h2>
+          <p class="muted">Выберите тариф и оплатите доступ к VPS Premium.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
         </div>
@@ -555,7 +555,7 @@ async function boot() {
       if (tpl) {
         const url = expandPaymentCheckoutUrl(tpl, {
           telegramId: me.telegramId,
-          productCode: pay.defaultProductCode || "vpn_30",
+          productCode: pay.defaultProductCode || "vps_30",
           grantDays: 30,
           username: "",
         });
@@ -735,7 +735,7 @@ async function boot() {
     : "";
 
   const connect = el(`<div class="card section" id="section-connect">
-    <h2 class="section-title">Подключение VPN</h2>
+    <h2 class="section-title">Подключение VPS Premium</h2>
     <p class="muted">Скопируйте URL и импортируйте подписку в клиент.</p>
     ${uiExtras}
     <div class="link-block link-block--compact">
@@ -815,19 +815,19 @@ async function boot() {
   const planTilesHtml = vpnFromNb
     ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
     : [
-        { grantDays: 30, title: "30 дней", code: "vpn_30" },
-        { grantDays: 90, title: "90 дней", code: "vpn_90" },
-        { grantDays: 180, title: "180 дней", code: "vpn_180" },
+        { grantDays: 30, title: "30 дней", code: "vps_30" },
+        { grantDays: 90, title: "90 дней", code: "vps_90" },
+        { grantDays: 180, title: "180 дней", code: "vps_180" },
       ]
         .map((p) => vpnPlanTileHtml(p))
         .join("");
 
   const extend = el(`<div class="card section" id="section-extend">
-    <h2 class="section-title">Покупка VPN</h2>
+    <h2 class="section-title">Покупка VPS Premium</h2>
     ${
       checkoutTpl
         ? `<p class="muted" style="margin-top:6px;line-height:1.45">После оплаты срок обновится автоматически.</p>`
-        : `<p class="muted" style="margin-top:6px;line-height:1.45">Выберите срок доступа VPN.</p>`
+        : `<p class="muted" style="margin-top:6px;line-height:1.45">Выберите срок доступа к VPS Premium.</p>`
     }
     ${
       vpnFromNb
@@ -838,7 +838,7 @@ async function boot() {
       <div class="vpn-renew-card__head">
         <span class="vpn-renew-card__glyph" aria-hidden="true">◎</span>
         <div class="vpn-renew-card__head-text">
-          <span class="vpn-renew-card__kind">VPN</span>
+          <span class="vpn-renew-card__kind">VPS Premium</span>
           <span class="vpn-renew-card__sub">Продление подписки</span>
         </div>
       </div>

@@ -108,3 +108,77 @@
 - Смежные проекты (geoip, sing-box и т.д.) — внизу их README.
 
 Эксплуатация серверов VL: [RUNBOOK.md](./RUNBOOK.md). Учёт в NocoBase: [NOCOBASE.md](./NOCOBASE.md).
+
+## Автообновление `geosite.dat` каждые 6 часов (безопасный вариант)
+
+Чтобы не ломать прод с активными пользователями, используйте staged-подход:
+
+1. Сначала настроить правило `geosite:category-ads-all` вручную и проверить на 1-2 клиентах.
+2. Только потом включить автообновление файла `geosite.dat`.
+3. По умолчанию скрипт **не делает restart** Xray, пока вы явно не зададите команду.
+
+В репозитории добавлены файлы:
+
+- [`scripts/xray/geosite-update.sh`](../scripts/xray/geosite-update.sh)
+- [`scripts/xray/geosite-update.service`](../scripts/xray/geosite-update.service)
+- [`scripts/xray/geosite-update.timer`](../scripts/xray/geosite-update.timer)
+
+### Что делает скрипт
+
+- скачивает `geosite.dat` и `.sha256sum` с release-ветки runetfreedom;
+- сверяет SHA256;
+- если файл изменился — делает backup текущего файла и атомарно заменяет;
+- опционально запускает тест-команду и затем restart/reload (если вы задали env-переменные).
+
+### Установка на сервере (пример)
+
+```bash
+sudo install -m 0755 scripts/xray/geosite-update.sh /usr/local/sbin/geosite-update.sh
+sudo install -m 0644 scripts/xray/geosite-update.service /etc/systemd/system/geosite-update.service
+sudo install -m 0644 scripts/xray/geosite-update.timer /etc/systemd/system/geosite-update.timer
+```
+
+Создайте `/etc/default/geosite-updater`:
+
+```bash
+GEOSITE_PATH=/usr/local/share/xray/geosite.dat
+# Для первой недели оставьте пустым:
+XRAY_RESTART_CMD=
+# Если есть безопасная проверка конфига:
+XRAY_TEST_CMD=
+```
+
+Проверить без замены:
+
+```bash
+sudo DRY_RUN=1 /usr/local/sbin/geosite-update.sh
+```
+
+Ручной запуск с заменой:
+
+```bash
+sudo /usr/local/sbin/geosite-update.sh
+```
+
+Включить таймер:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now geosite-update.timer
+systemctl list-timers | grep geosite-update
+```
+
+Логи:
+
+```bash
+journalctl -u geosite-update.service -n 200 --no-pager
+```
+
+### Рекомендация по restart/reload
+
+Когда убедитесь, что всё стабильно:
+
+- для 3X-UI часто используют: `XRAY_RESTART_CMD=\"systemctl restart x-ui\"`
+- если у вас отдельный сервис Xray, задайте его reload/restart вместо `x-ui`.
+
+Сначала прогоните `DRY_RUN=1`, затем 1-2 ручных обновления, и только после этого включайте автоматический restart.

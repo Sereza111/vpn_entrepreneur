@@ -230,6 +230,10 @@ app.post("/api/auth/telegram", (req, res) => {
   const v = validateWebAppInitData(initData);
   if (!v.ok) return res.status(401).json({ error: v.error });
   const telegramId = v.user.id;
+  void nocobase.syncCustomerSnapshot({
+    telegramId,
+    username: v.user.username || null,
+  });
   const token = signSession({
     telegramId,
     username: v.user.username,
@@ -244,7 +248,11 @@ app.post("/api/auth/telegram", (req, res) => {
   });
 });
 
-async function loadMe(telegramId) {
+async function loadMe(telegramId, username = null) {
+  void nocobase.syncCustomerSnapshot({
+    telegramId,
+    username: username != null ? String(username) : undefined,
+  });
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
   let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
 
@@ -386,7 +394,7 @@ async function loadMe(telegramId) {
     catalog,
     payment: {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
-      defaultProductCode: config.payment.defaultProductCode || "vpn_30",
+      defaultProductCode: config.payment.defaultProductCode || "vps_30",
       testGrantEnabled: config.testGrantEnabled,
     },
   };
@@ -527,7 +535,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
 app.get("/api/me", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    const data = await loadMe(tid);
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -537,7 +545,7 @@ app.get("/api/me", authMiddleware, async (req, res) => {
 app.get("/api/subscription", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    const data = await loadMe(tid);
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -770,7 +778,7 @@ const bot = new Bot(config.botToken);
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
   await ctx.reply(
-    "Открой мини-приложение: там статус подписки и подключение VPN.",
+    "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
     { reply_markup: kb },
   );
 });

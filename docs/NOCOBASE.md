@@ -307,6 +307,31 @@
 
 Точные клики в UI зависят от версии NocoBase и плагина визуализации: **Data visualization** / **Charts** — в блоке укажите коллекцию, поля измерения и меры, затем **выполните запрос** и проверьте превью.
 
+### Готовые SQL-шаблоны для 6 финальных графиков
+
+Если Builder в вашей версии неудобен, используйте SQL-блоки:
+
+- Выручка по дням: [`docs/snippets/revenue_by_day.sql`](snippets/revenue_by_day.sql)
+- Продажи по тарифам: [`docs/snippets/sales_by_product.sql`](snippets/sales_by_product.sql)
+- Новые пользователи по дням: [`docs/snippets/new_users_by_day.sql`](snippets/new_users_by_day.sql)
+- Активные подписки/статусы: [`docs/snippets/order_status_breakdown.sql`](snippets/order_status_breakdown.sql)
+- Выданные прокси по серверам: [`docs/snippets/proxy_issued_by_server.sql`](snippets/proxy_issued_by_server.sql)
+- Доход vs расходы по серверу: [`docs/snippets/income_vs_cost_by_server.sql`](snippets/income_vs_cost_by_server.sql)
+
+Для графика расходов по ролям/лейблам также остаётся: [`docs/snippets/infra_costs_chart.sql`](snippets/infra_costs_chart.sql).
+
+### Быстрый техчек и backfill из локальных данных
+
+Из корня проекта:
+
+```text
+node scripts/nocobase-analytics-check.mjs
+node scripts/nocobase-backfill-from-local.mjs --dry-run
+node scripts/nocobase-backfill-from-local.mjs
+```
+
+Опция `--with-demo-orders` добавляет демонстрационные строки в `orders` (только если нужно быстро наполнить пустой дашборд на старте). На бою используйте её только осознанно.
+
 ## 6. Политика секретов
 
 - **Не хранить** в NocoBase: пароли прокси, приватные SSH-ключи, `subId`/полные subscription URL с секретами, JWT-секреты бота.

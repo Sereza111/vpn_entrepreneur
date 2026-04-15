@@ -36,7 +36,7 @@ export const config = {
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
-    /** Шаблон имени узла в VPN-клиенте (фрагмент после # в VLESS). Плейсхолдеры: {subscriptionTitle} {telegramId} {username} */
+    /** Шаблон имени узла в клиенте подписки (фрагмент после # в VLESS). Плейсхолдеры: {subscriptionTitle} {telegramId} {username} */
     clientRemarkTemplate: (process.env.XUI_CLIENT_REMARK_TEMPLATE || "").trim(),
     /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */
     clientDisplaySuffix: String(process.env.XUI_CLIENT_DISPLAY_SUFFIX || "🌐").trim(),
@@ -48,7 +48,7 @@ export const config = {
   /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
   payment: {
     checkoutUrlTemplate: (process.env.PAYMENT_CHECKOUT_URL_TEMPLATE || "").trim(),
-    defaultProductCode: (process.env.PAYMENT_DEFAULT_PRODUCT_CODE || "vpn_30").trim(),
+    defaultProductCode: (process.env.PAYMENT_DEFAULT_PRODUCT_CODE || "vps_30").trim(),
   },
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:

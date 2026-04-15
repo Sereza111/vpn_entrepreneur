@@ -1,6 +1,6 @@
-# VL VPN Bot + Mini App
+# VL VPS Premium Bot + Mini App
 
-Telegram-бот и Web Mini App для VPN/прокси:
+Telegram-бот и Web Mini App для VPS Premium/прокси:
 
 - выдача и обновление подписки через 3X-UI/Xray;
 - каталог тарифов и операционные данные через NocoBase;
@@ -73,7 +73,7 @@ Telegram-бот и Web Mini App для VPN/прокси:
 ## Безопасность (минимальный baseline)
 
 1. NocoBase и 3X-UI не держать на открытом HTTP в интернет.
-2. Выдавать доступ к админкам через HTTPS + ограничение по IP/VPN.
+2. Выдавать доступ к админкам через HTTPS + ограничение по IP/Allowlist.
 3. API-ключи и `.env` не хранить в Git.
 4. Делать регулярные бэкапы Postgres (NocoBase) и operational stores (`data/`).
 5. Перед правками маршрутизации/GeoSite сохранять backup текущего Xray config.
