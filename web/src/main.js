@@ -211,6 +211,10 @@ function bindVpnRenewalActions({ tg, me }) {
         serverId: serverId || undefined,
       }),
     });
+    if (r?.sentToChat || r?.fallbackToChat) {
+      showToast("Счёт отправлен в чат с ботом — откройте диалог и оплатите.");
+      return;
+    }
     const link = String(r?.invoiceLink || "").trim();
     if (!link) throw new Error("invoice_link_missing");
     if (typeof tg.openInvoice === "function") {
@@ -528,7 +532,7 @@ async function boot() {
     document.getElementById("payBtn").onclick = async () => {
       const pay = me.payment || {};
       try {
-        await api("/api/payments/telegram/invoice", {
+        const r = await api("/api/payments/telegram/invoice-link", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -537,6 +541,10 @@ async function boot() {
             serviceType: "vps",
           }),
         });
+        if (r?.sentToChat || r?.fallbackToChat) {
+          showToast("Счёт отправлен в чат с ботом — откройте диалог и оплатите.");
+          return;
+        }
         const link = String(r?.invoiceLink || "").trim();
         if (!link) throw new Error("invoice_link_missing");
         if (typeof tg.openInvoice === "function") tg.openInvoice(link);

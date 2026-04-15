@@ -967,12 +967,7 @@ function buildInvoiceSelection(input = {}) {
   return { days, productCode, serviceType, serverId };
 }
 
-async function sendTelegramInvoiceForSelection({
-  chatId,
-  telegramId,
-  username = null,
-  selected,
-}) {
+function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
   const normalized = buildInvoiceSelection(selected);
   const amountMinor = resolvePlanPriceMinor(normalized);
   const titlePrefix = config.payment.mode === "test"
@@ -994,15 +989,74 @@ async function sendTelegramInvoiceForSelection({
     at: Date.now(),
   };
   const payload = savePaymentPayload(payloadData);
+  return { normalized, title, desc, payload, amountMinor };
+}
+
+async function sendTelegramInvoiceForSelection({
+  chatId,
+  telegramId,
+  username = null,
+  selected,
+}) {
+  const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
   await bot.api.sendInvoice(
     chatId,
-    title,
-    desc,
-    payload,
+    env.title,
+    env.desc,
+    env.payload,
     config.payment.telegramCurrency,
-    [{ label: `${normalized.days} дней`, amount: amountMinor }],
+    [{ label: `${env.normalized.days} дней`, amount: env.amountMinor }],
     { provider_token: config.payment.telegramProviderToken },
   );
+}
+
+function isRetryableInvoiceLinkError(msg) {
+  const s = String(msg || "").toUpperCase();
+  return (
+    s.includes("TIMEOUT") ||
+    s.includes("429") ||
+    s.includes("502") ||
+    s.includes("503") ||
+    s.includes("504") ||
+    s.includes("TOO_MANY") ||
+    s.includes("NETWORK")
+  );
+}
+
+async function createTelegramInvoiceLinkWithRetries(env) {
+  const endpoint = `https://api.telegram.org/bot${config.botToken}/createInvoiceLink`;
+  const body = JSON.stringify({
+    title: env.title,
+    description: env.desc,
+    payload: env.payload,
+    provider_token: config.payment.telegramProviderToken,
+    currency: config.payment.telegramCurrency,
+    prices: [{ label: `${env.normalized.days} дней`, amount: env.amountMinor }],
+  });
+  const maxAttempts = Math.max(1, Number(process.env.TG_INVOICE_LINK_RETRIES || 4));
+  let lastErr = "unknown";
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(600 * Math.min(8, 1 + attempt));
+    }
+    try {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const json = await resp.json().catch(() => null);
+      if (resp.ok && json?.ok && json?.result) {
+        return String(json.result);
+      }
+      lastErr = json?.description || `telegram_create_invoice_link_failed_${resp.status}`;
+      if (!isRetryableInvoiceLinkError(lastErr)) break;
+    } catch (e) {
+      lastErr = String(e?.message || e);
+      if (!isRetryableInvoiceLinkError(lastErr)) break;
+    }
+  }
+  throw new Error(lastErr);
 }
 
 async function createTelegramInvoiceLinkForSelection({
@@ -1010,48 +1064,11 @@ async function createTelegramInvoiceLinkForSelection({
   username = null,
   selected,
 }) {
-  const normalized = buildInvoiceSelection(selected);
-  const amountMinor = resolvePlanPriceMinor(normalized);
-  const titlePrefix = config.payment.mode === "test"
-    ? "VPS Premium — тестовый платёж"
-    : "VPS Premium — оплата";
-  const title = `${titlePrefix} · ${normalized.days} дней`;
-  const desc = normalized.serviceType === "proxy"
-    ? `Оплата доступа к прокси\nТариф: ${normalized.days} дней (${normalized.productCode})`
-    : `Оплата доступа к VPS Premium\nТариф: ${normalized.days} дней (${normalized.productCode})`;
-  const payloadData = {
-    kind: "telegram_payment",
-    telegramId,
-    username: username || null,
-    days: normalized.days,
-    productCode: normalized.productCode,
-    serviceType: normalized.serviceType,
-    serverId: normalized.serverId,
-    proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
-    at: Date.now(),
-  };
-  const payload = savePaymentPayload(payloadData);
-  const endpoint = `https://api.telegram.org/bot${config.botToken}/createInvoiceLink`;
-  const resp = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title,
-      description: desc,
-      payload,
-      provider_token: config.payment.telegramProviderToken,
-      currency: config.payment.telegramCurrency,
-      prices: [{ label: `${normalized.days} дней`, amount: amountMinor }],
-    }),
-  });
-  const json = await resp.json().catch(() => null);
-  if (!resp.ok || !json?.ok || !json?.result) {
-    const msg = json?.description || `telegram_create_invoice_link_failed_${resp.status}`;
-    throw new Error(msg);
-  }
+  const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
+  const invoiceLink = await createTelegramInvoiceLinkWithRetries(env);
   return {
-    invoiceLink: String(json.result),
-    normalized,
+    invoiceLink,
+    normalized: env.normalized,
   };
 }
 
@@ -1107,15 +1124,46 @@ app.post("/api/payments/telegram/invoice-link", authMiddleware, async (req, res)
   if (!Number.isFinite(telegramId) || telegramId < 1) {
     return res.status(400).json({ error: "bad_telegram_id" });
   }
+  const username = req.tgSession?.u ?? null;
+  const selected = req.body || {};
   try {
     const r = await createTelegramInvoiceLinkForSelection({
       telegramId,
-      username: req.tgSession?.u ?? null,
-      selected: req.body || {},
+      username,
+      selected,
     });
-    return res.json({ ok: true, invoiceLink: r.invoiceLink, selection: r.normalized });
+    return res.json({
+      ok: true,
+      invoiceLink: r.invoiceLink,
+      selection: r.normalized,
+      sentToChat: false,
+      fallbackToChat: false,
+    });
   } catch (e) {
-    return res.status(500).json({ error: String(e?.message || e) });
+    const msg = String(e?.message || e);
+    console.warn("[payments] createInvoiceLink failed, fallback sendInvoice:", msg);
+    try {
+      const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
+      await bot.api.sendInvoice(
+        telegramId,
+        env.title,
+        env.desc,
+        env.payload,
+        config.payment.telegramCurrency,
+        [{ label: `${env.normalized.days} дней`, amount: env.amountMinor }],
+        { provider_token: config.payment.telegramProviderToken },
+      );
+      return res.json({
+        ok: true,
+        invoiceLink: "",
+        selection: env.normalized,
+        sentToChat: true,
+        fallbackToChat: true,
+        reason: msg,
+      });
+    } catch (e2) {
+      return res.status(500).json({ error: String(e2?.message || e2 || msg) });
+    }
   }
 });
 
