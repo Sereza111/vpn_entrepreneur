@@ -131,17 +131,6 @@ function applyThemeVariant(tg) {
   }
 }
 
-/** PAYMENT_CHECKOUT_URL_TEMPLATE: {telegramId} {productCode} {grantDays} {username} */
-function expandPaymentCheckoutUrl(template, vars) {
-  const keys = ["telegramId", "productCode", "grantDays", "username"];
-  let out = String(template);
-  for (const k of keys) {
-    const val = vars[k] ?? "";
-    out = out.split(`{${k}}`).join(encodeURIComponent(String(val)));
-  }
-  return out;
-}
-
 function appendAppFooter(container) {
   container.appendChild(
     el(
@@ -206,44 +195,20 @@ function bindWheelSwipe(dock) {
 
 function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
-  const checkoutTpl = payCfg.checkoutUrlTemplate || "";
-  const testOn = Boolean(payCfg.testGrantEnabled);
-  const username = me.subscriptionStatus?.username || "";
-  const tid = me.telegramId;
-
-  const runFallbackGrant = async (days) => {
+  const sendInvoiceToChat = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
     const token = window.__vlToken || "";
     if (!token) throw new Error("auth_token_missing");
-    await api("/api/test/grant", {
+    await api("/api/payments/telegram/invoice", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ days: Number(days) }),
+      body: JSON.stringify({
+        productCode,
+        grantDays: Number(grantDays),
+        serviceType,
+        serverId: serverId || undefined,
+      }),
     });
-    showToast(`Подписка продлена на ${days} дней`);
-    setTimeout(() => window.location.reload(), 700);
-  };
-
-  const openCheckout = async ({ productCode, grantDays }) => {
-    if (!checkoutTpl) {
-      if (testOn) {
-        await runFallbackGrant(grantDays);
-        return true;
-      }
-      showToast("Оплата скоро будет доступна. Напишите в поддержку.");
-      return false;
-    }
-    const url = expandPaymentCheckoutUrl(checkoutTpl, {
-      telegramId: tid,
-      productCode,
-      grantDays,
-      username,
-    });
-    if (!/^https?:\/\//i.test(url)) {
-      showToast("Некорректный шаблон оплаты (нужен полный URL с https://)");
-      return false;
-    }
-    tg.openLink(url);
-    return true;
+    showToast("Счёт отправлен в чат с ботом.");
   };
 
   const bindGrid = (rootEl) => {
@@ -254,7 +219,7 @@ function bindVpnRenewalActions({ tg, me }) {
         const code =
           b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vps_30";
         try {
-          await openCheckout({ productCode: code, grantDays: days });
+          await sendInvoiceToChat({ productCode: code, grantDays: days });
         } catch (e) {
           showToast(`Ошибка: ${e.message}`);
         }
@@ -270,9 +235,11 @@ function bindVpnRenewalActions({ tg, me }) {
         const serverId = String(selectedServerGetter?.() || "").trim();
         if (!serverId) return showToast("Сначала выберите площадку прокси");
         try {
-          await openCheckout({
+          await sendInvoiceToChat({
             productCode: `proxy_${serverId}_${days}`,
             grantDays: days,
+            serviceType: "proxy",
+            serverId,
           });
         } catch (e) {
           showToast(`Ошибка: ${e.message}`);
@@ -551,33 +518,17 @@ async function boot() {
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
     document.getElementById("payBtn").onclick = async () => {
       const pay = me.payment || {};
-      const tpl = pay.checkoutUrlTemplate || "";
-      if (tpl) {
-        const url = expandPaymentCheckoutUrl(tpl, {
-          telegramId: me.telegramId,
-          productCode: pay.defaultProductCode || "vps_30",
-          grantDays: 30,
-          username: "",
-        });
-        if (!/^https?:\/\//i.test(url)) {
-          showToast("Некорректный шаблон оплаты (нужен http/https)");
-          return;
-        }
-        tg.openLink(url);
-        return;
-      }
-      if (!pay.testGrantEnabled) {
-        showToast("Оплата скоро будет доступна. Напишите в поддержку.");
-        return;
-      }
       try {
-        await api("/api/test/grant", {
+        await api("/api/payments/telegram/invoice", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ days: 30 }),
+          body: JSON.stringify({
+            productCode: pay.defaultProductCode || "vps_30",
+            grantDays: 30,
+            serviceType: "vps",
+          }),
         });
-        showToast("Подписка продлена на 30 дней");
-        setTimeout(() => window.location.reload(), 700);
+        showToast("Счёт отправлен в чат с ботом.");
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
       }
@@ -810,7 +761,7 @@ async function boot() {
         )
       : null;
   const payCfg = me.payment || {};
-  const checkoutTpl = payCfg.checkoutUrlTemplate || "";
+  const invoiceEnabled = Boolean(payCfg.telegramInvoiceEnabled);
 
   const planTilesHtml = vpnFromNb
     ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
@@ -825,9 +776,9 @@ async function boot() {
   const extend = el(`<div class="card section" id="section-extend">
     <h2 class="section-title">Покупка VPS Premium</h2>
     ${
-      checkoutTpl
-        ? `<p class="muted" style="margin-top:6px;line-height:1.45">После оплаты срок обновится автоматически.</p>`
-        : `<p class="muted" style="margin-top:6px;line-height:1.45">Выберите срок доступа к VPS Premium.</p>`
+      invoiceEnabled
+        ? `<p class="muted" style="margin-top:6px;line-height:1.45">После выбора тарифа счёт придёт в чат с ботом.</p>`
+        : `<p class="muted" style="margin-top:6px;line-height:1.45">Платежи временно недоступны, обратитесь в поддержку.</p>`
     }
     ${
       vpnFromNb
@@ -971,7 +922,7 @@ async function boot() {
     };
   }
   const addDev = document.getElementById("addDeviceBtn");
-  if (addDev) {
+  if (addDev && payCfg.allowTestTools) {
     addDev.onclick = async () => {
       try {
         await api("/api/test/add-device-slot", {
@@ -985,6 +936,8 @@ async function boot() {
         showToast(`Ошибка: ${e.message}`);
       }
     };
+  } else if (addDev) {
+    addDev.style.display = "none";
   }
   const supportHref = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
   document.getElementById("supportBtn").onclick = () => {

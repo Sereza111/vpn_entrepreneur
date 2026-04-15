@@ -47,6 +47,9 @@ export const config = {
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
   payment: {
+    mode: (process.env.TG_PAYMENT_MODE || "prod").trim().toLowerCase() === "test"
+      ? "test"
+      : "prod",
     checkoutUrlTemplate: (process.env.PAYMENT_CHECKOUT_URL_TEMPLATE || "").trim(),
     defaultProductCode: (process.env.PAYMENT_DEFAULT_PRODUCT_CODE || "vps_30").trim(),
     telegramProviderToken: (process.env.TG_PAYMENT_PROVIDER_TOKEN || "").trim(),
