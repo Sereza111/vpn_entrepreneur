@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { Agent } from "undici";
 import { config } from "./config.js";
@@ -615,6 +616,191 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
   });
 }
 
+let secondaryCookie = null;
+let secondaryCookieExpiresAt = 0;
+
+function getSecondaryPanelRoot() {
+  const base = String(config.xuiSecondary.panelBaseUrl || "").trim();
+  const wp = String(config.xuiSecondary.webBasePath || "").trim();
+  if (!base) return "";
+  if (!wp) return base.replace(/\/+$/, "");
+  let path = wp.startsWith("/") ? wp : `/${wp}`;
+  path = path.replace(/\/+$/, "");
+  try {
+    const u = new URL(base.includes("://") ? base : `http://${base}`);
+    return `${u.origin}${path}`;
+  } catch {
+    return `${base.replace(/\/+$/, "")}${path}`;
+  }
+}
+
+function secondaryDispatcher() {
+  return config.xuiSecondary.insecureTls
+    ? new Agent({ connect: { rejectUnauthorized: false } })
+    : undefined;
+}
+
+function encodeForm(obj) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj || {})) {
+    sp.set(k, String(v ?? ""));
+  }
+  return sp.toString();
+}
+
+async function secondaryLogin() {
+  const root = getSecondaryPanelRoot();
+  if (!root || !config.xuiSecondary.username || !config.xuiSecondary.password) {
+    throw new Error("xui_secondary_not_configured");
+  }
+  const dispatcher = secondaryDispatcher();
+  const res = await fetch(`${root}/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: encodeForm({
+      username: config.xuiSecondary.username,
+      password: config.xuiSecondary.password,
+    }),
+    redirect: "manual",
+    ...(dispatcher ? { dispatcher } : {}),
+  });
+  if (!res.ok && res.status !== 302) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`xui_secondary_login_failed: ${res.status} ${t}`.trim());
+  }
+  const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
+  const raw = Array.isArray(sc) ? sc : sc ? [sc] : [];
+  const cookie = raw
+    .map((h) => String(h || "").split(";")[0].trim())
+    .filter((x) => x.includes("="))
+    .join("; ");
+  if (!cookie) throw new Error("xui_secondary_login_no_cookie");
+  secondaryCookie = cookie;
+  secondaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
+  return cookie;
+}
+
+async function secondaryCookieValue() {
+  if (secondaryCookie && Date.now() < secondaryCookieExpiresAt) return secondaryCookie;
+  return await secondaryLogin();
+}
+
+async function secondaryFetch(path, { method = "GET", json } = {}) {
+  const root = getSecondaryPanelRoot();
+  const dispatcher = secondaryDispatcher();
+  const cookie = await secondaryCookieValue();
+  const headers = {
+    Accept: "application/json",
+    Cookie: cookie,
+  };
+  if (json !== undefined) headers["Content-Type"] = "application/json";
+  let res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+    method,
+    headers,
+    body: json !== undefined ? JSON.stringify(json) : undefined,
+    ...(dispatcher ? { dispatcher } : {}),
+  });
+  if (res.status === 401) {
+    secondaryCookie = null;
+    const cookie2 = await secondaryCookieValue();
+    headers.Cookie = cookie2;
+    res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+      method,
+      headers,
+      body: json !== undefined ? JSON.stringify(json) : undefined,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+  }
+  return res;
+}
+
+function normalizeClientsFromInbound(inbound) {
+  try {
+    const st = JSON.parse(String(inbound?.settings || "{}"));
+    return Array.isArray(st?.clients) ? st.clients : [];
+  } catch {
+    return [];
+  }
+}
+
+async function ensureSecondaryXuiClient({
+  telegramId,
+  subId,
+  baseRemark,
+}) {
+  if (!config.xuiSecondary.enabled) return;
+  if (!Number(config.xuiSecondary.inboundId)) return;
+  const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
+  const prefix = String(config.xuiSecondary.remarkPrefix || "").trim();
+  const remark = `${prefix}${String(baseRemark || "").trim()}`.trim().slice(0, 120);
+
+  const listRes = await secondaryFetch("/panel/api/inbounds/list");
+  if (!listRes.ok) {
+    const t = await listRes.text().catch(() => "");
+    throw new Error(`xui_secondary_list_inbounds: ${listRes.status} ${t}`.trim());
+  }
+  const list = await listRes.json().catch(() => ({}));
+  const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(config.xuiSecondary.inboundId)) || null;
+  if (!inb) throw new Error("xui_secondary_inbound_not_found");
+  const clients = normalizeClientsFromInbound(inb);
+  const tid = String(telegramId);
+  const found =
+    clients.find((c) => String(c?.tgId || "") === tid) ||
+    clients.find((c) => String(c?.email || "") === stableEmail) ||
+    null;
+
+  if (found) {
+    const clientId = String(found.id || found.ID || "").trim();
+    if (!clientId) throw new Error("xui_secondary_client_id_missing");
+    const patch = {
+      ...found,
+      enable: true,
+      email: stableEmail,
+      tgId: tid,
+      subId,
+      remark,
+    };
+    const upd = await secondaryFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientId)}`, {
+      method: "POST",
+      json: {
+        id: Number(config.xuiSecondary.inboundId),
+        settings: JSON.stringify({ clients: [patch] }),
+      },
+    });
+    if (!upd.ok) {
+      const t = await upd.text().catch(() => "");
+      throw new Error(`xui_secondary_update_client: ${upd.status} ${t}`.trim());
+    }
+    return;
+  }
+
+  const client = {
+    id: crypto.randomUUID(),
+    email: stableEmail,
+    enable: true,
+    limitIp: 0,
+    totalGB: 0,
+    expiryTime: 0,
+    tgId: tid,
+    subId,
+    remark,
+  };
+  const add = await secondaryFetch("/panel/api/inbounds/addClient", {
+    method: "POST",
+    json: {
+      id: Number(config.xuiSecondary.inboundId),
+      settings: JSON.stringify({ clients: [client] }),
+    },
+  });
+  if (!add.ok) {
+    const t = await add.text().catch(() => "");
+    throw new Error(`xui_secondary_add_client: ${add.status} ${t}`.trim());
+  }
+}
+
 /**
  * Создаёт клиента в 3X-UI (если нет) и привязывает subId в боте.
  * @returns {"already_linked"|"reused"|"created"}
@@ -636,6 +822,8 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   const existingExtraValues = Array.isArray(existing?.extraLinks)
     ? existing.extraLinks.map((x) => x?.value).filter(Boolean)
     : [];
+  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
+  const baseRemark = buildXuiClientRemark(tid, username, branding);
   if (existing && !force) {
     await runRemarkSync();
     return "already_linked";
@@ -662,13 +850,17 @@ async function xuiProvisionCore(telegramId, { force, username }) {
         xuiUrlOrToken: effective,
         extraXuiUrlOrTokens: existingExtraValues,
       });
+      await ensureSecondaryXuiClient({
+        telegramId: tid,
+        subId: String(effective),
+        baseRemark,
+      }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
       await runRemarkSync();
       return "reused";
     }
   }
 
-  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
-  const remark = buildXuiClientRemark(tid, username, branding);
+  const remark = baseRemark;
 
   const created = await xui.addClientToInbound({
     inboundId: config.xui.inboundId,
@@ -681,6 +873,11 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
     extraXuiUrlOrTokens: existingExtraValues,
   });
+  await ensureSecondaryXuiClient({
+    telegramId: tid,
+    subId: String(created.creds.subIdEffective || created.creds.subId),
+    baseRemark,
+  }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
   await runRemarkSync();
   return "created";
 }

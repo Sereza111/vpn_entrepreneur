@@ -47,6 +47,20 @@ export const config = {
     /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */
     clientDisplaySuffix: String(process.env.XUI_CLIENT_DISPLAY_SUFFIX || "🌐").trim(),
   },
+  xuiSecondary: {
+    enabled:
+      String(process.env.XUI_SECONDARY_ENABLED || "").toLowerCase() === "1" ||
+      String(process.env.XUI_SECONDARY_ENABLED || "").toLowerCase() === "true",
+    panelBaseUrl: (process.env.XUI_SECONDARY_PANEL_BASE_URL || "").replace(/\/$/, ""),
+    webBasePath: String(process.env.XUI_SECONDARY_WEB_BASE_PATH || "").trim(),
+    username: process.env.XUI_SECONDARY_USERNAME || "",
+    password: process.env.XUI_SECONDARY_PASSWORD || "",
+    inboundId: Number(process.env.XUI_SECONDARY_INBOUND_ID || 0),
+    remarkPrefix: String(process.env.XUI_SECONDARY_REMARK_PREFIX || "🇳🇱 ").trim(),
+    insecureTls:
+      String(process.env.XUI_SECONDARY_INSECURE_TLS || "").toLowerCase() === "1" ||
+      String(process.env.XUI_SECONDARY_INSECURE_TLS || "").toLowerCase() === "true",
+  },
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },
