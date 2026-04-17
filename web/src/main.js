@@ -261,6 +261,51 @@ function bindVpnRenewalActions({ tg, me }) {
     });
   };
 
+  const bindProxyInstantPay = ({
+    pickerRootSelector,
+    planGridId,
+    selectedServerRef,
+  }) => {
+    const pickerButtons = document.querySelectorAll(`${pickerRootSelector} .proxy-btn`);
+    const planButtons = document.querySelectorAll(`#${planGridId} .plan-tile[data-proxy-days]`);
+    if (!pickerButtons.length || !planButtons.length) return;
+
+    let selectedProxyDays = 7;
+    const markPlanActive = (days) => {
+      planButtons.forEach((btn) => {
+        const d = Number(btn.getAttribute("data-proxy-days") || 0);
+        btn.classList.toggle("active", d === Number(days));
+      });
+    };
+
+    markPlanActive(selectedProxyDays);
+    planButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        selectedProxyDays = Number(btn.getAttribute("data-proxy-days") || 7);
+        markPlanActive(selectedProxyDays);
+      });
+    });
+
+    pickerButtons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const serverId =
+          String(btn.getAttribute("data-proxy-server") || "").trim() ||
+          String(selectedServerRef?.() || "").trim();
+        if (!serverId) return;
+        try {
+          await openInvoiceInMiniApp({
+            productCode: `proxy_${serverId}_${selectedProxyDays}`,
+            grantDays: selectedProxyDays,
+            serviceType: "proxy",
+            serverId,
+          });
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+        }
+      });
+    });
+  };
+
   bindGrid(document.getElementById("vpnPlanGrid"));
   bindProxyPurchaseGrid(document.getElementById("proxyPlanGrid"), () =>
     document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
@@ -268,6 +313,18 @@ function bindVpnRenewalActions({ tg, me }) {
   bindProxyPurchaseGrid(document.getElementById("proxyPlanGridNoAcc"), () =>
     document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
   );
+  bindProxyInstantPay({
+    pickerRootSelector: "#section-proxy",
+    planGridId: "proxyPlanGrid",
+    selectedServerRef: () =>
+      document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
+  });
+  bindProxyInstantPay({
+    pickerRootSelector: "#proxyServerPickNoAcc",
+    planGridId: "proxyPlanGridNoAcc",
+    selectedServerRef: () =>
+      document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
+  });
 }
 
 function el(html) {
@@ -395,8 +452,8 @@ async function boot() {
   const xui = me.xui || null;
   const hasAccount = Boolean(u || xui?.linked);
   const priceMap = me?.payment?.prices || {};
-  const proxyPrice7 = Number(priceMap.proxy_7 || 0);
-  const proxyPrice30 = Number(priceMap.proxy_30 || 0);
+  const proxyPrice7 = Number(priceMap.proxy_7 || 1800);
+  const proxyPrice30 = Number(priceMap.proxy_30 || 7200);
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -473,8 +530,6 @@ async function boot() {
       el(`
         <div class="card section" id="section-proxy">
           <h2 class="section-title">Прокси</h2>
-          <div class="muted">Доступно прокси: <b>${Number(me?.proxy?.remaining || 0)}</b></div>
-          <div class="muted" style="margin-top:4px">Выдано: ${Number(me?.proxy?.used || 0)} / ${Number(me?.proxy?.total || 0)}</div>
           ${
             Array.isArray(me?.proxy?.items) && me.proxy.items.length
               ? `<div class="muted" style="margin-top:8px">Ваши прокси:</div>
@@ -511,7 +566,6 @@ async function boot() {
               ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
             </div>
           </div>
-          <button class="btn" type="button" id="proxyCreateBtnNoAcc">Создать прокси</button>
           <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
       `),
@@ -557,50 +611,15 @@ async function boot() {
       }
     };
     document.getElementById("refreshProxyBtn").onclick = () => window.location.reload();
-    const proxyCreateBtnNoAcc = document.getElementById("proxyCreateBtnNoAcc");
-    if (proxyCreateBtnNoAcc) {
-      let selectedServerNoAcc = null;
-      document.querySelectorAll("#proxyServerPickNoAcc .country-picker-grid .proxy-btn").forEach((b) => {
-        b.onclick = () => {
-          document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((x) => x.classList.remove("active"));
-          b.classList.add("active");
-          selectedServerNoAcc = b.getAttribute("data-proxy-server");
-        };
-      });
-      proxyCreateBtnNoAcc.onclick = async () => {
-        try {
-          const rem = Number(me?.proxy?.remaining || 0);
-          if (rem < 1) return showToast("Лимит прокси закончился: сначала купите тариф прокси");
-          if (!selectedServerNoAcc) return showToast("Выберите страну");
-          proxyCreateBtnNoAcc.disabled = true;
-          proxyCreateBtnNoAcc.textContent = "Создаём...";
-          await api("/api/proxy/provision", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ serverId: selectedServerNoAcc }),
-          });
-          showToast("Прокси создан");
-          setTimeout(() => window.location.reload(), 700);
-        } catch (e) {
-          const msg = String(e?.message || "");
-          if (msg === "proxy_quota_exhausted") {
-            showToast("Лимит прокси исчерпан: сначала добавьте квоту");
-          } else if (msg === "bad_serverId") {
-            showToast("Некорректный сервер: проверьте PROXY_SERVERS_JSON");
-          } else if (msg.startsWith("proxy_ssh_failed")) {
-            showToast("SSH/3proxy ошибка на сервере, проверь логи бота");
-          } else {
-            showToast(`Ошибка: ${msg}`);
-          }
-          proxyCreateBtnNoAcc.disabled = false;
-          proxyCreateBtnNoAcc.textContent = "Создать прокси";
-        }
+    document.querySelectorAll("#proxyServerPickNoAcc .country-picker-grid .proxy-btn").forEach((b) => {
+      b.onclick = () => {
+        document.querySelectorAll("#proxyServerPickNoAcc .proxy-btn").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
       };
-    }
+    });
     const supportHrefNoAcc = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
-    appendAppFooter(root);
     return;
   }
 
@@ -696,13 +715,8 @@ async function boot() {
               : ""
           }
           ${
-            su.supportUrl
-              ? `<p class="muted" style="margin:0 0 6px"><a class="link" href="${escAttr(su.supportUrl)}" target="_blank" rel="noopener noreferrer">Поддержка</a></p>`
-              : ""
-          }
-          ${
             su.profileUrl
-              ? `<p class="muted" style="margin:0"><a class="link" href="${escAttr(su.profileUrl)}" target="_blank" rel="noopener noreferrer">Сайт / профиль</a></p>`
+              ? `<p class="muted" style="margin:0"><a class="link" href="${escAttr(su.profileUrl)}" target="_blank" rel="noopener noreferrer">Сайт</a></p>`
               : ""
           }
         </div>`
@@ -731,10 +745,7 @@ async function boot() {
       <p class="muted">SOCKS5 и HTTP прокси. Выберите площадку и тариф перед оплатой.</p>
 
       ${
-        `<div class="muted" style="margin-top:8px">
-           Доступно: <b>${Number(p.remaining || 0)}</b> / Куплено: <b>${Number(p.total || 0)}</b>
-         </div>
-         ${
+        `${
            items.length
              ? `<div class="muted" style="margin-top:8px">Ваши прокси:</div>
                 ${items
@@ -770,7 +781,7 @@ async function boot() {
                 ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
               </div>
              </div>
-             <button class="btn secondary" type="button" id="proxyCreateBtn">Создать прокси</button>`
+             `
       }
     </div>`);
     root.appendChild(proxySec);
@@ -870,35 +881,12 @@ async function boot() {
 
   // (Per-proxy copy buttons can be added later if needed)
 
-  const proxyCreateBtn = document.getElementById("proxyCreateBtn");
-  if (proxyCreateBtn) {
-    let selectedServer = null;
-    document.querySelectorAll("#section-proxy .country-picker-grid .proxy-btn").forEach((b) => {
-      b.onclick = () => {
-        document.querySelectorAll("#section-proxy .proxy-btn").forEach((x) => x.classList.remove("active"));
-        b.classList.add("active");
-        selectedServer = b.getAttribute("data-proxy-server");
-      };
-    });
-    proxyCreateBtn.onclick = async () => {
-      try {
-        if (!selectedServer) return showToast("Выберите страну");
-        proxyCreateBtn.disabled = true;
-        proxyCreateBtn.textContent = "Создаём...";
-        await api("/api/proxy/provision", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ serverId: selectedServer }),
-        });
-        showToast("Прокси создан");
-        setTimeout(() => window.location.reload(), 700);
-      } catch (e) {
-        showToast(`Ошибка: ${e.message}`);
-        proxyCreateBtn.disabled = false;
-        proxyCreateBtn.textContent = "Создать прокси";
-      }
+  document.querySelectorAll("#section-proxy .country-picker-grid .proxy-btn").forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll("#section-proxy .proxy-btn").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
     };
-  }
+  });
 
   const provBtn = document.getElementById("xuiProvisionBtn");
   if (provBtn) {
@@ -966,8 +954,6 @@ async function boot() {
   document.getElementById("supportBtn").onclick = () => {
     tg.openLink(supportHref);
   };
-
-  appendAppFooter(root);
 
   // "Спидометр": считаем скорость как прирост usedTrafficBytes за интервал.
   // Никаких внешних speedtest — только то, что реально прошло через подписку.

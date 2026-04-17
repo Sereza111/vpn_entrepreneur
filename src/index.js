@@ -22,12 +22,12 @@ const publicDir = path.join(__dirname, "..", "public");
 const whPath = "/telegram/webhook";
 
 const DEFAULT_PRICE_MAP_MINOR = {
-  vps_7: 14900,
-  vps_30: 39900,
-  vps_90: 99000,
-  vps_180: 179000,
-  proxy_7: 24900,
-  proxy_30: 79900,
+  vps_7: 2500,
+  vps_30: 10000,
+  vps_90: 30000,
+  vps_180: 60000,
+  proxy_7: 1800,
+  proxy_30: 7200,
 };
 
 function parsePriceMapFromConfig(raw) {
