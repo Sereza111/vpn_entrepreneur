@@ -16,6 +16,7 @@ import {
   parseProxyServers,
 } from "./proxyProvision.js";
 import * as nocobase from "./nocobase.js";
+import * as balanceStore from "./balanceStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -539,6 +540,51 @@ async function loadMe(telegramId, username = null) {
     }
   }
 
+  let balancePayload = { enabled: false };
+  if (config.balance.billingEnabled) {
+    const shouldBillHourly =
+      subscriptionStatus?.source === "xui" &&
+      String(subscriptionStatus.panelStatus || "").toUpperCase() === "ACTIVE";
+    const snap = shouldBillHourly
+      ? await balanceStore.applyHourlyDeduction(telegramId, config.balance.hourlyRateMinor)
+      : await balanceStore.getDisplaySnapshot(telegramId, config.balance.hourlyRateMinor);
+    const rec = await balanceStore.getRecord(telegramId);
+    balancePayload = {
+      enabled: true,
+      billingActive: snap.billingActive,
+      balanceMinor: snap.balanceMinor,
+      balanceRub: snap.balanceMinor / 100,
+      hourlyRateMinor: snap.hourlyRateMinor,
+      hourlyRateRub: snap.hourlyRateMinor / 100,
+    };
+    if (
+      shouldBillHourly &&
+      snap.billingActive &&
+      snap.depleted &&
+      canQueryXui &&
+      subscriptionStatus?.source === "xui"
+    ) {
+      await setXuiClientEnabled(telegramId, false).catch(() => {});
+      subscriptionStatus = {
+        ...subscriptionStatus,
+        panelStatus: "DISABLED",
+      };
+    } else if (
+      snap.billingActive &&
+      snap.balanceMinor > 0 &&
+      rec?.suspendedForBilling &&
+      canQueryXui &&
+      subscriptionStatus?.source === "xui"
+    ) {
+      await setXuiClientEnabled(telegramId, true).catch(() => {});
+      await balanceStore.clearSuspendedForBilling(telegramId).catch(() => {});
+      subscriptionStatus = {
+        ...subscriptionStatus,
+        panelStatus: "ACTIVE",
+      };
+    }
+  }
+
   return {
     telegramId,
     remnawaveUser: null,
@@ -554,6 +600,7 @@ async function loadMe(telegramId, username = null) {
       label: s.label || "",
     })),
     catalog,
+    balance: balancePayload,
     payment: {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
       defaultProductCode: config.payment.defaultProductCode || "vps_30",
@@ -906,25 +953,77 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   return "created";
 }
 
+async function setXuiClientEnabled(telegramId, enabled) {
+  if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) return;
+  if (!config.xui.inboundId) return;
+  const tid = Number(telegramId);
+  const found = await xui.findClientInInbound({
+    inboundId: config.xui.inboundId,
+    telegramId: tid,
+  });
+  if (!found?.client) return;
+  const clientId = String(found.client.id || found.client.ID || "").trim();
+  if (!clientId) return;
+  const patch = { ...found.client, enable: Boolean(enabled) };
+  await xui.updateClientInInbound({
+    inboundId: config.xui.inboundId,
+    clientId,
+    client: patch,
+  });
+}
+
 function parseTelegramPaymentPayload(raw) {
   const shortKey = String(raw || "").trim();
   if (shortKey.startsWith("p:")) {
     const saved = paymentPayloadStore.get(shortKey);
-    if (!saved) return null;
-    return saved;
+    if (!saved || typeof saved !== "object") return null;
+    if (saved.kind === "balance_topup") {
+      const telegramId = Number(saved.telegramId);
+      if (!Number.isFinite(telegramId) || telegramId < 1) return null;
+      return {
+        kind: "balance_topup",
+        telegramId,
+        username: saved.username != null ? String(saved.username) : null,
+      };
+    }
+    const telegramId = Number(saved.telegramId);
+    const days = Number(saved.days);
+    const productCode = String(saved.productCode || "").trim() || config.payment.telegramTestProductCode;
+    const serviceType = String(saved.serviceType || "vps").trim().toLowerCase();
+    const serverId = String(saved.serverId || "").trim();
+    const proxyCredits = Number(saved.proxyCredits || 0);
+    if (!Number.isFinite(telegramId) || telegramId < 1) return null;
+    if (!Number.isFinite(days) || days < 1) return null;
+    return {
+      kind: "plan",
+      telegramId,
+      days,
+      productCode,
+      serviceType: serviceType === "proxy" ? "proxy" : "vps",
+      serverId: serverId || null,
+      proxyCredits: Number.isFinite(proxyCredits) && proxyCredits > 0 ? Math.floor(proxyCredits) : 0,
+    };
   }
   try {
     const obj = JSON.parse(String(raw || ""));
     if (!obj || typeof obj !== "object") return null;
     const telegramId = Number(obj.telegramId);
+    if (!Number.isFinite(telegramId) || telegramId < 1) return null;
+    if (obj.kind === "balance_topup") {
+      return {
+        kind: "balance_topup",
+        telegramId,
+        username: obj.username != null ? String(obj.username) : null,
+      };
+    }
     const days = Number(obj.days);
     const productCode = String(obj.productCode || "").trim() || config.payment.telegramTestProductCode;
     const serviceType = String(obj.serviceType || "vps").trim().toLowerCase();
     const serverId = String(obj.serverId || "").trim();
     const proxyCredits = Number(obj.proxyCredits || 0);
-    if (!Number.isFinite(telegramId) || telegramId < 1) return null;
     if (!Number.isFinite(days) || days < 1) return null;
     return {
+      kind: "plan",
       telegramId,
       days,
       productCode,
@@ -1310,6 +1409,30 @@ function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
   return { normalized, title, desc, payload, amountMinor };
 }
 
+function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
+  const tid = Number(telegramId);
+  const minor = Math.max(100, Math.floor(Number(amountMinor) || 0));
+  const rub = (minor / 100).toFixed(0);
+  const title =
+    config.payment.mode === "test"
+      ? "Баланс VL — тестовое пополнение"
+      : "Пополнение баланса VL";
+  const desc = `Зачисление на внутренний баланс: ${rub} RUB. После первого пополнения VPN списывается почасово.`;
+  const payload = savePaymentPayload({
+    kind: "balance_topup",
+    telegramId: tid,
+    username: username || null,
+    at: Date.now(),
+  });
+  return { title, desc, payload, amountMinor: minor };
+}
+
+async function createBalanceTopupInvoiceLink({ telegramId, username, amountMinor }) {
+  const env = buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
+  const invoiceLink = await createTelegramInvoiceLinkWithRetries(env);
+  return { invoiceLink, amountMinor: env.amountMinor };
+}
+
 async function sendTelegramInvoiceForSelection({
   chatId,
   telegramId,
@@ -1485,6 +1608,64 @@ app.post("/api/payments/telegram/invoice-link", authMiddleware, async (req, res)
   }
 });
 
+app.post("/api/payments/balance/invoice-link", authMiddleware, async (req, res) => {
+  if (!config.balance.billingEnabled) {
+    return res.status(503).json({ error: "balance_billing_disabled" });
+  }
+  if (!config.payment.telegramProviderToken) {
+    return res.status(503).json({ error: "telegram_payments_disabled" });
+  }
+  const telegramId = Number(req.tgSession.sub || req.tgSession.tg);
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  const username = req.tgSession?.u ?? null;
+  const amountRub = Math.floor(Number(req.body?.amountRub ?? req.body?.amount ?? 0));
+  if (!Number.isFinite(amountRub) || amountRub < 1 || amountRub > 500_000) {
+    return res.status(400).json({ error: "bad_amount" });
+  }
+  const amountMinor = amountRub * 100;
+  try {
+    const r = await createBalanceTopupInvoiceLink({
+      telegramId,
+      username,
+      amountMinor,
+    });
+    return res.json({
+      ok: true,
+      invoiceLink: r.invoiceLink,
+      amountMinor: r.amountMinor,
+      sentToChat: false,
+      fallbackToChat: false,
+    });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    console.warn("[payments] balance createInvoiceLink failed, fallback sendInvoice:", msg);
+    try {
+      const env = buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
+      await bot.api.sendInvoice(
+        telegramId,
+        env.title,
+        env.desc,
+        env.payload,
+        config.payment.telegramCurrency,
+        [{ label: "Пополнение баланса", amount: env.amountMinor }],
+        { provider_token: config.payment.telegramProviderToken },
+      );
+      return res.json({
+        ok: true,
+        invoiceLink: "",
+        amountMinor: env.amountMinor,
+        sentToChat: true,
+        fallbackToChat: true,
+        reason: msg,
+      });
+    } catch (e2) {
+      return res.status(500).json({ error: String(e2?.message || e2 || msg) });
+    }
+  }
+});
+
 bot.command("start", async (ctx) => {
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
   await ctx.reply(
@@ -1553,6 +1734,29 @@ bot.on("message:successful_payment", async (ctx) => {
   if (dedupKey) processedPayments.add(dedupKey);
   const username = ctx.from?.username || null;
   try {
+    if (payload.kind === "balance_topup") {
+      const minor = Number(sp.total_amount || 0);
+      if (Number.isFinite(minor) && minor > 0) {
+        await balanceStore.credit(payload.telegramId, minor);
+      }
+      await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
+      void nocobase.syncPaymentOrder({
+        telegramId: payload.telegramId,
+        extendDays: 0,
+        addDeviceSlots: 0,
+        amount: Number(sp.total_amount || 0) / 100,
+        currency: sp.currency,
+        externalPaymentId:
+          sp.provider_payment_charge_id || sp.telegram_payment_charge_id || null,
+        productCode: "balance_topup",
+        username,
+        source: "telegram_successful_payment",
+      });
+      await ctx.reply(
+        `Баланс пополнен на ${(Number(sp.total_amount || 0) / 100).toFixed(0)} руб. Списание за VPN — почасово после активации баланса.`,
+      );
+      return;
+    }
     if (payload.serviceType === "proxy") {
       const grantDays = Number.isFinite(payload.days) ? payload.days : 30;
       const grantCount = Number.isFinite(payload.proxyCredits) && payload.proxyCredits > 0

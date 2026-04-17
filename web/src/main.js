@@ -107,6 +107,38 @@ function proxyPurchaseTileHtml(days, label, priceMinor = 0) {
   </button>`;
 }
 
+function balanceTopupBlockHtml(balance) {
+  if (!balance?.enabled) return "";
+  const br = Number(balance.balanceRub ?? 0).toFixed(2);
+  const hr = Number(balance.hourlyRateRub ?? 0).toFixed(2);
+  const activeHint = balance.billingActive
+    ? "Пока VPN в статусе «Активна», с баланса удерживается почасовая плата."
+    : "После первого пополнения включится почасовое списание (только при активном VPN).";
+  const tiles = [50, 100, 300, 500, 1000]
+    .map(
+      (amt) =>
+        `<button type="button" class="plan-tile" data-balance-rub="${amt}">
+          <span class="plan-tile__title">${amt} руб.</span>
+          <span class="plan-tile__meta">На баланс</span>
+        </button>`,
+    )
+    .join("");
+  return `
+    <div class="vpn-renew-card" style="margin-bottom:14px">
+      <div class="vpn-renew-card__head">
+        <span class="vpn-renew-card__glyph" aria-hidden="true">\u25C6</span>
+        <div class="vpn-renew-card__head-text">
+          <span class="vpn-renew-card__kind">Баланс</span>
+          <span class="vpn-renew-card__sub">Пополнение · почасовой тариф</span>
+        </div>
+      </div>
+      <p class="muted" style="margin:0 0 8px;line-height:1.45">На счёте: <b>${br}</b> руб. · <b>${hr}</b> руб/час</p>
+      <p class="muted" style="margin:0 0 10px;font-size:0.78rem;line-height:1.45">${activeHint}</p>
+      <div class="store-field-label">Сумма пополнения</div>
+      <div class="plan-grid plan-grid--vpn balance-topup-grid">${tiles}</div>
+    </div>`;
+}
+
 function applyTelegramChrome(tg) {
   try {
     const p = tg.themeParams;
@@ -342,6 +374,41 @@ function bindVpnRenewalActions({ tg, me }) {
     selectedServerRef: () =>
       document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
   });
+
+  if (me.balance?.enabled) {
+    document.querySelectorAll(".balance-topup-grid [data-balance-rub]").forEach((b) => {
+      b.onclick = async () => {
+        const amountRub = Number(b.getAttribute("data-balance-rub"));
+        if (!Number.isFinite(amountRub) || amountRub < 1) return;
+        const token = window.__vlToken || "";
+        if (!token) return showToast("Ошибка: auth_token_missing");
+        try {
+          const r = await api("/api/payments/balance/invoice-link", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ amountRub }),
+          });
+          if (r?.sentToChat || r?.fallbackToChat) {
+            showPaymentMessage("Счёт на пополнение отправлен в чат с ботом — откройте и оплатите.");
+            return;
+          }
+          const link = String(r?.invoiceLink || "").trim();
+          if (!link) throw new Error("invoice_link_missing");
+          if (typeof tg.openInvoice === "function") {
+            tg.openInvoice(link, (status) => {
+              if (status === "failed") {
+                showPaymentMessage("Не удалось открыть оплату. Проверьте чат с ботом.");
+              }
+            });
+          } else {
+            tg.openLink(link);
+          }
+        } catch (e) {
+          showToast(`Ошибка: ${e.message}`);
+        }
+      };
+    });
+  }
 }
 
 function el(html) {
@@ -568,6 +635,7 @@ async function boot() {
       el(`
         <div class="card section" id="section-extend">
           <h2 class="section-title">Покупка VPS Premium</h2>
+          ${balanceTopupBlockHtml(me.balance)}
           <p class="muted">Выберите тариф и оплатите доступ к VPS Premium.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
@@ -887,6 +955,7 @@ async function boot() {
 
   const extend = el(`<div class="card section" id="section-extend">
     <h2 class="section-title">Покупка VPS Premium</h2>
+    ${balanceTopupBlockHtml(me.balance)}
     ${
       invoiceEnabled
         ? `<p class="muted" style="margin-top:6px;line-height:1.45">После выбора тарифа счёт придёт в чат с ботом.</p>`

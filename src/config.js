@@ -65,6 +65,22 @@ export const config = {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
+  /**
+   * Внутренний баланс + почасовое списание за VPN (после первого пополнения).
+   * Ставка по умолчанию: цена vps_7 за неделю / (7*24) в копейках/час.
+   */
+  balance: {
+    billingEnabled:
+      String(process.env.BALANCE_BILLING_ENABLED || "").toLowerCase() === "1" ||
+      String(process.env.BALANCE_BILLING_ENABLED || "").toLowerCase() === "true",
+    hourlyRateMinor: Math.max(
+      1,
+      Number(
+        process.env.BALANCE_VPS_HOURLY_MINOR ||
+          Math.ceil(2500 / (7 * 24)),
+      ),
+    ),
+  },
   /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
   payment: {
     mode: (process.env.TG_PAYMENT_MODE || "prod").trim().toLowerCase() === "test"
