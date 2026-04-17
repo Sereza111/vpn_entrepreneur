@@ -33,6 +33,12 @@ export const config = {
     // Subscription path root on subscription host.
     // Usually "/sub" (or custom if you changed "Корневой путь URL-адреса подписки" in 3X-UI).
     subPath: process.env.XUI_SUB_PATH || "/sub",
+    // Optional extra subscription hosts used when link is stored as token (subId).
+    // Comma-separated URLs, example: "https://ru.example.com:2096,https://nl.example.com:2096"
+    extraBaseUrls: String(process.env.XUI_EXTRA_BASE_URLS || "")
+      .split(",")
+      .map((s) => s.trim().replace(/\/$/, ""))
+      .filter(Boolean),
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",

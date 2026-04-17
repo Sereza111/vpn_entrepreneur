@@ -220,6 +220,33 @@ function resolveXuiUrlFromLink(link) {
   return null;
 }
 
+function resolveExtraXuiUrls(link) {
+  const arr = Array.isArray(link?.extraLinks) ? link.extraLinks : [];
+  const urls = [];
+  if (link?.kind === "token" && link?.value) {
+    const root = String(config.xui.subPath || "/sub").trim() || "/sub";
+    const root2 = root.startsWith("/") ? root : `/${root}`;
+    const root3 = root2.replace(/\/+$/, "");
+    for (const base of config.xui.extraBaseUrls || []) {
+      urls.push(`${base}${root3}/${link.value}`);
+    }
+  }
+  for (const it of arr) {
+    const u = resolveXuiUrlFromLink(it);
+    if (u) urls.push(u);
+  }
+  return [...new Set(urls)];
+}
+
+function parseXuiLinkInput(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  return text
+    .split(/[\n,;]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function passThroughSubscriptionHeaders(upstreamHeaders, res) {
   const allow = new Set([
     "content-type",
@@ -248,24 +275,53 @@ app.get("/sub/xui/:token", async (req, res) => {
     const link = await xuiStore.getXuiLinkByPublicToken(token);
     if (!link) return res.status(404).send("not_found");
     const targetUrl = resolveXuiUrlFromLink(link);
-    if (!targetUrl) return res.status(503).send("xui_base_url_required");
+    const targets = [
+      ...(targetUrl ? [targetUrl] : []),
+      ...resolveExtraXuiUrls(link),
+    ];
+    if (!targets.length) return res.status(503).send("xui_base_url_required");
     const dispatcher = config.xui.insecureTls
       ? new Agent({ connect: { rejectUnauthorized: false } })
       : undefined;
-    const upstream = await fetch(targetUrl, {
-      redirect: "follow",
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-    if (!upstream.ok) {
-      const tt = await upstream.text().catch(() => "");
-      return res.status(upstream.status).send(tt || "upstream_failed");
+    const mergedLines = [];
+    const seen = new Set();
+    let firstHeaders = null;
+    let okCount = 0;
+    let firstStatus = 500;
+    let firstErrorText = "upstream_failed";
+
+    for (const url of targets) {
+      const upstream = await fetch(url, {
+        redirect: "follow",
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+      if (!upstream.ok) {
+        const tt = await upstream.text().catch(() => "");
+        if (okCount === 0) {
+          firstStatus = upstream.status;
+          firstErrorText = tt || "upstream_failed";
+        }
+        continue;
+      }
+      if (!firstHeaders) firstHeaders = upstream.headers;
+      okCount += 1;
+      const body = await upstream.text();
+      for (const line of decodeSubscriptionToLines(body)) {
+        if (seen.has(line)) continue;
+        seen.add(line);
+        mergedLines.push(line);
+      }
     }
-    passThroughSubscriptionHeaders(upstream.headers, res);
-    const body = await upstream.text();
+    if (okCount < 1) {
+      return res.status(firstStatus).send(firstErrorText);
+    }
+    if (firstHeaders) {
+      passThroughSubscriptionHeaders(firstHeaders, res);
+    }
     if (!res.getHeader("Content-Type")) {
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
     }
-    return res.status(200).send(body);
+    return res.status(200).send(Buffer.from(mergedLines.join("\n"), "utf8").toString("base64"));
   } catch (e) {
     return res.status(500).send(String(e?.message || e));
   }
@@ -546,6 +602,9 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     );
 
   const existing = await xuiStore.getXuiLinkByTelegramId(tid);
+  const existingExtraValues = Array.isArray(existing?.extraLinks)
+    ? existing.extraLinks.map((x) => x?.value).filter(Boolean)
+    : [];
   if (existing && !force) {
     await runRemarkSync();
     return "already_linked";
@@ -570,6 +629,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
       await xuiStore.linkXuiSubscription({
         telegramId: tid,
         xuiUrlOrToken: effective,
+        extraXuiUrlOrTokens: existingExtraValues,
       });
       await runRemarkSync();
       return "reused";
@@ -588,6 +648,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   await xuiStore.linkXuiSubscription({
     telegramId: tid,
     xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
+    extraXuiUrlOrTokens: existingExtraValues,
   });
   await runRemarkSync();
   return "created";
@@ -668,10 +729,15 @@ app.get("/api/subscription", authMiddleware, async (req, res) => {
 // Body: { subscriptionUrlOrToken: "https://.../sub/xxxx" } OR { subscriptionUrlOrToken: "xxxx" }
 app.post("/api/link-xui", authMiddleware, async (req, res) => {
   const raw = String(req.body?.subscriptionUrlOrToken || "").trim();
-  if (!raw) return res.status(400).json({ error: "subscriptionUrlOrToken_required" });
+  const parsed = parseXuiLinkInput(raw);
+  if (!parsed.length) return res.status(400).json({ error: "subscriptionUrlOrToken_required" });
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    await xuiStore.linkXuiSubscription({ telegramId: tid, xuiUrlOrToken: raw });
+    await xuiStore.linkXuiSubscription({
+      telegramId: tid,
+      xuiUrlOrToken: parsed[0],
+      extraXuiUrlOrTokens: parsed.slice(1),
+    });
     const data = await loadMe(tid);
     return res.json({ ok: true, ...data });
   } catch (e) {

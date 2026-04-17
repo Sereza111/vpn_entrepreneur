@@ -51,13 +51,32 @@ function normalizeUrlOrToken(input) {
   return { ok: false, error: "bad_format" };
 }
 
+function uniqueLinks(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of Array.isArray(items) ? items : []) {
+    const key = `${it?.kind || ""}:${it?.value || ""}`;
+    if (!it?.kind || !it?.value || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ kind: it.kind, value: it.value });
+  }
+  return out;
+}
+
 function newPublicToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
-export async function linkXuiSubscription({ telegramId, xuiUrlOrToken }) {
+export async function linkXuiSubscription({ telegramId, xuiUrlOrToken, extraXuiUrlOrTokens = [] }) {
   const v = normalizeUrlOrToken(xuiUrlOrToken);
   if (!v.ok) throw new Error(v.error);
+  const extras = [];
+  for (const raw of Array.isArray(extraXuiUrlOrTokens) ? extraXuiUrlOrTokens : []) {
+    const vv = normalizeUrlOrToken(raw);
+    if (!vv.ok) continue;
+    if (vv.kind === v.kind && vv.value === v.value) continue;
+    extras.push({ kind: vv.kind, value: vv.value });
+  }
 
   const db = await readJson();
   const tid = String(telegramId);
@@ -69,6 +88,7 @@ export async function linkXuiSubscription({ telegramId, xuiUrlOrToken }) {
     publicToken,
     kind: v.kind,
     value: v.value,
+    extraLinks: uniqueLinks(extras),
     updatedAt: new Date().toISOString(),
   };
   await writeJson(db);
