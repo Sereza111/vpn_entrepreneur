@@ -1037,6 +1037,10 @@ body.vl-wheel-layout #root {
   box-shadow: var(--app-card-shadow);
 }
 
+body.vl-wheel-layout .toast {
+  bottom: calc(110px + env(safe-area-inset-bottom, 0));
+}
+
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);

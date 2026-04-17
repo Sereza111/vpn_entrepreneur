@@ -198,6 +198,19 @@ function bindWheelSwipe(dock) {
 
 function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
+  const showPaymentMessage = (text) => {
+    const msg = String(text || "").trim();
+    if (!msg) return;
+    try {
+      if (typeof tg?.showAlert === "function") {
+        tg.showAlert(msg);
+        return;
+      }
+    } catch {
+      // fallback to toast
+    }
+    showToast(msg);
+  };
   const openInvoiceInMiniApp = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
     const token = window.__vlToken || "";
     if (!token) throw new Error("auth_token_missing");
@@ -212,13 +225,17 @@ function bindVpnRenewalActions({ tg, me }) {
       }),
     });
     if (r?.sentToChat || r?.fallbackToChat) {
-      showToast("Счёт отправлен в чат с ботом — откройте диалог и оплатите.");
+      showPaymentMessage("Счёт отправлен в чат с ботом. Откройте диалог и оплатите там.");
       return;
     }
     const link = String(r?.invoiceLink || "").trim();
     if (!link) throw new Error("invoice_link_missing");
     if (typeof tg.openInvoice === "function") {
-      tg.openInvoice(link);
+      tg.openInvoice(link, (status) => {
+        if (status === "failed") {
+          showPaymentMessage("Не удалось открыть окно оплаты. Счёт отправлен в чат с ботом.");
+        }
+      });
     } else {
       tg.openLink(link);
     }
