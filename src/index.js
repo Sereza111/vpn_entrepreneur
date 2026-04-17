@@ -36,10 +36,18 @@ function parsePriceMapFromConfig(raw) {
     const obj = JSON.parse(raw);
     if (!obj || typeof obj !== "object") return { ...DEFAULT_PRICE_MAP_MINOR };
     const out = {};
+    const normalizeMinorAmount = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 1) return null;
+      const i = Math.floor(n);
+      // Compatibility: some configs were entered in RUB (25, 99, 300),
+      // while Telegram expects minor units (kopeks).
+      return i < 1000 ? i * 100 : i;
+    };
     for (const [k, v] of Object.entries(obj)) {
-      const n = Number(v);
+      const n = normalizeMinorAmount(v);
       if (!Number.isFinite(n) || n < 1) continue;
-      out[String(k).trim().toLowerCase()] = Math.floor(n);
+      out[String(k).trim().toLowerCase()] = n;
     }
     // Canonical weekly pricing must stay consistent in UI and invoice
     // even when stale environment values are still present.
@@ -55,6 +63,14 @@ function resolvePlanPriceMinor(selection = {}) {
   const code = String(selection.productCode || "").trim().toLowerCase();
   const days = Number(selection.days || selection.grantDays || 0);
   const serviceType = String(selection.serviceType || "").trim().toLowerCase();
+  const canonicalKey = serviceType === "proxy" && days > 0
+    ? `proxy_${Math.floor(days)}`
+    : days > 0
+      ? `vps_${Math.floor(days)}`
+      : "";
+  if (canonicalKey && Number.isFinite(PAYMENT_PRICE_MAP_MINOR[canonicalKey])) {
+    return PAYMENT_PRICE_MAP_MINOR[canonicalKey];
+  }
   if (code && Number.isFinite(PAYMENT_PRICE_MAP_MINOR[code])) {
     return PAYMENT_PRICE_MAP_MINOR[code];
   }
