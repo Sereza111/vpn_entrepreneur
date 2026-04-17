@@ -35,13 +35,15 @@ function parsePriceMapFromConfig(raw) {
   try {
     const obj = JSON.parse(raw);
     if (!obj || typeof obj !== "object") return { ...DEFAULT_PRICE_MAP_MINOR };
-    const out = { ...DEFAULT_PRICE_MAP_MINOR };
+    const out = {};
     for (const [k, v] of Object.entries(obj)) {
       const n = Number(v);
       if (!Number.isFinite(n) || n < 1) continue;
       out[String(k).trim().toLowerCase()] = Math.floor(n);
     }
-    return out;
+    // Canonical weekly pricing must stay consistent in UI and invoice
+    // even when stale environment values are still present.
+    return { ...out, ...DEFAULT_PRICE_MAP_MINOR };
   } catch {
     return { ...DEFAULT_PRICE_MAP_MINOR };
   }

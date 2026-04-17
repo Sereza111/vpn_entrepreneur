@@ -79,7 +79,7 @@ function vpnPlanTileHtml(p) {
   const days = Number(p.grantDays);
   const safeDays = Number.isFinite(days) && days > 0 ? days : 0;
   const code = escAttr(p.code || "");
-  const title = escAttr(p.title || (safeDays ? `${safeDays} дней` : "Тариф"));
+  const title = escAttr(safeDays ? `${safeDays} дней` : p.title || "Тариф");
   const priceMinor = Number(p.priceMinor || 0);
   const priceLabel = priceMinor > 0 ? `${(priceMinor / 100).toFixed(0)} ₽` : "цена по запросу";
   const meta = escAttr(safeDays ? `${safeDays} дн. · ${priceLabel}` : `VPS Premium · ${priceLabel}`);
