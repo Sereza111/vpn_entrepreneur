@@ -394,6 +394,9 @@ async function boot() {
   const u = null;
   const xui = me.xui || null;
   const hasAccount = Boolean(u || xui?.linked);
+  const priceMap = me?.payment?.prices || {};
+  const proxyPrice7 = Number(priceMap.proxy_7 || 0);
+  const proxyPrice30 = Number(priceMap.proxy_30 || 0);
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -631,9 +634,6 @@ async function boot() {
       </div>`;
 
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
-  const priceMap = me?.payment?.prices || {};
-  const proxyPrice7 = Number(priceMap.proxy_7 || 0);
-  const proxyPrice30 = Number(priceMap.proxy_30 || 0);
 
   const card = el(`<div class="card section is-visible" id="section-status">
     <div class="chip ${isActive ? "active" : ""}" style="${isPending ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.35)" : ""}">

@@ -735,7 +735,11 @@ async function ensureSecondaryXuiClient({
   if (!Number(config.xuiSecondary.inboundId)) return;
   const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
   const prefix = String(config.xuiSecondary.remarkPrefix || "").trim();
-  const remark = `${prefix}${String(baseRemark || "").trim()}`.trim().slice(0, 120);
+  const cleanBase = String(baseRemark || "")
+    .replace(/-\s*(tg_|u_)\S*$/i, "")
+    .replace(/\bRU\b/gi, "NL")
+    .trim();
+  const remark = `${prefix}${cleanBase}`.trim().slice(0, 120);
 
   const listRes = await secondaryFetch("/panel/api/inbounds/list");
   if (!listRes.ok) {
@@ -750,6 +754,8 @@ async function ensureSecondaryXuiClient({
   const found =
     clients.find((c) => String(c?.tgId || "") === tid) ||
     clients.find((c) => String(c?.email || "") === stableEmail) ||
+    clients.find((c) => String(c?.email || "").startsWith(`tg_${tid}`)) ||
+    clients.find((c) => String(c?.remark || "").includes(tid)) ||
     null;
 
   if (found) {
