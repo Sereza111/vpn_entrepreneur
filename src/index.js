@@ -223,12 +223,19 @@ function resolveXuiUrlFromLink(link) {
 function resolveExtraXuiUrls(link) {
   const arr = Array.isArray(link?.extraLinks) ? link.extraLinks : [];
   const urls = [];
+  let tokenForExtra = "";
   if (link?.kind === "token" && link?.value) {
+    tokenForExtra = String(link.value).trim();
+  } else if (link?.kind === "url" && link?.value) {
+    const m = String(link.value).match(/\/sub\/([^/?#]+)/i);
+    tokenForExtra = String(m?.[1] || "").trim();
+  }
+  if (tokenForExtra) {
     const root = String(config.xui.subPath || "/sub").trim() || "/sub";
     const root2 = root.startsWith("/") ? root : `/${root}`;
     const root3 = root2.replace(/\/+$/, "");
     for (const base of config.xui.extraBaseUrls || []) {
-      urls.push(`${base}${root3}/${link.value}`);
+      urls.push(`${base}${root3}/${tokenForExtra}`);
     }
   }
   for (const it of arr) {
