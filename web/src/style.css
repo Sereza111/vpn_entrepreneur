@@ -751,11 +751,12 @@ body.vl-wheel-layout #root {
 }
 
 .plan-tile__meta {
-  font-size: 0.65rem;
-  font-weight: 500;
+  font-size: 0.68rem;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--app-hint);
+  color: color-mix(in srgb, var(--app-text) 82%, var(--gothic-gold));
+  text-shadow: 0 0 6px color-mix(in srgb, var(--gothic-gold) 24%, transparent);
 }
 
 .plan-tile:hover {

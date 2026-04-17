@@ -452,8 +452,40 @@ async function boot() {
   const xui = me.xui || null;
   const hasAccount = Boolean(u || xui?.linked);
   const priceMap = me?.payment?.prices || {};
-  const proxyPrice7 = Number(priceMap.proxy_7 || 1800);
-  const proxyPrice30 = Number(priceMap.proxy_30 || 7200);
+  const defaultPriceMinorByCode = {
+    vps_7: 2500,
+    vps_30: 10000,
+    vps_90: 30000,
+    vps_180: 60000,
+    proxy_7: 1800,
+    proxy_30: 7200,
+  };
+  const resolveKnownPriceMinor = ({ code = "", days = 0, serviceType = "" } = {}) => {
+    const normalizedCode = String(code || "").trim().toLowerCase();
+    const normalizedService = String(serviceType || "").trim().toLowerCase();
+    if (normalizedCode && Number.isFinite(Number(priceMap[normalizedCode]))) {
+      return Number(priceMap[normalizedCode]);
+    }
+    if (normalizedCode && Number.isFinite(Number(defaultPriceMinorByCode[normalizedCode]))) {
+      return Number(defaultPriceMinorByCode[normalizedCode]);
+    }
+    const d = Number(days || 0);
+    const fallbackCode =
+      normalizedService === "proxy" ? `proxy_${Math.floor(d)}` : `vps_${Math.floor(d)}`;
+    if (Number.isFinite(Number(priceMap[fallbackCode]))) {
+      return Number(priceMap[fallbackCode]);
+    }
+    if (Number.isFinite(Number(defaultPriceMinorByCode[fallbackCode]))) {
+      return Number(defaultPriceMinorByCode[fallbackCode]);
+    }
+    return 0;
+  };
+  const proxyPrice7 = resolveKnownPriceMinor({ code: "proxy_7", days: 7, serviceType: "proxy" });
+  const proxyPrice30 = resolveKnownPriceMinor({
+    code: "proxy_30",
+    days: 30,
+    serviceType: "proxy",
+  });
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -544,7 +576,7 @@ async function boot() {
                      `,
                    )
                    .join("")}`
-              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Нажмите «Создать прокси», когда будет доступный остаток.</div>`
+              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку — после оплаты доступ создастся автоматически.</div>`
           }
           <div class="proxy-service-card">
             <div class="proxy-service-card__head">
@@ -759,7 +791,7 @@ async function boot() {
                     `,
                   )
                   .join("")}`
-             : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите страну и нажмите «Создать прокси».</div>`
+             : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку — после оплаты доступ создастся автоматически.</div>`
          }
              <div class="proxy-service-card">
                <div class="proxy-service-card__head">
@@ -798,11 +830,40 @@ async function boot() {
   const invoiceEnabled = Boolean(payCfg.telegramInvoiceEnabled);
 
   const planTilesHtml = vpnFromNb
-    ? vpnFromNb.map((p) => vpnPlanTileHtml(p)).join("")
+    ? vpnFromNb
+        .map((p) => ({
+          ...p,
+          priceMinor: resolveKnownPriceMinor({
+            code: p.code,
+            days: p.grantDays,
+            serviceType: "vps",
+          }),
+        }))
+        .map((p) => vpnPlanTileHtml(p))
+        .join("")
     : [
-        { grantDays: 30, title: "30 дней", code: "vps_30", priceMinor: Number(priceMap.vps_30 || 0) },
-        { grantDays: 90, title: "90 дней", code: "vps_90", priceMinor: Number(priceMap.vps_90 || 0) },
-        { grantDays: 180, title: "180 дней", code: "vps_180", priceMinor: Number(priceMap.vps_180 || 0) },
+        {
+          grantDays: 30,
+          title: "30 дней",
+          code: "vps_30",
+          priceMinor: resolveKnownPriceMinor({ code: "vps_30", days: 30, serviceType: "vps" }),
+        },
+        {
+          grantDays: 90,
+          title: "90 дней",
+          code: "vps_90",
+          priceMinor: resolveKnownPriceMinor({ code: "vps_90", days: 90, serviceType: "vps" }),
+        },
+        {
+          grantDays: 180,
+          title: "180 дней",
+          code: "vps_180",
+          priceMinor: resolveKnownPriceMinor({
+            code: "vps_180",
+            days: 180,
+            serviceType: "vps",
+          }),
+        },
       ]
         .map((p) => vpnPlanTileHtml(p))
         .join("");
