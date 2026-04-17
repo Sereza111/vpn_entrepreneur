@@ -781,6 +781,159 @@ body.vl-wheel-layout #root {
   color: color-mix(in srgb, var(--gothic-gold) 65%, var(--app-hint));
 }
 
+/* --- Баланс VPN (режим почасовой оплаты) --- */
+.section-title--balance {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.balance-screen {
+  margin: 0 0 4px;
+}
+
+.balance-hero {
+  text-align: center;
+  padding: 20px 14px 16px;
+  border: 1px solid var(--app-stroke-strong);
+  clip-path: var(--clip-chamfer);
+  background: color-mix(in srgb, var(--gothic-gold) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 18%, transparent);
+  margin-bottom: 12px;
+}
+
+.balance-hero__label {
+  font-family: var(--font-gothic);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gothic-gold) 90%, #fff);
+  margin-bottom: 8px;
+}
+
+.balance-hero__amount {
+  font-size: clamp(2rem, 8vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 20px color-mix(in srgb, var(--gothic-gold) 25%, transparent);
+}
+
+.balance-hero__currency {
+  font-size: 1.35rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.balance-hero__rate {
+  margin-top: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--app-text) 90%, var(--gothic-gold));
+}
+
+.balance-time-block {
+  text-align: center;
+  padding: 16px 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--app-stroke-strong);
+  clip-path: var(--clip-chamfer);
+  background: color-mix(in srgb, var(--app-text) 5%, transparent);
+}
+
+.balance-time-block__label {
+  font-family: var(--font-gothic);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--app-hint);
+  margin-bottom: 8px;
+}
+
+.balance-time-block__value {
+  font-size: clamp(1.35rem, 5vw, 1.85rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: color-mix(in srgb, var(--app-text) 88%, var(--gothic-gold));
+}
+
+.balance-time-block__hint {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--app-hint);
+}
+
+.balance-topup-panel {
+  margin-top: 4px;
+}
+
+.balance-topup-panel__label {
+  font-family: var(--font-gothic);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--gothic-gold) 85%, var(--app-text));
+  margin-bottom: 10px;
+}
+
+.balance-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.balance-input-row .balance-input {
+  flex: 1;
+  min-height: 50px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance-input-row .balance-topup-submit {
+  flex-shrink: 0;
+  min-width: 118px;
+  font-weight: 700;
+}
+
+.balance-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.balance-chip {
+  appearance: none;
+  border: 1px solid var(--app-stroke-strong);
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+  color: var(--app-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  clip-path: var(--clip-chamfer);
+  font-family: var(--font-body);
+}
+
+.balance-chip:hover {
+  border-color: color-mix(in srgb, var(--gothic-gold) 55%, var(--app-stroke-strong));
+  background: color-mix(in srgb, var(--gothic-gold) 12%, transparent);
+}
+
+.balance-footnote {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--app-hint);
+  margin: 0 0 16px;
+  text-align: center;
+}
+
 .actions-stack {
   margin-top: 16px;
   padding-top: 14px;

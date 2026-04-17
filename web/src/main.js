@@ -107,35 +107,65 @@ function proxyPurchaseTileHtml(days, label, priceMinor = 0) {
   </button>`;
 }
 
+function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
+  const bal = Number(balanceRub) || 0;
+  const rate = Number(hourlyRateRub) || 0;
+  if (rate <= 0) return { main: "—", sub: "Ставка не задана" };
+  if (!billingActive && bal <= 0) {
+    return { main: "—", sub: "Пополните счёт — после первого платежа включится почасовое списание" };
+  }
+  const hours = bal / rate;
+  if (hours <= 0) {
+    return { main: "0", sub: "Баланс пуст — пополните, чтобы снова включить VPN" };
+  }
+  let main;
+  if (hours < 1) {
+    main = `≈ ${Math.max(1, Math.round(hours * 60))} мин`;
+  } else if (hours < 48) {
+    main = `≈ ${hours < 10 ? hours.toFixed(1) : Math.round(hours)} ч`;
+  } else {
+    const d = Math.floor(hours / 24);
+    const h = Math.round(hours - d * 24);
+    main = `≈ ${d} д ${h} ч`;
+  }
+  const sub =
+    billingActive && bal > 0
+      ? "Оценка при активном VPN и текущей ставке"
+      : "Оценка по текущей ставке (списание — после первого пополнения)";
+  return { main, sub };
+}
+
 function balanceTopupBlockHtml(balance) {
   if (!balance?.enabled) return "";
-  const br = Number(balance.balanceRub ?? 0).toFixed(2);
-  const hr = Number(balance.hourlyRateRub ?? 0).toFixed(2);
-  const activeHint = balance.billingActive
-    ? "Пока VPN в статусе «Активна», с баланса удерживается почасовая плата."
-    : "После первого пополнения включится почасовое списание (только при активном VPN).";
-  const tiles = [50, 100, 300, 500, 1000]
+  const br = Number(balance.balanceRub ?? 0);
+  const hr = Number(balance.hourlyRateRub ?? 0);
+  const est = formatBalanceTimeEstimate(br, hr, Boolean(balance.billingActive));
+  const chips = [100, 300, 500, 1000]
     .map(
       (amt) =>
-        `<button type="button" class="plan-tile" data-balance-rub="${amt}">
-          <span class="plan-tile__title">${amt} руб.</span>
-          <span class="plan-tile__meta">На баланс</span>
-        </button>`,
+        `<button type="button" class="balance-chip" data-balance-rub="${amt}" title="Подставить ${amt} ₽">${amt} ₽</button>`,
     )
     .join("");
   return `
-    <div class="vpn-renew-card" style="margin-bottom:14px">
-      <div class="vpn-renew-card__head">
-        <span class="vpn-renew-card__glyph" aria-hidden="true">\u25C6</span>
-        <div class="vpn-renew-card__head-text">
-          <span class="vpn-renew-card__kind">Баланс</span>
-          <span class="vpn-renew-card__sub">Пополнение · почасовой тариф</span>
-        </div>
+    <div class="balance-screen">
+      <div class="balance-hero">
+        <div class="balance-hero__label">Баланс</div>
+        <div class="balance-hero__amount">${br.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<span class="balance-hero__currency"> ₽</span></div>
+        <div class="balance-hero__rate">${hr > 0 ? `${hr.toFixed(2)} ₽/час` : "—"}</div>
       </div>
-      <p class="muted" style="margin:0 0 8px;line-height:1.45">На счёте: <b>${br}</b> руб. · <b>${hr}</b> руб/час</p>
-      <p class="muted" style="margin:0 0 10px;font-size:0.78rem;line-height:1.45">${activeHint}</p>
-      <div class="store-field-label">Сумма пополнения</div>
-      <div class="plan-grid plan-grid--vpn balance-topup-grid">${tiles}</div>
+      <div class="balance-time-block">
+        <div class="balance-time-block__label">Осталось по времени</div>
+        <div class="balance-time-block__value">${escAttr(est.main)}</div>
+        <div class="balance-time-block__hint">${escAttr(est.sub)}</div>
+      </div>
+      <div class="balance-topup-panel">
+        <div class="balance-topup-panel__label">Пополнить на сумму</div>
+        <div class="balance-input-row">
+          <input type="number" class="balance-input text-input" id="balanceTopupAmount" inputmode="numeric" min="1" max="500000" step="1" placeholder="Например 250" autocomplete="transaction-amount" />
+          <button type="button" class="btn balance-topup-submit" id="balanceTopupSubmit">Оплатить</button>
+        </div>
+        <div class="balance-chips" aria-label="Быстрые суммы">${chips}</div>
+      </div>
     </div>`;
 }
 
@@ -175,18 +205,19 @@ function appendAppFooter(container) {
 }
 
 /** Нижняя навигация — «колесо»: дуга + свайп влево/вправо по доку */
-function wheelNavHtml(hasProxy) {
+function wheelNavHtml(hasProxy, balanceMode = false) {
+  const extendLabel = balanceMode ? "Баланс" : "Срок";
   const rows = hasProxy
     ? [
         { target: "status", label: "Статус", glyph: "◇" },
         { target: "connect", label: "Сеть", glyph: "◎" },
         { target: "proxy", label: "Прокси", glyph: "◈" },
-        { target: "extend", label: "Срок", glyph: "⬡" },
+        { target: "extend", label: extendLabel, glyph: "⬡" },
       ]
     : [
         { target: "status", label: "Статус", glyph: "◇" },
         { target: "connect", label: "Сеть", glyph: "◎" },
-        { target: "extend", label: "Срок", glyph: "⬡" },
+        { target: "extend", label: extendLabel, glyph: "⬡" },
       ];
   const n = rows.length;
   const lift =
@@ -375,38 +406,60 @@ function bindVpnRenewalActions({ tg, me }) {
       document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
   });
 
-  if (me.balance?.enabled) {
-    document.querySelectorAll(".balance-topup-grid [data-balance-rub]").forEach((b) => {
-      b.onclick = async () => {
-        const amountRub = Number(b.getAttribute("data-balance-rub"));
-        if (!Number.isFinite(amountRub) || amountRub < 1) return;
-        const token = window.__vlToken || "";
-        if (!token) return showToast("Ошибка: auth_token_missing");
-        try {
-          const r = await api("/api/payments/balance/invoice-link", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ amountRub }),
-          });
-          if (r?.sentToChat || r?.fallbackToChat) {
-            showPaymentMessage("Счёт на пополнение отправлен в чат с ботом — откройте и оплатите.");
-            return;
-          }
-          const link = String(r?.invoiceLink || "").trim();
-          if (!link) throw new Error("invoice_link_missing");
-          if (typeof tg.openInvoice === "function") {
-            tg.openInvoice(link, (status) => {
-              if (status === "failed") {
-                showPaymentMessage("Не удалось открыть оплату. Проверьте чат с ботом.");
-              }
-            });
-          } else {
-            tg.openLink(link);
-          }
-        } catch (e) {
-          showToast(`Ошибка: ${e.message}`);
+  const openBalanceInvoice = async (amountRub) => {
+    const n = Math.floor(Number(amountRub));
+    if (!Number.isFinite(n) || n < 1) {
+      showToast("Введите сумму от 1 ₽");
+      return;
+    }
+    if (n > 500_000) {
+      showToast("Максимум 500 000 ₽ за раз");
+      return;
+    }
+    const token = window.__vlToken || "";
+    if (!token) throw new Error("auth_token_missing");
+    const r = await api("/api/payments/balance/invoice-link", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amountRub: n }),
+    });
+    if (r?.sentToChat || r?.fallbackToChat) {
+      showPaymentMessage("Счёт на пополнение отправлен в чат с ботом — откройте и оплатите.");
+      return;
+    }
+    const link = String(r?.invoiceLink || "").trim();
+    if (!link) throw new Error("invoice_link_missing");
+    if (typeof tg.openInvoice === "function") {
+      tg.openInvoice(link, (status) => {
+        if (status === "failed") {
+          showPaymentMessage("Не удалось открыть оплату. Проверьте чат с ботом.");
         }
-      };
+      });
+    } else {
+      tg.openLink(link);
+    }
+  };
+
+  if (me.balance?.enabled) {
+    const submit = () => {
+      const inp = document.getElementById("balanceTopupAmount");
+      const raw = inp?.value?.trim() ?? "";
+      const amountRub = raw === "" ? NaN : Number(raw.replace(",", "."));
+      openBalanceInvoice(amountRub).catch((e) => showToast(`Ошибка: ${e.message}`));
+    };
+    document.getElementById("balanceTopupSubmit")?.addEventListener("click", submit);
+    document.getElementById("balanceTopupAmount")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submit();
+      }
+    });
+    document.querySelectorAll(".balance-chip[data-balance-rub]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const amt = b.getAttribute("data-balance-rub");
+        const inp = document.getElementById("balanceTopupAmount");
+        if (inp) inp.value = amt || "";
+      });
     });
   }
 }
@@ -634,10 +687,15 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-extend">
-          <h2 class="section-title">Покупка VPS Premium</h2>
+          ${
+            me.balance?.enabled
+              ? `<h2 class="section-title section-title--balance">Баланс VPN</h2>
           ${balanceTopupBlockHtml(me.balance)}
+          <p class="balance-footnote">После пополнения бот привяжет доступ. Оплата через Telegram.</p>`
+              : `<h2 class="section-title">Покупка VPS Premium</h2>
           <p class="muted">Выберите тариф и оплатите доступ к VPS Premium.</p>
-          <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>
+          <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>`
+          }
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
         </div>
       `),
@@ -688,8 +746,9 @@ async function boot() {
       `),
     );
 
-    root.appendChild(el(wheelNavHtml(true)));
+    root.appendChild(el(wheelNavHtml(true, Boolean(me.balance?.enabled))));
     document.body.classList.add("vl-wheel-layout");
+    if (me.balance?.enabled) document.body.classList.add("vl-balance-mode");
 
     document.querySelectorAll(".seg-btn").forEach((btn) => {
       btn.onclick = () => {
@@ -703,7 +762,8 @@ async function boot() {
     bindWheelSwipe(document.getElementById("vlWheelDock"));
 
     document.getElementById("refreshBtn").onclick = () => window.location.reload();
-    document.getElementById("payBtn").onclick = async () => {
+    const payBtnNoAcc = document.getElementById("payBtn");
+    if (payBtnNoAcc) payBtnNoAcc.onclick = async () => {
       const pay = me.payment || {};
       try {
         const r = await api("/api/payments/telegram/invoice-link", {
@@ -953,9 +1013,25 @@ async function boot() {
         .map((p) => vpnPlanTileHtml(p))
         .join("");
 
-  const extend = el(`<div class="card section" id="section-extend">
-    <h2 class="section-title">Покупка VPS Premium</h2>
+  const balanceMode = Boolean(me.balance?.enabled);
+  const extend = el(
+    balanceMode
+      ? `<div class="card section" id="section-extend">
+    <h2 class="section-title section-title--balance">Баланс VPN</h2>
     ${balanceTopupBlockHtml(me.balance)}
+    <p class="balance-footnote">${invoiceEnabled ? "Оплата через Telegram — счёт можно открыть здесь или в чате с ботом." : "Платежи временно недоступны."}</p>
+    <div class="actions-stack">
+    ${
+      isXuiPrimary
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (IP лимит)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
+    }
+    <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
+    </div>
+  </div>`
+      : `<div class="card section" id="section-extend">
+    <h2 class="section-title">Покупка VPS Premium</h2>
     ${
       invoiceEnabled
         ? `<p class="muted" style="margin-top:6px;line-height:1.45">После выбора тарифа счёт придёт в чат с ботом.</p>`
@@ -988,11 +1064,13 @@ async function boot() {
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
-  </div>`);
+  </div>`,
+  );
   root.appendChild(extend);
 
-  root.appendChild(el(wheelNavHtml(hasProxy)));
+  root.appendChild(el(wheelNavHtml(hasProxy, balanceMode)));
   document.body.classList.add("vl-wheel-layout");
+  if (balanceMode) document.body.classList.add("vl-balance-mode");
 
   bindVpnRenewalActions({ tg, me });
 
