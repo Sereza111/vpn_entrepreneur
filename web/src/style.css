@@ -848,10 +848,16 @@ body.vl-wheel-layout #root {
   font-variant-numeric: tabular-nums;
 }
 
-.balance-input-row .balance-topup-submit {
+.balance-topup-submit {
   flex-shrink: 0;
   min-width: 118px;
   font-weight: 700;
+}
+
+.balance-topup-submit--full {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 50px;
 }
 
 .balance-chips {

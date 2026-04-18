@@ -162,9 +162,9 @@ function balanceTopupBlockHtml(balance) {
         <div class="balance-topup-panel__label">Пополнить на сумму</div>
         <div class="balance-input-row">
           <input type="number" class="balance-input text-input" id="balanceTopupAmount" inputmode="numeric" min="1" max="500000" step="1" placeholder="Например 250" autocomplete="transaction-amount" />
-          <button type="button" class="btn balance-topup-submit" id="balanceTopupSubmit">Оплатить</button>
         </div>
         <div class="balance-chips" aria-label="Быстрые суммы">${chips}</div>
+        <button type="button" class="btn balance-topup-submit balance-topup-submit--full" id="balanceTopupSubmit">Оплатить</button>
       </div>
     </div>`;
 }
