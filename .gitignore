@@ -10,3 +10,8 @@ web/node_modules/
 Thumbs.db
 *.lnk
 data/
+
+# Local operational artifacts (should never be committed)
+$env
+*.xlsx
+XUI_USERNAME=*.txt

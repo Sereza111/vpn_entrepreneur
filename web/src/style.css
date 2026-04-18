@@ -1,6 +1,4 @@
-/* VL mini-app: Gothic UI shell on Telegram theme tokens */
-@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600&family=UnifrakturMaguntia&display=swap");
+/* VL mini-app: minimal UI shell on Telegram theme tokens */
 
 :root {
   color-scheme: light dark;
@@ -16,29 +14,18 @@
   --app-stroke: color-mix(in srgb, var(--app-text) 14%, transparent);
   --app-stroke-strong: color-mix(in srgb, var(--app-text) 22%, transparent);
   --app-card-shadow: 0 6px 28px rgba(0, 0, 0, 0.42);
-  --app-radius: 6px;
-  --app-radius-sm: 4px;
-  --font-gothic: "Cinzel", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: "Cormorant Garamond", "Palatino Linotype", Palatino, Georgia, serif;
+  --app-radius: 12px;
+  --app-radius-sm: 10px;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  /* Backward-compatible tokens (older gothic styles still reference them) */
+  --font-gothic: var(--font-body);
+  --gothic-gold: var(--app-accent);
+  --gothic-frame: var(--app-stroke-strong);
+  --clip-chamfer: inset(0 round var(--app-radius));
   --app-font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
-  --gothic-cut: 9px;
-  --gothic-gold: color-mix(in srgb, #c9a227 38%, var(--app-accent));
-  --gothic-frame: color-mix(in srgb, var(--app-accent) 28%, var(--app-stroke-strong));
-  --clip-chamfer: polygon(
-    var(--gothic-cut) 0%,
-    calc(100% - var(--gothic-cut)) 0%,
-    100% var(--gothic-cut),
-    100% calc(100% - var(--gothic-cut)),
-    calc(100% - var(--gothic-cut)) 100%,
-    var(--gothic-cut) 100%,
-    0% calc(100% - var(--gothic-cut)),
-    0% var(--gothic-cut)
-  );
 }
 
 html.vl-theme-light {
-  --gothic-gold: color-mix(in srgb, #8b6914 55%, var(--app-accent));
-  --gothic-frame: color-mix(in srgb, var(--app-text) 32%, var(--app-stroke-strong));
   --app-card-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -49,15 +36,11 @@ html.vl-theme-light {
 
 body {
   margin: 0;
-  font-family: "EB Garamond", var(--font-body);
-  font-size: 17px;
+  font-family: var(--font-body);
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.45;
-  background: linear-gradient(135deg, #050505 0%, #0b0b0b 50%, #070707 100%);
-  background-attachment: fixed;
-  background-image:
-    repeating-linear-gradient(90deg, transparent, transparent 10px, color-mix(in srgb, var(--app-text) 5%, transparent) 10px, color-mix(in srgb, var(--app-text) 5%, transparent) 11px),
-    repeating-linear-gradient(0deg, transparent, transparent 10px, color-mix(in srgb, var(--app-text) 5%, transparent) 10px, color-mix(in srgb, var(--app-text) 5%, transparent) 11px);
+  line-height: 1.4;
+  background: var(--app-bg);
   color: var(--app-text);
   min-height: 100vh;
   padding: 12px 14px 28px;
@@ -125,51 +108,25 @@ body.vl-wheel-layout #root {
 
 /* Cards */
 .card {
-  background: linear-gradient(135deg, rgba(10, 10, 10, 0.95) 0%, rgba(15, 15, 15, 0.95) 100%);
-  border: 2px solid #2f2f36;
+  position: relative;
+  background: var(--app-bg-secondary);
+  border: 1px solid var(--app-stroke);
   border-radius: var(--app-radius);
   padding: 16px 18px;
   margin-bottom: 12px;
-  box-shadow:
-    0 0 36px rgba(0, 0, 0, 0.62),
-    inset 0 0 18px rgba(255, 255, 255, 0.04),
-    inset 0 0 0 1px color-mix(in srgb, var(--app-text) 7%, transparent);
+  box-shadow: var(--app-card-shadow);
   animation: fadeUp 260ms ease;
-  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
 .card:hover {
   transform: translateY(-1px);
-  box-shadow:
-    0 8px 28px rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 26%, transparent);
-}
-
-.card::before,
-.card::after {
-  content: "✠";
-  position: absolute;
-  top: -12px;
-  font-size: 13px;
-  color: color-mix(in srgb, var(--app-text) 34%, transparent);
-  pointer-events: none;
-}
-
-.card::before {
-  left: 12px;
-}
-
-.card::after {
-  right: 12px;
+  border-color: var(--app-stroke-strong);
 }
 
 .card--hero {
   padding: 18px 20px 20px;
-  border-width: 2px;
-  box-shadow:
-    var(--app-card-shadow),
-    inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 18%, transparent),
-    0 0 40px color-mix(in srgb, var(--gothic-gold) 6%, transparent);
+  border-color: var(--app-stroke-strong);
 }
 
 /* Герой: шапка + крупные VL + нижний орнамент — по смыслу твоего макета (раскладка), в стиле готики мини‑аппа */
@@ -251,13 +208,10 @@ body.vl-wheel-layout #root {
 
 .hero-title {
   margin: 0 0 4px;
-  font-size: 1.45rem;
+  font-size: 1.2rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  font-family: "UnifrakturMaguntia", var(--font-gothic);
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  font-family: var(--font-body);
 }
 
 .brand {

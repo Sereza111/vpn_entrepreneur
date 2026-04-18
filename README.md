@@ -43,6 +43,7 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 - NocoBase: `NOCOBASE_BASE_URL`, `NOCOBASE_API_TOKEN`, `NOCOBASE_COLLECTION_*`
 - Прокси: `PROXY_SERVERS_JSON`
 - Платежи: `PAYMENT_WEBHOOK_SECRET`, `PAYMENT_CHECKOUT_URL_TEMPLATE`
+- Security/ops: `SESSION_JWT_EXPIRES_IN`, `RATE_LIMIT_RPM`
 
 ## NocoBase: данные и аналитика
 
@@ -75,10 +76,12 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 1. NocoBase и 3X-UI не держать на открытом HTTP в интернет.
 2. Выдавать доступ к админкам через HTTPS + ограничение по IP/Allowlist.
 3. API-ключи и `.env` не хранить в Git.
+   - если токены/ключи случайно попали в чат/логи — считать скомпрометированными и ротировать.
 4. Делать регулярные бэкапы Postgres (NocoBase) и operational stores (`data/`).
 5. Перед правками маршрутизации/GeoSite сохранять backup текущего Xray config.
 
 Операционный чеклист: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+Релизный чеклист: [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
 
 ## Мониторинг и эксплуатация
 

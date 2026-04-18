@@ -4,6 +4,8 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { Agent } from "undici";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { config } from "./config.js";
 import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
@@ -17,6 +19,7 @@ import {
 } from "./proxyProvision.js";
 import * as nocobase from "./nocobase.js";
 import * as balanceStore from "./balanceStore.js";
+import * as paymentWebhookStore from "./paymentWebhookStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -154,11 +157,41 @@ async function setupTelegramTransport() {
 }
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+app.disable("x-powered-by");
+
+// Correlation id for logs/diagnostics
+app.use((req, res, next) => {
+  const incoming = String(req.headers["x-request-id"] || "").trim();
+  const id = incoming && incoming.length < 128 ? incoming : crypto.randomUUID();
+  req.requestId = id;
+  res.setHeader("x-request-id", id);
+  next();
+});
+
+app.use(express.json({ limit: "1mb", strict: true, type: ["application/json", "application/*+json"] }));
+
+app.use(
+  helmet({
+    // Mini-app is embedded in Telegram; avoid breaking it with a strict CSP here.
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
+app.use(
+  rateLimit({
+    windowMs: 60 * 1000,
+    limit: Number(process.env.RATE_LIMIT_RPM || 240),
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "rate_limited" },
+  }),
+);
 
 if (config.corsOrigin) {
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", config.corsOrigin);
+    res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -179,6 +212,14 @@ function authMiddleware(req, res, next) {
 }
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Warn for common misconfigurations (helps prod ops)
+if (config.xui.extraBaseUrls?.length && !config.xuiSecondary.enabled) {
+  console.warn(
+    "[env] XUI_EXTRA_BASE_URLS is set, but XUI_SECONDARY_ENABLED is not enabled. " +
+      "Merge will call extra /sub/<id>, but NL usually returns 400 unless the same subId exists there.",
+  );
+}
 
 function isProbablyBase64(s) {
   const t = String(s || "").trim();
@@ -265,6 +306,16 @@ function resolveExtraXuiUrls(link) {
   return [...new Set(urls)];
 }
 
+function extractSubIdFromStoredLink(link) {
+  if (!link) return "";
+  if (link.kind === "token" && link.value) return String(link.value).trim();
+  if (link.kind === "url" && link.value) {
+    const m = String(link.value).match(/\/sub\/([^/?#]+)/i);
+    return String(m?.[1] || "").trim();
+  }
+  return "";
+}
+
 function parseXuiLinkInput(raw) {
   const text = String(raw || "").trim();
   if (!text) return [];
@@ -330,6 +381,7 @@ app.get("/sub/xui/:token", async (req, res) => {
     const seen = new Set();
     let firstHeaders = null;
     let okCount = 0;
+    let failCount = 0;
     let firstStatus = 500;
     let firstErrorText = "upstream_failed";
 
@@ -341,14 +393,16 @@ app.get("/sub/xui/:token", async (req, res) => {
         upstream = r.upstream;
         tt = r.body;
       } catch (e) {
+        failCount += 1;
         if (okCount === 0) {
           firstStatus = 504;
           firstErrorText = "upstream_timeout";
         }
-        console.warn("[xui-sub] upstream timeout/fail:", url, String(e?.message || e));
+        console.warn("[xui-sub] upstream timeout/fail:", req.requestId, url, String(e?.message || e));
         continue;
       }
       if (!upstream.ok) {
+        failCount += 1;
         if (okCount === 0) {
           firstStatus = upstream.status;
           firstErrorText = tt || "upstream_failed";
@@ -369,6 +423,7 @@ app.get("/sub/xui/:token", async (req, res) => {
     if (firstHeaders) {
       passThroughSubscriptionHeaders(firstHeaders, res);
     }
+    res.setHeader("x-sub-upstreams", `ok=${okCount};fail=${failCount};total=${targets.length}`);
     if (!res.getHeader("Content-Type")) {
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
     }
@@ -719,19 +774,27 @@ async function secondaryLogin() {
     throw new Error("xui_secondary_not_configured");
   }
   const dispatcher = secondaryDispatcher();
-  const res = await fetch(`${root}/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: encodeForm({
-      username: config.xuiSecondary.username,
-      password: config.xuiSecondary.password,
-    }),
-    redirect: "manual",
-    ...(dispatcher ? { dispatcher } : {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  let res;
+  try {
+    res = await fetch(`${root}/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: encodeForm({
+        username: config.xuiSecondary.username,
+        password: config.xuiSecondary.password,
+      }),
+      redirect: "manual",
+      signal: controller.signal,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok && res.status !== 302) {
     const t = await res.text().catch(() => "");
     throw new Error(`xui_secondary_login_failed: ${res.status} ${t}`.trim());
@@ -757,29 +820,37 @@ async function secondaryFetch(path, { method = "GET", json } = {}) {
   const root = getSecondaryPanelRoot();
   const dispatcher = secondaryDispatcher();
   const cookie = await secondaryCookieValue();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
   const headers = {
     Accept: "application/json",
     Cookie: cookie,
   };
   if (json !== undefined) headers["Content-Type"] = "application/json";
-  let res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
-    method,
-    headers,
-    body: json !== undefined ? JSON.stringify(json) : undefined,
-    ...(dispatcher ? { dispatcher } : {}),
-  });
-  if (res.status === 401) {
-    secondaryCookie = null;
-    const cookie2 = await secondaryCookieValue();
-    headers.Cookie = cookie2;
-    res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+  try {
+    let res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
       method,
       headers,
       body: json !== undefined ? JSON.stringify(json) : undefined,
+      signal: controller.signal,
       ...(dispatcher ? { dispatcher } : {}),
     });
+    if (res.status === 401) {
+      secondaryCookie = null;
+      const cookie2 = await secondaryCookieValue();
+      headers.Cookie = cookie2;
+      res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+        method,
+        headers,
+        body: json !== undefined ? JSON.stringify(json) : undefined,
+        signal: controller.signal,
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
   }
-  return res;
 }
 
 function normalizeClientsFromInbound(inbound) {
@@ -896,6 +967,15 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
   const baseRemark = buildXuiClientRemark(tid, username, branding);
   if (existing && !force) {
+    // Even if already linked, keep NL in sync when secondary is enabled.
+    const subId = extractSubIdFromStoredLink(existing);
+    if (subId) {
+      await ensureSecondaryXuiClient({
+        telegramId: tid,
+        subId,
+        baseRemark,
+      }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
+    }
     await runRemarkSync();
     return "already_linked";
   }
@@ -1224,6 +1304,7 @@ app.post("/api/webhooks/payment", async (req, res) => {
     netAmount,
     serverId,
   } = req.body || {};
+  const idKey = String(externalPaymentId ?? paymentId ?? "").trim();
   const days = Number(extendDays || planDays || 0);
   const slots = Number(addDeviceSlots || 0);
   if (!telegramId || (!Number.isFinite(days) && !Number.isFinite(slots))) {
@@ -1234,6 +1315,14 @@ app.post("/api/webhooks/payment", async (req, res) => {
   }
   try {
     const tid = Number(telegramId);
+    if (idKey) {
+      const processed = await paymentWebhookStore.wasProcessed(idKey);
+      if (processed) {
+        return res.json({ ok: true, duplicate: true });
+      }
+    } else {
+      console.warn("[payment-webhook] missing paymentId/externalPaymentId; idempotency disabled for this call");
+    }
     if (days < 1 && slots < 1) {
       return res.status(400).json({ error: "nothing_to_apply" });
     }
@@ -1252,6 +1341,12 @@ app.post("/api/webhooks/payment", async (req, res) => {
       serverId,
       source: "payment_webhook",
     });
+    if (idKey) {
+      await paymentWebhookStore.markProcessed(idKey, {
+        telegramId: String(tid),
+        productCode: String(productCode || ""),
+      });
+    }
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

@@ -14,6 +14,7 @@ export const config = {
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
   webhookSecret: process.env.WEBHOOK_SECRET || "",
   sessionJwtSecret: req("SESSION_JWT_SECRET"),
+  sessionJwtExpiresIn: String(process.env.SESSION_JWT_EXPIRES_IN || "7d").trim() || "7d",
   subscriptions: {
     primary: "xui",
   },

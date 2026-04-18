@@ -5,7 +5,7 @@ export function signSession({ telegramId, username }) {
   return jwt.sign(
     { tg: telegramId, u: username || null },
     config.sessionJwtSecret,
-    { expiresIn: "7d", subject: String(telegramId) },
+    { expiresIn: config.sessionJwtExpiresIn || "7d", subject: String(telegramId) },
   );
 }
 
