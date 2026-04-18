@@ -139,6 +139,7 @@ function balanceTopupBlockHtml(balance) {
   if (!balance?.enabled) return "";
   const br = Number(balance.balanceRub ?? 0);
   const hr = Number(balance.hourlyRateRub ?? 0);
+  const minRub = Math.max(1, Math.floor(Number(balance.minTopupRub ?? 60)));
   const est = formatBalanceTimeEstimate(br, hr, Boolean(balance.billingActive));
   const chips = [100, 300, 500, 1000]
     .map(
@@ -161,7 +162,7 @@ function balanceTopupBlockHtml(balance) {
       <div class="balance-topup-panel">
         <div class="balance-topup-panel__label">Пополнить на сумму</div>
         <div class="balance-input-row">
-          <input type="number" class="balance-input text-input" id="balanceTopupAmount" inputmode="numeric" min="1" max="500000" step="1" placeholder="Например 250" autocomplete="transaction-amount" />
+          <input type="number" class="balance-input text-input" id="balanceTopupAmount" inputmode="numeric" min="${minRub}" max="500000" step="1" placeholder="От ${minRub} ₽" autocomplete="transaction-amount" />
         </div>
         <div class="balance-chips" aria-label="Быстрые суммы">${chips}</div>
         <button type="button" class="btn balance-topup-submit balance-topup-submit--full" id="balanceTopupSubmit">Оплатить</button>
@@ -406,10 +407,12 @@ function bindVpnRenewalActions({ tg, me }) {
       document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
   });
 
+  const minTopupRub = Math.max(1, Math.floor(Number(me.balance?.minTopupRub ?? 60)));
+
   const openBalanceInvoice = async (amountRub) => {
     const n = Math.floor(Number(amountRub));
-    if (!Number.isFinite(n) || n < 1) {
-      showToast("Введите сумму от 1 ₽");
+    if (!Number.isFinite(n) || n < minTopupRub) {
+      showToast(`Минимум ${minTopupRub} ₽ (ограничение Telegram/платёжного провайдера)`);
       return;
     }
     if (n > 500_000) {

@@ -611,6 +611,7 @@ async function loadMe(telegramId, username = null) {
       balanceRub: snap.balanceMinor / 100,
       hourlyRateMinor: snap.hourlyRateMinor,
       hourlyRateRub: snap.hourlyRateMinor / 100,
+      minTopupRub: config.payment.telegramMinInvoiceAmountMajor,
     };
     if (
       shouldBillHourly &&
@@ -1506,7 +1507,8 @@ function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
 
 function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
   const tid = Number(telegramId);
-  const minor = Math.max(100, Math.floor(Number(amountMinor) || 0));
+  const minMinor = Math.max(100, config.payment.telegramMinInvoiceAmountMajor * 100);
+  const minor = Math.max(minMinor, Math.floor(Number(amountMinor) || 0));
   const rub = (minor / 100).toFixed(0);
   const title =
     config.payment.mode === "test"
@@ -1716,7 +1718,13 @@ app.post("/api/payments/balance/invoice-link", authMiddleware, async (req, res) 
   }
   const username = req.tgSession?.u ?? null;
   const amountRub = Math.floor(Number(req.body?.amountRub ?? req.body?.amount ?? 0));
-  if (!Number.isFinite(amountRub) || amountRub < 1 || amountRub > 500_000) {
+  const minRub = config.payment.telegramMinInvoiceAmountMajor;
+  if (!Number.isFinite(amountRub) || amountRub < minRub || amountRub > 500_000) {
+    if (Number.isFinite(amountRub) && amountRub >= 1 && amountRub < minRub) {
+      return res.status(400).json({
+        error: `Минимум ${minRub} ₽ для оплаты через Telegram (лимит платёжного провайдера)`,
+      });
+    }
     return res.status(400).json({ error: "bad_amount" });
   }
   const amountMinor = amountRub * 100;
