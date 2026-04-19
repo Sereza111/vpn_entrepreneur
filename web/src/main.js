@@ -10,26 +10,23 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
+function vlBrandingPngUrl() {
+  return `${import.meta.env.BASE_URL}branding/vl-fleur.png`;
+}
+
 /**
- * Герб fleur-de-lis как inline SVG (наследует `color` от темы Telegram).
- * При `animate: true` части «собираются» при показе (CSS в style.css).
+ * Логотип из `web/public/branding/vl-fleur.png` — форма как в бренде.
+ * На сплэше `animate: true` включает CSS-раскрытие (см. `.vl-fleur-mark--animate`).
  */
-function vlFleurLogoSvg({ animate = false } = {}) {
-  const rootClass = animate ? "vl-fleur vl-fleur--animate" : "vl-fleur";
-  return `<svg class="${rootClass}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 110" fill="currentColor" aria-hidden="true">
-  <g class="vl-fleur__part vl-fleur__part--band">
-    <path d="M34 78h32l-2.2 14H36.2L34 78z" opacity="0.95"/>
-  </g>
-  <g class="vl-fleur__part vl-fleur__part--left">
-    <path d="M46 52C32 54 20 64 18 78c-2 14 10 24 24 22 8-1 14-10 16-20 2-12 0-22-12-28z"/>
-  </g>
-  <g class="vl-fleur__part vl-fleur__part--right">
-    <path d="M54 52C68 54 80 64 82 78c2 14-10 24-24 22-8-1-14-10-16-20-2-12 0-22 12-28z"/>
-  </g>
-  <g class="vl-fleur__part vl-fleur__part--center">
-    <path d="M50 8c-7 16-8 32-4.5 46L41 86l9-7 9 7-4.5-32C57 40 57 24 50 8z"/>
-  </g>
-</svg>`;
+function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
+  const url = escAttr(vlBrandingPngUrl());
+  const base = variant === "brand" ? "vl-fleur-mark vl-fleur-mark--brand" : "vl-fleur-mark vl-fleur-mark--splash";
+  const cls = animate ? `${base} vl-fleur-mark--animate` : base;
+  return `<div class="${cls}" aria-hidden="true">
+  <div class="vl-fleur-mark__inner">
+    <img class="vl-fleur-mark__img" src="${url}" alt="" width="160" height="160" decoding="async" fetchpriority="high" />
+  </div>
+</div>`;
 }
 
 /** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
@@ -554,7 +551,7 @@ async function boot() {
     <div class="splash" id="splash">
       <div class="splash-simple">
         <div class="splash-brand" aria-hidden="true">
-          <div class="splash-logo splash-logo--svg">${vlFleurLogoSvg({ animate: true })}</div>
+          <div class="splash-logo splash-logo--mark">${vlFleurLogoBlock({ animate: true, variant: "splash" })}</div>
         </div>
         <div class="splash-hint" id="splashHint">Подключение…</div>
       </div>
@@ -678,7 +675,7 @@ async function boot() {
       <div class="hero-scene__content">
         <div class="brand">
           <div class="brand-mark brand-mark--logo" aria-hidden="true">
-            <div class="brand-mark__svg">${vlFleurLogoSvg({ animate: false })}</div>
+            ${vlFleurLogoBlock({ animate: false, variant: "brand" })}
           </div>
           <div>
             <h1 class="hero-title">VL</h1>

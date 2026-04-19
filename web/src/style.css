@@ -99,92 +99,72 @@ body.vl-wheel-layout #root {
   opacity: 0;
 }
 
-.splash-logo--svg {
+.splash-logo--mark {
   display: grid;
   place-items: center;
 }
 
-.splash-logo--svg .vl-fleur {
+/* Герб PNG: раскрытие снизу вверх + лёгкий «посадка» (сплэш) */
+.vl-fleur-mark {
+  display: grid;
+  place-items: center;
+}
+
+.vl-fleur-mark__inner {
+  overflow: hidden;
+  line-height: 0;
+  border-radius: 10px;
+}
+
+.vl-fleur-mark--splash .vl-fleur-mark__img {
+  display: block;
   width: min(44vw, 152px);
   height: auto;
   max-height: min(44vw, 152px);
-  color: var(--app-text);
+  object-fit: contain;
 }
 
-/* Герб: поэтапная «сборка» на сплэше */
-.vl-fleur {
+.vl-fleur-mark--brand .vl-fleur-mark__img {
   display: block;
-  overflow: visible;
+  width: 100%;
+  max-height: 38px;
+  height: auto;
+  object-fit: contain;
 }
 
-.vl-fleur--animate .vl-fleur__part {
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: 50% 80%;
-  will-change: opacity, transform;
+.vl-fleur-mark--animate .vl-fleur-mark__inner {
+  animation: vlFleurReveal 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  will-change: clip-path, transform;
 }
 
-.vl-fleur--animate .vl-fleur__part--band {
-  animation: vlFleurInBand 0.58s cubic-bezier(0.22, 1, 0.36, 1) 0.04s forwards;
-  transform-origin: 50% 85%;
+.vl-fleur-mark--animate .vl-fleur-mark__img {
+  animation: vlFleurSettle 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  will-change: transform, filter;
 }
 
-.vl-fleur--animate .vl-fleur__part--left {
-  animation: vlFleurInLeft 0.62s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
-  transform-origin: 36% 68%;
-}
-
-.vl-fleur--animate .vl-fleur__part--right {
-  animation: vlFleurInRight 0.62s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
-  transform-origin: 64% 68%;
-}
-
-.vl-fleur--animate .vl-fleur__part--center {
-  animation: vlFleurInCenter 0.72s cubic-bezier(0.22, 1, 0.36, 1) 0.22s forwards;
-  transform-origin: 50% 92%;
-}
-
-@keyframes vlFleurInBand {
+@keyframes vlFleurReveal {
   from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.82);
+    clip-path: inset(100% 6% 0 6%);
+    transform: scale(0.9);
   }
   to {
-    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: scale(1);
+  }
+}
+
+@keyframes vlFleurSettle {
+  0% {
+    transform: translateY(10px) scale(0.92);
+    filter: brightness(0.75) blur(1px);
+  }
+  55% {
+    transform: translateY(0) scale(1.04);
+    filter: brightness(1.05) blur(0);
+  }
+  100% {
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes vlFleurInLeft {
-  from {
-    opacity: 0;
-    transform: translate(-14px, 10px) rotate(-10deg) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(0, 0) rotate(0) scale(1);
-  }
-}
-
-@keyframes vlFleurInRight {
-  from {
-    opacity: 0;
-    transform: translate(14px, 10px) rotate(10deg) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(0, 0) rotate(0) scale(1);
-  }
-}
-
-@keyframes vlFleurInCenter {
-  from {
-    opacity: 0;
-    transform: translateY(22px) scale(0.86);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    filter: brightness(1) blur(0);
   }
 }
 
@@ -332,20 +312,6 @@ body.vl-wheel-layout #root {
   height: 100%;
   object-fit: contain;
   display: block;
-}
-
-.brand-mark__svg {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-}
-
-.brand-mark__svg .vl-fleur {
-  width: 100%;
-  height: 100%;
-  max-height: 38px;
-  color: var(--app-text);
 }
 
 .meter {
@@ -1357,10 +1323,12 @@ body.vl-wheel-layout .toast {
     transform: none;
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
   }
-  .vl-fleur--animate .vl-fleur__part {
+  .vl-fleur-mark--animate .vl-fleur-mark__inner,
+  .vl-fleur-mark--animate .vl-fleur-mark__img {
     animation: none !important;
-    opacity: 1 !important;
+    clip-path: none !important;
     transform: none !important;
+    filter: none !important;
   }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
