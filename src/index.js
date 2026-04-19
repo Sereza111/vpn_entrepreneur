@@ -1514,7 +1514,7 @@ function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
     config.payment.mode === "test"
       ? "Баланс VL — тестовое пополнение"
       : "Пополнение баланса VL";
-  const desc = `Зачисление на внутренний баланс: ${rub} RUB. После первого пополнения VPN списывается почасово.`;
+  const desc = `Зачисление на внутренний баланс: ${rub} RUB. После первого пополнения доступ к VPS списывается почасово.`;
   const payload = savePaymentPayload({
     kind: "balance_topup",
     telegramId: tid,
@@ -1856,7 +1856,7 @@ bot.on("message:successful_payment", async (ctx) => {
         source: "telegram_successful_payment",
       });
       await ctx.reply(
-        `Баланс пополнен на ${(Number(sp.total_amount || 0) / 100).toFixed(0)} руб. Списание за VPN — почасово после активации баланса.`,
+        `Баланс пополнен на ${(Number(sp.total_amount || 0) / 100).toFixed(0)} руб. Списание за VPS — почасово после активации баланса.`,
       );
       return;
     }
