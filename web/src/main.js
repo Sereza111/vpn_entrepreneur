@@ -10,6 +10,28 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
+/**
+ * Герб fleur-de-lis как inline SVG (наследует `color` от темы Telegram).
+ * При `animate: true` части «собираются» при показе (CSS в style.css).
+ */
+function vlFleurLogoSvg({ animate = false } = {}) {
+  const rootClass = animate ? "vl-fleur vl-fleur--animate" : "vl-fleur";
+  return `<svg class="${rootClass}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 110" fill="currentColor" aria-hidden="true">
+  <g class="vl-fleur__part vl-fleur__part--band">
+    <path d="M34 78h32l-2.2 14H36.2L34 78z" opacity="0.95"/>
+  </g>
+  <g class="vl-fleur__part vl-fleur__part--left">
+    <path d="M46 52C32 54 20 64 18 78c-2 14 10 24 24 22 8-1 14-10 16-20 2-12 0-22-12-28z"/>
+  </g>
+  <g class="vl-fleur__part vl-fleur__part--right">
+    <path d="M54 52C68 54 80 64 82 78c2 14-10 24-24 22-8-1-14-10-16-20-2-12 0-22 12-28z"/>
+  </g>
+  <g class="vl-fleur__part vl-fleur__part--center">
+    <path d="M50 8c-7 16-8 32-4.5 46L41 86l9-7 9 7-4.5-32C57 40 57 24 50 8z"/>
+  </g>
+</svg>`;
+}
+
 /** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
 function countryCodeToFlagEmoji(countryCode) {
   const c = String(countryCode || "")
@@ -116,7 +138,7 @@ function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
   }
   const hours = bal / rate;
   if (hours <= 0) {
-    return { main: "0", sub: "Баланс пуст — пополните, чтобы снова включить VPN" };
+    return { main: "0", sub: "Баланс пуст — пополните, чтобы снова включить VPS" };
   }
   let main;
   if (hours < 1) {
@@ -130,7 +152,7 @@ function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
   }
   const sub =
     billingActive && bal > 0
-      ? "Оценка при активном VPN и текущей ставке"
+      ? "Оценка при активном VPS и текущей ставке"
       : "Оценка по текущей ставке (списание — после первого пополнения)";
   return { main, sub };
 }
@@ -519,8 +541,7 @@ async function boot() {
   applyTelegramChrome(tg);
   applyThemeVariant(tg);
 
-  const logoUrl = `${import.meta.env.BASE_URL}branding/vl-fleur.png`;
-  /** Инлайн SVG — так орнамент наследует `color` и тему мини‑аппа (внешний .svg в <img> этого не умеет). */
+  /** Инлайн SVG — орнамент и герб наследуют `color` и тему мини‑аппа. */
   const heroWaveSvg = `<svg class="hero-scene__wave-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 96" fill="none" aria-hidden="true"><path d="M0 88V52c28-18 72-42 118-28 32 10 52 8 78-6 18-10 38-14 58-10 24 4 46 18 66 36 14 12 28 22 40 28v16H0Z" fill="currentColor" fill-opacity="0.08"/><path d="M0 72c32-22 78-48 124-32 30 10 48 6 72-8 22-14 48-20 74-14 26 6 50 22 70 42" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M268 58 292 28l20 36 44-22" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 
   const initData = tg.initData;
@@ -533,7 +554,7 @@ async function boot() {
     <div class="splash" id="splash">
       <div class="splash-simple">
         <div class="splash-brand" aria-hidden="true">
-          <img class="splash-logo" src="${logoUrl}" alt="" width="160" height="160" decoding="async" />
+          <div class="splash-logo splash-logo--svg">${vlFleurLogoSvg({ animate: true })}</div>
         </div>
         <div class="splash-hint" id="splashHint">Подключение…</div>
       </div>
@@ -657,7 +678,7 @@ async function boot() {
       <div class="hero-scene__content">
         <div class="brand">
           <div class="brand-mark brand-mark--logo" aria-hidden="true">
-            <img class="brand-mark__img" src="${logoUrl}" alt="" width="48" height="48" decoding="async" />
+            <div class="brand-mark__svg">${vlFleurLogoSvg({ animate: false })}</div>
           </div>
           <div>
             <h1 class="hero-title">VL</h1>
@@ -692,7 +713,7 @@ async function boot() {
         <div class="card section" id="section-extend">
           ${
             me.balance?.enabled
-              ? `<h2 class="section-title section-title--balance">Баланс VPN</h2>
+              ? `<h2 class="section-title section-title--balance">Баланс VPS</h2>
           ${balanceTopupBlockHtml(me.balance)}
           <p class="balance-footnote">После пополнения бот привяжет доступ. Оплата через Telegram.</p>`
               : `<h2 class="section-title">Покупка VPS Premium</h2>
@@ -1020,7 +1041,7 @@ async function boot() {
   const extend = el(
     balanceMode
       ? `<div class="card section" id="section-extend">
-    <h2 class="section-title section-title--balance">Баланс VPN</h2>
+    <h2 class="section-title section-title--balance">Баланс VPS</h2>
     ${balanceTopupBlockHtml(me.balance)}
     <p class="balance-footnote">${invoiceEnabled ? "Оплата через Telegram — счёт можно открыть здесь или в чате с ботом." : "Платежи временно недоступны."}</p>
     <div class="actions-stack">
