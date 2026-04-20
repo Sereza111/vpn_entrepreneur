@@ -1,5 +1,7 @@
 import "./style.css";
-import vlFramesSvg from "./branding/vl-frames.svg?raw";
+function ornateSvgUrl() {
+  return `${import.meta.env.BASE_URL}branding/vl-ornate-source.svg`;
+}
 
 const root = document.getElementById("root");
 const SPLASH_MIN_DURATION_MS = 2600;
@@ -28,13 +30,15 @@ function escAttr(s) {
 function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
   const base =
     variant === "brand"
-      ? "vl-fleur-mark vl-fleur-mark--brand"
-      : "vl-fleur-mark vl-fleur-mark--splash";
-  const cls = animate ? `${base} vl-fleur-mark--animate` : base;
-  const mode = variant === "brand" ? "final" : "frames";
-  return `<div class="${cls}" data-vl-logo="${mode}" aria-hidden="true">
-  <div class="vl-fleur-mark__inner">${vlFramesSvg}</div>
-</div>`;
+      ? "vl-ornate vl-ornate--brand"
+      : "vl-ornate vl-ornate--splash";
+  const cls = animate ? `${base} vl-ornate--animate` : base;
+  const url = escAttr(ornateSvgUrl());
+  return `<div class="${cls}" aria-hidden="true">
+    <div class="vl-ornate__viewport">
+      <img class="vl-ornate__img" src="${url}" alt="" decoding="async" />
+    </div>
+  </div>`;
 }
 
 /** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
@@ -689,14 +693,12 @@ async function boot() {
         <div class="hero-scene__vl">VL</div>
       </div>
       <div class="hero-scene__content">
-        <div class="brand">
-          <div class="brand-mark brand-mark--logo" aria-hidden="true">
+        <div class="brand brand--center">
+          <div class="brand-mark brand-mark--center" aria-hidden="true">
             ${vlFleurLogoBlock({ animate: false, variant: "brand" })}
           </div>
-          <div>
-            <h1 class="hero-title">VL</h1>
-            <div class="muted hero-tagline">Подписка и прокси в одном месте</div>
-          </div>
+          <h1 class="hero-title hero-title--center">VL</h1>
+          <div class="muted hero-tagline hero-tagline--center">Подписка и прокси в одном месте</div>
         </div>
       </div>
       <div class="hero-scene__wave-wrap" aria-hidden="true">${heroWaveSvg}</div>

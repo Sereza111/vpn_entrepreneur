@@ -138,118 +138,68 @@ body.vl-wheel-layout #root {
   place-items: center;
 }
 
-/* Герб SVG: отрисовка контура + мягкое заполнение (сплэш) */
-.vl-fleur-mark {
+/* Орнамент (artist SVG) — показываем нужный фрагмент через viewport crop */
+.vl-ornate {
   display: grid;
   place-items: center;
 }
 
-.vl-fleur-mark__inner {
+.vl-ornate__viewport {
   overflow: hidden;
   line-height: 0;
-  border-radius: 10px;
+  border-radius: 14px;
+  width: min(62vw, 240px);
+  height: min(62vw, 240px);
+  display: grid;
+  place-items: center;
 }
 
-.vl-fleur-mark__inner > svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  color: color-mix(in srgb, var(--app-text) 88%, #fff);
+.vl-ornate__img {
+  width: 520px;
+  height: 520px;
+  object-fit: none;
+  /* Позиция подобрана под блок «лилия + VL» в Illustrator SVG.
+     Если нужно сдвинуть — меняем проценты. */
+  object-position: 50% 74%;
+  filter:
+    invert(1)
+    drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 22%, transparent));
+  opacity: 0.98;
 }
 
-.vl-fleur-mark__inner > svg * {
-  vector-effect: non-scaling-stroke;
+.vl-ornate--brand .vl-ornate__viewport {
+  width: min(86vw, 320px);
+  height: min(86vw, 320px);
+  border-radius: 18px;
 }
 
-.vl-fleur-mark__inner > svg {
-  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--app-accent) 18%, transparent));
+.vl-ornate--brand .vl-ornate__img {
+  width: 720px;
+  height: 720px;
+  object-position: 50% 74%;
 }
 
-.vl-fleur-mark--splash .vl-fleur-mark__inner > svg {
-  display: block;
-  width: min(44vw, 152px);
-  height: auto;
-  max-height: min(44vw, 152px);
+.vl-ornate--animate .vl-ornate__viewport {
+  animation: vlOrnateReveal 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+  will-change: clip-path, transform, opacity;
 }
 
-.vl-fleur-mark--brand .vl-fleur-mark__inner > svg {
-  display: block;
-  width: 100%;
-  max-height: 38px;
-  height: auto;
-}
-
-.vl-fleur-mark--animate .vl-fleur-mark__inner {
-  animation: vlFleurReveal 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
-  will-change: clip-path, transform;
-}
-
-.vl-fleur-mark--animate .vl-fleur-mark__inner > svg {
-  animation: vlFleurSettle 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+.vl-ornate--animate .vl-ornate__img {
+  animation: vlOrnateSettle 1.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
   will-change: transform, filter;
 }
 
-.vl-fleur-mark[data-vl-logo="final"] .vl-frame {
-  opacity: 0;
-}
-
-.vl-fleur-mark[data-vl-logo="final"] .vl-frame--4 {
-  opacity: 1;
-}
-
-.vl-fleur-mark[data-vl-logo="frames"] .vl-frame {
-  opacity: 0;
-}
-
-.vl-fleur-mark--animate[data-vl-logo="frames"] .vl-frame--1 { opacity: 1; }
-.vl-fleur-mark--animate[data-vl-logo="frames"] .vl-frame--2 { animation: vlFrameIn 2600ms linear forwards; }
-.vl-fleur-mark--animate[data-vl-logo="frames"] .vl-frame--3 { animation: vlFrameIn 2600ms linear forwards; }
-.vl-fleur-mark--animate[data-vl-logo="frames"] .vl-frame--4 { animation: vlFrameIn 2600ms linear forwards; }
-
-.vl-fleur-mark--animate .vl-stroke {
-  stroke-dasharray: var(--len, 160);
-  stroke-dashoffset: var(--len, 160);
-  animation: vlFleurDraw 1120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.vl-fleur-mark--animate .vl-frame--1 .vl-stroke { animation-delay: 0.10s; }
-.vl-fleur-mark--animate .vl-frame--2 { animation-delay: 0.58s; }
-.vl-fleur-mark--animate .vl-frame--2 .vl-stroke { animation-delay: 0.60s; }
-.vl-fleur-mark--animate .vl-frame--3 { animation-delay: 0.98s; }
-.vl-fleur-mark--animate .vl-frame--3 .vl-stroke { animation-delay: 1.00s; }
-.vl-fleur-mark--animate .vl-frame--4 { animation-delay: 1.42s; }
-.vl-fleur-mark--animate .vl-frame--4 .vl-stroke { animation-delay: 1.44s; }
-
-@keyframes vlFleurReveal {
+@keyframes vlOrnateReveal {
   from {
-    clip-path: inset(100% 6% 0 6%);
-    transform: scale(0.9);
+    clip-path: inset(100% 12% 0 12%);
+    transform: scale(0.92);
+    opacity: 0;
   }
   to {
     clip-path: inset(0 0 0 0);
     transform: scale(1);
-  }
-}
-
-@keyframes vlFleurDraw {
-  0% {
-    stroke-dashoffset: var(--len, 160);
-    opacity: 0.7;
-  }
-  60% {
     opacity: 1;
   }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-}
-
-@keyframes vlFrameIn {
-  0% { opacity: 0; }
-  23% { opacity: 0; }
-  27% { opacity: 1; }
-  100% { opacity: 1; }
 }
 
 @keyframes vlFleurSettle {
@@ -264,6 +214,33 @@ body.vl-wheel-layout #root {
   100% {
     transform: translateY(0) scale(1);
     filter: brightness(1) blur(0);
+  }
+}
+
+@keyframes vlOrnateSettle {
+  0% {
+    transform: translateY(14px) scale(0.94);
+    filter:
+      invert(1)
+      brightness(0.82)
+      blur(1.2px)
+      drop-shadow(0 0 10px transparent);
+  }
+  55% {
+    transform: translateY(0) scale(1.03);
+    filter:
+      invert(1)
+      brightness(1.05)
+      blur(0)
+      drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 24%, transparent));
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    filter:
+      invert(1)
+      brightness(1)
+      blur(0)
+      drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 22%, transparent));
   }
 }
 
@@ -423,6 +400,22 @@ body.vl-wheel-layout #root {
   align-items: center;
 }
 
+.brand--center {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.hero-title--center {
+  margin-top: 2px;
+}
+
+.hero-tagline--center {
+  margin-top: 0;
+  max-width: 26ch;
+}
+
 /* Лого fleur-de-lis: белый контур на тёмной «плите», чтобы читалось в любой теме Telegram */
 .brand-mark {
   width: 56px;
@@ -438,6 +431,15 @@ body.vl-wheel-layout #root {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 35%, transparent),
     0 6px 20px color-mix(in srgb, #000 55%, transparent);
+}
+
+.brand-mark--center {
+  width: auto;
+  height: auto;
+  padding: 10px 12px;
+  background: transparent;
+  box-shadow: none;
+  clip-path: none;
 }
 
 .brand-mark--logo .vl-fleur-mark__svg {
@@ -1470,24 +1472,15 @@ body.vl-wheel-layout .toast {
     transform: none;
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
   }
-  .vl-fleur-mark--animate .vl-fleur-mark__inner,
-  .vl-fleur-mark--animate .vl-fleur-mark__inner > svg,
-  .vl-fleur-mark--animate .vl-stroke {
+  .vl-ornate--animate .vl-ornate__viewport,
+  .vl-ornate--animate .vl-ornate__img {
     animation: none !important;
     clip-path: none !important;
     transform: none !important;
     filter: none !important;
-    stroke-dashoffset: 0 !important;
     opacity: 1 !important;
   }
-  .vl-fleur-mark[data-vl-logo="frames"] .vl-frame { opacity: 0 !important; }
-  .vl-fleur-mark[data-vl-logo="frames"] .vl-frame--4 { opacity: 1 !important; }
-  .brand-mark--logo .vl-fleur-mark__svg {
-    animation: none !important;
-  }
-  .brand-mark--logo .vl-fleur-mark__inner > svg {
-    animation: none !important;
-  }
+  .vl-ornate__img { filter: invert(1) !important; }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
   .wheel-dock__btn {
