@@ -529,9 +529,6 @@ async function boot() {
   applyTelegramChrome(tg);
   applyThemeVariant(tg);
 
-  /** Инлайн SVG — орнамент и герб наследуют `color` и тему мини‑аппа. */
-  const heroWaveSvg = `<svg class="hero-scene__wave-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 96" fill="none" aria-hidden="true"><path d="M0 88V52c28-18 72-42 118-28 32 10 52 8 78-6 18-10 38-14 58-10 24 4 46 18 66 36 14 12 28 22 40 28v16H0Z" fill="currentColor" fill-opacity="0.08"/><path d="M0 72c32-22 78-48 124-32 30 10 48 6 72-8 22-14 48-20 74-14 26 6 50 22 70 42" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M268 58 292 28l20 36 44-22" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
-
   const initData = tg.initData;
   if (!initData) {
     showError("Нет initData. Откройте через кнопку бота /start.");
@@ -635,10 +632,6 @@ async function boot() {
 
   const head = el(
     `<div class="card card--hero card--hero-scene">
-      <div class="hero-scene__header" aria-hidden="true">
-        <div class="hero-scene__bar"></div>
-        <div class="hero-scene__vl">VL</div>
-      </div>
       <div class="hero-scene__content">
         <div class="brand brand--center">
           <div class="brand-mark brand-mark--center" aria-hidden="true">
@@ -648,7 +641,6 @@ async function boot() {
           <div class="muted hero-tagline hero-tagline--center">Подписка и прокси в одном месте</div>
         </div>
       </div>
-      <div class="hero-scene__wave-wrap" aria-hidden="true">${heroWaveSvg}</div>
     </div>`,
   );
   root.appendChild(head);

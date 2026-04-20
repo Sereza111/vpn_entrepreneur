@@ -78,9 +78,18 @@ body.vl-wheel-layout #root {
   filter: drop-shadow(0 0 18px color-mix(in srgb, var(--app-accent) 34%, transparent));
 }
 
+.vl-mark.vl-mark--brand {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .vl-mark--brand .vl-mark__img {
   width: min(88vw, 340px);
   max-height: min(52vh, 360px);
+  margin-inline: auto;
+  display: block;
   filter: drop-shadow(0 0 22px color-mix(in srgb, var(--app-accent) 30%, transparent));
 }
 
@@ -118,61 +127,14 @@ body.vl-wheel-layout #root {
   border-color: var(--app-stroke-strong);
 }
 
-/* Герой: шапка + крупные VL + нижний орнамент — по смыслу твоего макета (раскладка), в стиле готики мини‑аппа */
+/* Герой: эмблема + заголовок + теглайн (без шапки-водяного VL и без волн внизу) */
 .card--hero-scene {
   padding: 0;
   overflow: hidden;
 }
 
-.hero-scene__header {
-  position: relative;
-  height: 72px;
-  overflow: hidden;
-}
-
-.hero-scene__bar {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 16px;
-  height: 44px;
-  background: color-mix(in srgb, #0a0a0d 72%, var(--app-bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--app-text) 12%, transparent);
-  clip-path: var(--clip-chamfer);
-  opacity: 0.92;
-}
-
-.hero-scene__vl {
-  position: absolute;
-  left: 50%;
-  top: 2px;
-  transform: translateX(-50%);
-  font-family: var(--font-gothic);
-  font-weight: 700;
-  font-size: clamp(3.5rem, 18vw, 5.25rem);
-  line-height: 1;
-  letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--app-text) 88%, transparent);
-  opacity: 0.22;
-  pointer-events: none;
-  user-select: none;
-}
-
 .hero-scene__content {
-  padding: 4px 20px 14px;
-}
-
-.hero-scene__wave-wrap {
-  margin-top: -4px;
-  padding: 0 8px 10px;
-  color: color-mix(in srgb, var(--gothic-gold) 42%, var(--app-text));
-}
-
-.hero-scene__wave-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: 88px;
+  padding: 20px 20px 18px;
 }
 
 .hero-tagline {
@@ -244,12 +206,16 @@ body.vl-wheel-layout #root {
 }
 
 .brand-mark--center {
-  width: auto;
+  width: 100%;
+  max-width: 100%;
   height: auto;
-  padding: 10px 12px;
+  padding: 8px 0 4px;
   background: transparent;
   box-shadow: none;
   clip-path: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .brand-mark--logo .vl-fleur-mark__svg {
