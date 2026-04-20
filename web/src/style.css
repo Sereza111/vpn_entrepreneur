@@ -69,7 +69,9 @@ body.vl-wheel-layout #root {
   display: grid;
   place-items: center;
   background:
-    radial-gradient(130% 90% at 50% 22%, color-mix(in srgb, var(--app-accent) 18%, transparent), transparent 52%),
+    radial-gradient(125% 95% at 50% 18%, color-mix(in srgb, var(--app-accent) 34%, transparent), transparent 46%),
+    radial-gradient(95% 75% at 20% 88%, color-mix(in srgb, #5b6cff 22%, transparent), transparent 55%),
+    radial-gradient(90% 70% at 82% 72%, color-mix(in srgb, var(--app-accent) 20%, transparent), transparent 50%),
     radial-gradient(85% 70% at 50% 100%, color-mix(in srgb, #11172b 88%, var(--app-bg)), var(--app-bg));
   transition: opacity 240ms ease, transform 240ms ease;
   overflow: hidden;
@@ -82,14 +84,32 @@ body.vl-wheel-layout #root {
     conic-gradient(
       from 220deg at 50% 50%,
       transparent 0deg,
-      color-mix(in srgb, var(--app-accent) 24%, transparent) 78deg,
+      color-mix(in srgb, var(--app-accent) 38%, transparent) 78deg,
       transparent 150deg,
-      color-mix(in srgb, #7f8fff 18%, transparent) 220deg,
+      color-mix(in srgb, #9aacff 28%, transparent) 220deg,
       transparent 320deg
     );
-  filter: blur(34px) saturate(112%);
-  opacity: 0.9;
-  animation: splashAurora 6.4s ease-in-out infinite alternate;
+  filter: blur(22px) saturate(128%);
+  opacity: 1;
+  animation: splashAurora 5.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.splash-shimmer {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  background: linear-gradient(
+    118deg,
+    transparent 0%,
+    transparent 38%,
+    color-mix(in srgb, var(--app-accent) 55%, transparent) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 240% 240%;
+  animation: splashShimmer 3.8s ease-in-out infinite;
   pointer-events: none;
 }
 
@@ -113,11 +133,16 @@ body.vl-wheel-layout #root {
 .splash-brand::before {
   content: "";
   position: absolute;
-  width: min(54vw, 220px);
-  height: min(54vw, 220px);
+  width: min(72vw, 300px);
+  height: min(72vw, 300px);
   border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--app-accent) 22%, transparent) 0%, transparent 70%);
-  filter: blur(8px);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--app-accent) 42%, transparent) 0%,
+    color-mix(in srgb, var(--app-accent) 12%, transparent) 42%,
+    transparent 72%
+  );
+  filter: blur(10px);
   animation: splashPulse 2.2s ease-in-out infinite;
   pointer-events: none;
 }
@@ -136,151 +161,108 @@ body.vl-wheel-layout #root {
 .splash-logo--mark {
   display: grid;
   place-items: center;
+  width: min(78vw, 300px);
+  height: min(78vw, 300px);
+  max-width: 100%;
+  animation: none;
+  opacity: 1;
+  filter: none;
 }
 
-/* Орнамент (artist SVG) — вставляем реальный <svg> и кадрируем через overflow + transform */
-.vl-ornate {
+/* Знак VL — один PNG, без кропа Illustrator-артборда */
+.vl-mark {
   display: grid;
   place-items: center;
-  --vl-ornate-s: 2.18;
-  --vl-ornate-tx: -2%;
-  --vl-ornate-ty: 10%;
-}
-
-.vl-ornate__viewport {
-  overflow: hidden;
-  line-height: 0;
-  border-radius: 14px;
-  width: min(62vw, 240px);
-  height: min(62vw, 240px);
-  position: relative;
-}
-
-.vl-ornate__anchor {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-}
-
-.vl-ornate__pan {
   width: 100%;
   height: 100%;
-  transform: translate3d(var(--vl-ornate-tx), var(--vl-ornate-ty), 0) scale(var(--vl-ornate-s));
-  transform-origin: 50% 50%;
-  will-change: transform, filter;
 }
 
-.vl-ornate__mount,
-.vl-ornate__mount svg {
+.vl-mark__img {
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
   display: block;
-}
-
-.vl-ornate__mount svg {
   filter:
     invert(1)
-    drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 22%, transparent));
-  opacity: 0.98;
+    drop-shadow(0 0 28px color-mix(in srgb, var(--app-accent) 26%, transparent));
 }
 
-.vl-ornate--brand .vl-ornate__viewport {
-  width: min(86vw, 320px);
-  height: min(86vw, 320px);
-  border-radius: 18px;
+.vl-mark--brand .vl-mark__img {
+  width: min(88vw, 340px);
+  max-height: min(52vh, 360px);
+  filter:
+    invert(1)
+    drop-shadow(0 0 22px color-mix(in srgb, var(--app-accent) 22%, transparent));
 }
 
-.vl-ornate--brand {
-  --vl-ornate-s: 2.95;
-  --vl-ornate-tx: -2%;
-  --vl-ornate-ty: 10%;
+.vl-mark--animate .vl-mark__img {
+  animation: vlMarkSplashIn 1.75s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+  will-change: transform, opacity, filter;
 }
 
-.vl-ornate--animate .vl-ornate__viewport {
-  animation: vlOrnateReveal 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
-  will-change: clip-path, transform, opacity;
-}
-
-.vl-ornate--animate .vl-ornate__pan {
-  animation: vlOrnateSettle 1.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
-  will-change: transform, filter;
-}
-
-@keyframes vlOrnateReveal {
-  from {
-    clip-path: inset(100% 12% 0 12%);
-    transform: scale(0.92);
+@keyframes vlMarkSplashIn {
+  0% {
     opacity: 0;
+    transform: scale(0.86) translateY(22px);
+    filter:
+      invert(1)
+      brightness(0.72)
+      blur(10px)
+      drop-shadow(0 0 6px transparent);
   }
-  to {
-    clip-path: inset(0 0 0 0);
-    transform: scale(1);
+  58% {
     opacity: 1;
-  }
-}
-
-@keyframes vlFleurSettle {
-  0% {
-    transform: translateY(10px) scale(0.92);
-    filter: brightness(0.75) blur(1px);
-  }
-  55% {
-    transform: translateY(0) scale(1.04);
-    filter: brightness(1.05) blur(0);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-    filter: brightness(1) blur(0);
-  }
-}
-
-@keyframes vlOrnateSettle {
-  0% {
-    transform: translateY(14px) scale(0.94);
+    transform: scale(1.05) translateY(0);
     filter:
       invert(1)
-      brightness(0.82)
-      blur(1.2px)
-      drop-shadow(0 0 10px transparent);
-  }
-  55% {
-    transform: translateY(0) scale(1.03);
-    filter:
-      invert(1)
-      brightness(1.05)
+      brightness(1.08)
       blur(0)
-      drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 24%, transparent));
+      drop-shadow(0 0 36px color-mix(in srgb, var(--app-accent) 34%, transparent));
   }
   100% {
-    transform: translateY(0) scale(1);
+    opacity: 1;
+    transform: scale(1) translateY(0);
     filter:
       invert(1)
       brightness(1)
       blur(0)
-      drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 22%, transparent));
+      drop-shadow(0 0 30px color-mix(in srgb, var(--app-accent) 24%, transparent));
+  }
+}
+
+@keyframes splashShimmer {
+  0% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+  100% {
+    background-position: 0% 40%;
   }
 }
 
 @keyframes splashAurora {
   0% {
-    transform: translate3d(-3%, -2%, 0) scale(1) rotate(0deg);
-    opacity: 0.78;
+    transform: translate3d(-5%, -3%, 0) scale(1) rotate(0deg);
+    opacity: 0.88;
   }
   100% {
-    transform: translate3d(4%, 2%, 0) scale(1.08) rotate(12deg);
+    transform: translate3d(6%, 4%, 0) scale(1.12) rotate(14deg);
     opacity: 1;
   }
 }
 
 @keyframes splashPulse {
   0%, 100% {
-    transform: scale(0.92);
-    opacity: 0.45;
+    transform: scale(0.9);
+    opacity: 0.55;
   }
   50% {
-    transform: scale(1.08);
-    opacity: 0.82;
+    transform: scale(1.12);
+    opacity: 0.95;
   }
 }
 
@@ -1481,8 +1463,12 @@ body.vl-wheel-layout .toast {
 @media (prefers-reduced-motion: reduce) {
   .card { animation: none; }
   .splash-bg,
+  .splash-shimmer,
   .splash-brand::before {
     animation: none !important;
+  }
+  .splash-shimmer {
+    opacity: 0.18;
   }
   .splash-logo {
     animation: none;
@@ -1490,14 +1476,12 @@ body.vl-wheel-layout .toast {
     transform: none;
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
   }
-  .vl-ornate--animate .vl-ornate__viewport,
-  .vl-ornate--animate .vl-ornate__pan {
+  .vl-mark--animate .vl-mark__img {
     animation: none !important;
-    clip-path: none !important;
-    filter: none !important;
     opacity: 1 !important;
+    transform: none !important;
+    filter: invert(1) drop-shadow(0 0 14px color-mix(in srgb, var(--app-accent) 18%, transparent)) !important;
   }
-  .vl-ornate__mount svg { filter: invert(1) !important; }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
   .wheel-dock__btn {
