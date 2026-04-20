@@ -1,10 +1,20 @@
 import "./style.css";
+import vlFramesSvg from "./branding/vl-frames.svg?raw";
 
 const root = document.getElementById("root");
-const SPLASH_MIN_DURATION_MS = 2200;
+const SPLASH_MIN_DURATION_MS = 2600;
+const SPLASH_ANIMATION_MS = 2600;
 
 function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function prefersReducedMotion() {
+  try {
+    return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch {
+    return false;
+  }
 }
 
 function escAttr(s) {
@@ -15,39 +25,15 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
-/** Инлайн SVG fleur-de-lis для сплэша и шапки. */
 function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
-  const base = variant === "brand" ? "vl-fleur-mark vl-fleur-mark--brand" : "vl-fleur-mark vl-fleur-mark--splash";
+  const base =
+    variant === "brand"
+      ? "vl-fleur-mark vl-fleur-mark--brand"
+      : "vl-fleur-mark vl-fleur-mark--splash";
   const cls = animate ? `${base} vl-fleur-mark--animate` : base;
-  return `<div class="${cls}" aria-hidden="true">
-  <div class="vl-fleur-mark__inner">
-    <svg class="vl-fleur-mark__svg" viewBox="0 0 128 128" role="img" aria-label="VL fleur">
-      <path
-        class="vl-fleur-core"
-        d="M64 17c-10 13-15 24-15 35 0 10 5 18 15 27 10-9 15-17 15-27 0-11-5-22-15-35Zm-11 73c3-2 7-3 11-3 4 0 8 1 11 3 0 6-5 10-11 10-6 0-11-4-11-10Z"
-      />
-      <path
-        class="vl-fleur-stroke vl-fleur-stroke--center"
-        style="--len: 160"
-        d="M64 14c-13 14-21 28-21 41 0 14 7 25 21 37 14-12 21-23 21-37 0-13-8-27-21-41Z"
-      />
-      <path
-        class="vl-fleur-stroke vl-fleur-stroke--left"
-        style="--len: 180"
-        d="M64 71c-8-10-17-16-27-16-11 0-19 6-23 15-2 5-2 10-1 16h35c1-7 6-12 16-15Zm-16 15c-5 0-9 2-12 5"
-      />
-      <path
-        class="vl-fleur-stroke vl-fleur-stroke--right"
-        style="--len: 180"
-        d="M64 71c8-10 17-16 27-16 11 0 19 6 23 15 2 5 2 10 1 16H80c-1-7-6-12-16-15Zm16 15c5 0 9 2 12 5"
-      />
-      <path
-        class="vl-fleur-stroke vl-fleur-stroke--base"
-        style="--len: 170"
-        d="M46 85c1 8 7 13 18 14 11-1 17-6 18-14m-36 0c-2 7-6 12-14 15 6 2 12 2 18-1m32-14c2 7 6 12 14 15-6 2-12 2-18-1m-37 7c2 6 7 11 13 13m15-13c-2 6-7 11-13 13m-11-20h22"
-      />
-    </svg>
-  </div>
+  const mode = variant === "brand" ? "final" : "frames";
+  return `<div class="${cls}" data-vl-logo="${mode}" aria-hidden="true">
+  <div class="vl-fleur-mark__inner">${vlFramesSvg}</div>
 </div>`;
 }
 
@@ -623,11 +609,11 @@ async function boot() {
     return;
   }
 
-  // Сплэш обязан отыграться даже при очень быстром API.
+  // Сплэш обязан отыграться даже при очень быстром API + дождаться анимации.
   const elapsed = performance.now() - splashStartedAt;
-  if (elapsed < SPLASH_MIN_DURATION_MS) {
-    await waitMs(SPLASH_MIN_DURATION_MS - elapsed);
-  }
+  const minGate = elapsed < SPLASH_MIN_DURATION_MS ? waitMs(SPLASH_MIN_DURATION_MS - elapsed) : Promise.resolve();
+  const animGate = prefersReducedMotion() ? Promise.resolve() : waitMs(SPLASH_ANIMATION_MS);
+  await Promise.all([minGate, animGate]);
 
   // Remove splash smoothly
   const sp = document.getElementById("splash");

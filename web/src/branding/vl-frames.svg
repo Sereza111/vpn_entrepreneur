@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 192">
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Frame 1: center spear -->
+    <g class="vl-frame vl-frame--1" stroke-width="2.2">
+      <path class="vl-stroke" style="--len:120" d="M80 18c-14 16-22 34-22 50 0 18 8 31 22 44 14-13 22-26 22-44 0-16-8-34-22-50Z"/>
+      <path class="vl-stroke" style="--len:72" d="M80 30c-8 11-12 22-12 32 0 11 4 20 12 28 8-8 12-17 12-28 0-10-4-21-12-32Z"/>
+    </g>
+
+    <!-- Frame 2: left wing -->
+    <g class="vl-frame vl-frame--2" stroke-width="2.1">
+      <path class="vl-stroke" style="--len:150" d="M80 76c-10-12-22-19-35-19-14 0-25 8-30 20-3 8-3 16-2 25h44c1-9 8-16 23-21Z"/>
+      <path class="vl-stroke" style="--len:64" d="M48 102c4-7 11-12 20-14"/>
+    </g>
+
+    <!-- Frame 3: right wing -->
+    <g class="vl-frame vl-frame--3" stroke-width="2.1">
+      <path class="vl-stroke" style="--len:150" d="M80 76c10-12 22-19 35-19 14 0 25 8 30 20 3 8 3 16 2 25H103c-1-9-8-16-23-21Z"/>
+      <path class="vl-stroke" style="--len:64" d="M112 102c-4-7-11-12-20-14"/>
+    </g>
+
+    <!-- Frame 4: base + monogram -->
+    <g class="vl-frame vl-frame--4" stroke-width="2.15">
+      <path class="vl-stroke" style="--len:150" d="M56 102c2 12 12 20 24 20s22-8 24-20"/>
+      <path class="vl-stroke" style="--len:120" d="M44 126h72"/>
+      <path class="vl-stroke" style="--len:86" d="M63 126c2 9 8 16 17 18 9-2 15-9 17-18"/>
+      <path class="vl-stroke" style="--len:110" d="M50 166l18-26 12 18 12-18 18 26"/>
+      <path class="vl-stroke" style="--len:90" d="M54 166h52"/>
+    </g>
+  </g>
+</svg>
+
