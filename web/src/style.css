@@ -104,7 +104,7 @@ body.vl-wheel-layout #root {
   place-items: center;
 }
 
-/* Герб PNG: раскрытие снизу вверх + лёгкий «посадка» (сплэш) */
+/* Герб SVG: отрисовка контура + мягкое заполнение (сплэш) */
 .vl-fleur-mark {
   display: grid;
   place-items: center;
@@ -116,20 +116,50 @@ body.vl-wheel-layout #root {
   border-radius: 10px;
 }
 
-.vl-fleur-mark--splash .vl-fleur-mark__img {
+.vl-fleur-mark__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: color-mix(in srgb, var(--app-text) 88%, #fff);
+}
+
+.vl-fleur-mark__svg path {
+  vector-effect: non-scaling-stroke;
+}
+
+.vl-fleur-core {
+  fill: currentColor;
+  opacity: 0.14;
+}
+
+.vl-fleur-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.vl-fleur-mark--splash .vl-fleur-mark__svg {
   display: block;
   width: min(44vw, 152px);
   height: auto;
   max-height: min(44vw, 152px);
-  object-fit: contain;
 }
 
-.vl-fleur-mark--brand .vl-fleur-mark__img {
+.vl-fleur-mark--brand .vl-fleur-mark__svg {
   display: block;
   width: 100%;
   max-height: 38px;
   height: auto;
-  object-fit: contain;
+}
+
+.vl-fleur-mark--brand .vl-fleur-core {
+  opacity: 0.22;
+}
+
+.vl-fleur-mark--brand .vl-fleur-stroke {
+  stroke-width: 2.05;
 }
 
 .vl-fleur-mark--animate .vl-fleur-mark__inner {
@@ -137,10 +167,26 @@ body.vl-wheel-layout #root {
   will-change: clip-path, transform;
 }
 
-.vl-fleur-mark--animate .vl-fleur-mark__img {
+.vl-fleur-mark--animate .vl-fleur-mark__svg {
   animation: vlFleurSettle 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
   will-change: transform, filter;
 }
+
+.vl-fleur-mark--animate .vl-fleur-core {
+  opacity: 0;
+  animation: vlFleurCoreIn 780ms ease-out 0.72s forwards;
+}
+
+.vl-fleur-mark--animate .vl-fleur-stroke {
+  stroke-dasharray: var(--len, 160);
+  stroke-dashoffset: var(--len, 160);
+  animation: vlFleurDraw 980ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.vl-fleur-mark--animate .vl-fleur-stroke--left { animation-delay: 0.16s; }
+.vl-fleur-mark--animate .vl-fleur-stroke--right { animation-delay: 0.28s; }
+.vl-fleur-mark--animate .vl-fleur-stroke--center { animation-delay: 0.02s; }
+.vl-fleur-mark--animate .vl-fleur-stroke--base { animation-delay: 0.42s; }
 
 @keyframes vlFleurReveal {
   from {
@@ -150,6 +196,31 @@ body.vl-wheel-layout #root {
   to {
     clip-path: inset(0 0 0 0);
     transform: scale(1);
+  }
+}
+
+@keyframes vlFleurDraw {
+  0% {
+    stroke-dashoffset: var(--len, 160);
+    opacity: 0.7;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes vlFleurCoreIn {
+  0% {
+    opacity: 0;
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 0.2;
+    filter: blur(0);
   }
 }
 
@@ -1324,11 +1395,15 @@ body.vl-wheel-layout .toast {
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
   }
   .vl-fleur-mark--animate .vl-fleur-mark__inner,
-  .vl-fleur-mark--animate .vl-fleur-mark__img {
+  .vl-fleur-mark--animate .vl-fleur-mark__svg,
+  .vl-fleur-mark--animate .vl-fleur-stroke,
+  .vl-fleur-mark--animate .vl-fleur-core {
     animation: none !important;
     clip-path: none !important;
     transform: none !important;
     filter: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
   }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }

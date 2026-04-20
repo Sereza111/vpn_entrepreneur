@@ -10,21 +10,42 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
-function vlBrandingPngUrl() {
-  return `${import.meta.env.BASE_URL}branding/vl-fleur.png`;
-}
-
 /**
- * Логотип из `web/public/branding/vl-fleur.png` — форма как в бренде.
- * На сплэше `animate: true` включает CSS-раскрытие (см. `.vl-fleur-mark--animate`).
+ * Инлайн SVG fleur-de-lis:
+ * - на сплэше рисуется по контуру и мягко заполняется;
+ * - в шапке показывается как статичный знак.
  */
 function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
-  const url = escAttr(vlBrandingPngUrl());
   const base = variant === "brand" ? "vl-fleur-mark vl-fleur-mark--brand" : "vl-fleur-mark vl-fleur-mark--splash";
   const cls = animate ? `${base} vl-fleur-mark--animate` : base;
   return `<div class="${cls}" aria-hidden="true">
   <div class="vl-fleur-mark__inner">
-    <img class="vl-fleur-mark__img" src="${url}" alt="" width="160" height="160" decoding="async" fetchpriority="high" />
+    <svg class="vl-fleur-mark__svg" viewBox="0 0 128 128" role="img" aria-label="VL fleur">
+      <path
+        class="vl-fleur-core"
+        d="M64 22c-10 11-15 23-15 34 0 11 6 20 15 28 9-8 15-17 15-28 0-11-5-23-15-34Zm-36 61c0-13 11-23 25-23 7 0 14 3 19 9-4 4-7 8-8 12-8 0-14 5-14 12h-22c0-3 0-6 0-10Zm72 0c0-13-11-23-25-23-7 0-14 3-19 9 4 4 7 8 8 12 8 0 14 5 14 12h22c0-3 0-6 0-10Zm-44 3c-6 0-11 5-11 11 0 6 5 11 11 11h16c6 0 11-5 11-11 0-6-5-11-11-11H56Zm8 8c-5 0-9 4-9 9 0 5 4 9 9 9s9-4 9-9c0-5-4-9-9-9Z"
+      />
+      <path
+        class="vl-fleur-stroke vl-fleur-stroke--center"
+        style="--len: 180"
+        d="M64 14c-14 14-22 30-22 44 0 14 8 25 22 36 14-11 22-22 22-36 0-14-8-30-22-44Z"
+      />
+      <path
+        class="vl-fleur-stroke vl-fleur-stroke--left"
+        style="--len: 190"
+        d="M24 92c0-18 13-31 31-31 9 0 17 3 23 11m-54 20h26c0-9 6-15 14-15m-34-2c-5-4-8-10-8-16 0-13 10-23 24-23 8 0 14 3 18 9"
+      />
+      <path
+        class="vl-fleur-stroke vl-fleur-stroke--right"
+        style="--len: 190"
+        d="M104 92c0-18-13-31-31-31-9 0-17 3-23 11m54 20H78c0-9-6-15-14-15m34-2c5-4 8-10 8-16 0-13-10-23-24-23-8 0-14 3-18 9"
+      />
+      <path
+        class="vl-fleur-stroke vl-fleur-stroke--base"
+        style="--len: 130"
+        d="M45 92c0 12 8 22 19 22s19-10 19-22M39 108h50M52 100c0 5-3 10-8 12m32-12c0 5 3 10 8 12"
+      />
+    </svg>
   </div>
 </div>`;
 }
