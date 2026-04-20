@@ -138,10 +138,13 @@ body.vl-wheel-layout #root {
   place-items: center;
 }
 
-/* Орнамент (artist SVG) — показываем нужный фрагмент через viewport crop */
+/* Орнамент (artist SVG) — вставляем реальный <svg> и кадрируем через overflow + transform */
 .vl-ornate {
   display: grid;
   place-items: center;
+  --vl-ornate-s: 2.18;
+  --vl-ornate-tx: -2%;
+  --vl-ornate-ty: 10%;
 }
 
 .vl-ornate__viewport {
@@ -150,17 +153,32 @@ body.vl-wheel-layout #root {
   border-radius: 14px;
   width: min(62vw, 240px);
   height: min(62vw, 240px);
+  position: relative;
+}
+
+.vl-ornate__anchor {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
 }
 
-.vl-ornate__img {
-  width: 520px;
-  height: 520px;
-  object-fit: none;
-  /* Позиция подобрана под блок «лилия + VL» в Illustrator SVG.
-     Если нужно сдвинуть — меняем проценты. */
-  object-position: 50% 74%;
+.vl-ornate__pan {
+  width: 100%;
+  height: 100%;
+  transform: translate3d(var(--vl-ornate-tx), var(--vl-ornate-ty), 0) scale(var(--vl-ornate-s));
+  transform-origin: 50% 50%;
+  will-change: transform, filter;
+}
+
+.vl-ornate__mount,
+.vl-ornate__mount svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.vl-ornate__mount svg {
   filter:
     invert(1)
     drop-shadow(0 0 34px color-mix(in srgb, var(--app-accent) 22%, transparent));
@@ -173,10 +191,10 @@ body.vl-wheel-layout #root {
   border-radius: 18px;
 }
 
-.vl-ornate--brand .vl-ornate__img {
-  width: 720px;
-  height: 720px;
-  object-position: 50% 74%;
+.vl-ornate--brand {
+  --vl-ornate-s: 2.95;
+  --vl-ornate-tx: -2%;
+  --vl-ornate-ty: 10%;
 }
 
 .vl-ornate--animate .vl-ornate__viewport {
@@ -184,7 +202,7 @@ body.vl-wheel-layout #root {
   will-change: clip-path, transform, opacity;
 }
 
-.vl-ornate--animate .vl-ornate__img {
+.vl-ornate--animate .vl-ornate__pan {
   animation: vlOrnateSettle 1.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
   will-change: transform, filter;
 }
@@ -1473,14 +1491,13 @@ body.vl-wheel-layout .toast {
     filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
   }
   .vl-ornate--animate .vl-ornate__viewport,
-  .vl-ornate--animate .vl-ornate__img {
+  .vl-ornate--animate .vl-ornate__pan {
     animation: none !important;
     clip-path: none !important;
-    transform: none !important;
     filter: none !important;
     opacity: 1 !important;
   }
-  .vl-ornate__img { filter: invert(1) !important; }
+  .vl-ornate__mount svg { filter: invert(1) !important; }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
   .wheel-dock__btn {

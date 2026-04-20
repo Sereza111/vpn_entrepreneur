@@ -7,6 +7,37 @@ const root = document.getElementById("root");
 const SPLASH_MIN_DURATION_MS = 2600;
 const SPLASH_ANIMATION_MS = 2600;
 
+let ornateSvgTextPromise = null;
+function loadOrnateSvgText() {
+  if (!ornateSvgTextPromise) {
+    ornateSvgTextPromise = fetch(ornateSvgUrl(), { cache: "force-cache" }).then(async (r) => {
+      if (!r.ok) throw new Error(`ornate_svg_${r.status}`);
+      return await r.text();
+    });
+  }
+  return ornateSvgTextPromise;
+}
+
+async function hydrateOrnateSvgs(rootEl = document) {
+  const nodes = rootEl.querySelectorAll?.(".vl-ornate__mount") || [];
+  if (!nodes.length) return;
+  const svgText = await loadOrnateSvgText();
+  const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+  const imported = doc.documentElement;
+  if (!imported || imported.querySelector("parsererror")) {
+    throw new Error("ornate_svg_parse_failed");
+  }
+  for (const mount of nodes) {
+    const svg = imported.cloneNode(true);
+    svg.removeAttribute("width");
+    svg.removeAttribute("height");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    mount.replaceChildren(svg);
+  }
+}
+
+void loadOrnateSvgText();
+
 function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
@@ -33,10 +64,13 @@ function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
       ? "vl-ornate vl-ornate--brand"
       : "vl-ornate vl-ornate--splash";
   const cls = animate ? `${base} vl-ornate--animate` : base;
-  const url = escAttr(ornateSvgUrl());
   return `<div class="${cls}" aria-hidden="true">
     <div class="vl-ornate__viewport">
-      <img class="vl-ornate__img" src="${url}" alt="" decoding="async" />
+      <div class="vl-ornate__anchor">
+        <div class="vl-ornate__pan">
+          <div class="vl-ornate__mount"></div>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -572,6 +606,11 @@ async function boot() {
   `);
   document.body.appendChild(splash);
   const splashStartedAt = performance.now();
+  try {
+    await hydrateOrnateSvgs(splash);
+  } catch {
+    // Если SVG не подтянулся — оставим пустой mount, приложение всё равно должно работать.
+  }
   root.innerHTML = `
       <div class="card">
         <div class="skeleton s1"></div>
@@ -705,6 +744,11 @@ async function boot() {
     </div>`,
   );
   root.appendChild(head);
+  try {
+    await hydrateOrnateSvgs(root);
+  } catch {
+    // ignore
+  }
 
   if (!hasAccount) {
     root.appendChild(
