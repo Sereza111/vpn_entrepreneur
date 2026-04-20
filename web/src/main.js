@@ -4,20 +4,6 @@ function markPngUrl() {
 }
 
 const root = document.getElementById("root");
-const SPLASH_MIN_DURATION_MS = 2600;
-const SPLASH_ANIMATION_MS = 2200;
-
-function waitMs(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
-}
-
-function prefersReducedMotion() {
-  try {
-    return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  } catch {
-    return false;
-  }
-}
 
 function escAttr(s) {
   return String(s ?? "")
@@ -27,11 +13,9 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
-function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
-  const base = variant === "brand" ? "vl-mark vl-mark--brand" : "vl-mark vl-mark--splash";
-  const cls = animate ? `${base} vl-mark--animate` : base;
+function vlMarkHeroBlock() {
   const url = escAttr(markPngUrl());
-  return `<div class="${cls}" aria-hidden="true">
+  return `<div class="vl-mark vl-mark--brand" aria-hidden="true">
     <img class="vl-mark__img" src="${url}" alt="" decoding="async" />
   </div>`;
 }
@@ -554,20 +538,6 @@ async function boot() {
     return;
   }
 
-  const splash = el(`
-    <div class="splash" id="splash">
-      <div class="splash-bg" aria-hidden="true"></div>
-      <div class="splash-shimmer" aria-hidden="true"></div>
-      <div class="splash-simple">
-        <div class="splash-brand" aria-hidden="true">
-          <div class="splash-logo splash-logo--mark">${vlFleurLogoBlock({ animate: true, variant: "splash" })}</div>
-        </div>
-        <div class="splash-hint" id="splashHint">Подключение…</div>
-      </div>
-    </div>
-  `);
-  document.body.appendChild(splash);
-  const splashStartedAt = performance.now();
   root.innerHTML = `
       <div class="card">
         <div class="skeleton s1"></div>
@@ -582,8 +552,6 @@ async function boot() {
 
   let token;
   try {
-    const hint = document.getElementById("splashHint");
-    if (hint) hint.textContent = "Авторизация…";
     const auth = await api("/api/auth/telegram", {
       method: "POST",
       body: JSON.stringify({ initData }),
@@ -591,35 +559,18 @@ async function boot() {
     token = auth.token;
     window.__vlToken = token;
   } catch (e) {
-    document.getElementById("splash")?.remove();
     showError("Авторизация: " + e.message);
     return;
   }
 
   let me;
   try {
-    const hint = document.getElementById("splashHint");
-    if (hint) hint.textContent = "Получаем данные…";
     me = await api("/api/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (e) {
-    document.getElementById("splash")?.remove();
     showError("Профиль: " + e.message);
     return;
-  }
-
-  // Сплэш обязан отыграться даже при очень быстром API + дождаться анимации.
-  const elapsed = performance.now() - splashStartedAt;
-  const minGate = elapsed < SPLASH_MIN_DURATION_MS ? waitMs(SPLASH_MIN_DURATION_MS - elapsed) : Promise.resolve();
-  const animGate = prefersReducedMotion() ? Promise.resolve() : waitMs(SPLASH_ANIMATION_MS);
-  await Promise.all([minGate, animGate]);
-
-  // Remove splash smoothly
-  const sp = document.getElementById("splash");
-  if (sp) {
-    sp.classList.add("is-hidden");
-    setTimeout(() => sp.remove(), 260);
   }
 
   const u = null;
@@ -691,7 +642,7 @@ async function boot() {
       <div class="hero-scene__content">
         <div class="brand brand--center">
           <div class="brand-mark brand-mark--center" aria-hidden="true">
-            ${vlFleurLogoBlock({ animate: false, variant: "brand" })}
+            ${vlMarkHeroBlock()}
           </div>
           <h1 class="hero-title hero-title--center">VL</h1>
           <div class="muted hero-tagline hero-tagline--center">Подписка и прокси в одном месте</div>

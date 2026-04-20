@@ -61,223 +61,27 @@ body.vl-wheel-layout #root {
   margin: 0 auto;
 }
 
-/* Splash */
-.splash {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(120% 90% at 50% 12%, color-mix(in srgb, var(--app-accent) 42%, transparent), transparent 44%),
-    radial-gradient(100% 80% at 12% 75%, color-mix(in srgb, var(--app-accent) 28%, transparent), transparent 52%),
-    radial-gradient(95% 75% at 88% 65%, color-mix(in srgb, #8a9cff 26%, transparent), transparent 50%),
-    radial-gradient(140% 100% at 50% 108%, color-mix(in srgb, var(--app-bg-secondary) 72%, var(--app-bg)) 0%, var(--app-bg) 62%),
-    linear-gradient(
-      168deg,
-      color-mix(in srgb, var(--app-bg-secondary) 88%, var(--app-accent)) 0%,
-      var(--app-bg) 38%,
-      color-mix(in srgb, var(--app-bg) 70%, #1a1f33) 100%
-    );
-  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 220% 220%;
-  background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 35%;
-  animation: splashBgDrift 14s ease-in-out infinite alternate;
-  transition: opacity 240ms ease, transform 240ms ease;
-  overflow: hidden;
-}
-
-.splash-bg {
-  position: absolute;
-  inset: -24%;
-  background:
-    conic-gradient(
-      from 200deg at 50% 50%,
-      transparent 0deg,
-      color-mix(in srgb, var(--app-accent) 44%, transparent) 70deg,
-      transparent 140deg,
-      color-mix(in srgb, #b4c0ff 32%, transparent) 210deg,
-      transparent 300deg
-    );
-  filter: blur(18px) saturate(140%);
-  opacity: 1;
-  animation: splashAurora 4.8s ease-in-out infinite alternate;
-  pointer-events: none;
-}
-
-.splash-shimmer {
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: overlay;
-  opacity: 0.58;
-  background: linear-gradient(
-    122deg,
-    transparent 0%,
-    transparent 32%,
-    color-mix(in srgb, var(--app-accent) 65%, transparent) 49%,
-    color-mix(in srgb, var(--app-text) 18%, transparent) 52%,
-    transparent 68%,
-    transparent 100%
-  );
-  background-size: 260% 260%;
-  animation: splashShimmer 3.2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.splash.is-hidden {
-  opacity: 0;
-  transform: translateY(-6px);
-  pointer-events: none;
-}
-
-.splash-simple {
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-
-@keyframes splashBgDrift {
-  0% {
-    background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 30%;
-  }
-  100% {
-    background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 100% 70%;
-  }
-}
-
-.splash-brand {
-  display: grid;
-  place-items: center;
-  margin-bottom: 8px;
-  position: relative;
-}
-
-.splash-brand::before {
-  content: "";
-  position: absolute;
-  width: min(72vw, 300px);
-  height: min(72vw, 300px);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--app-accent) 42%, transparent) 0%,
-    color-mix(in srgb, var(--app-accent) 12%, transparent) 42%,
-    transparent 72%
-  );
-  filter: blur(10px);
-  animation: splashPulse 2.2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.splash-logo {
-  width: min(44vw, 152px);
-  height: auto;
-  max-height: min(44vw, 152px);
-  object-fit: contain;
-  display: block;
-  filter: drop-shadow(0 0 28px color-mix(in srgb, var(--app-text) 25%, transparent));
-  animation: splashLogoIn 880ms ease-out forwards;
-  opacity: 0;
-}
-
-.splash-logo--mark {
-  display: grid;
-  place-items: center;
-  width: min(78vw, 300px);
-  height: min(78vw, 300px);
-  max-width: 100%;
-  animation: none;
-  opacity: 1;
-  filter: none;
-}
-
-/* Знак VL — PNG «чёрное на белом»: только invert → белое на чёрной плашке (уёбищно).
-   invert + screen: после инверта тёмные пиксели = бывший белый фон → screen с фоном даёт «прозрачность»,
-   светлые штрихи остаются читаемыми на тёмной карточке и на сплэше. */
+/* Знак VL — PNG с альфой (см. web/scripts/make-vl-mark-transparent.py); без invert/screen — нет «квадрата». */
 .vl-mark {
   display: grid;
   place-items: center;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
 }
 
 .vl-mark__img {
-  width: 100%;
+  width: min(88vw, 320px);
   height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  max-height: min(52vh, 380px);
   object-fit: contain;
   display: block;
-  mix-blend-mode: screen;
-  filter: invert(1)
-    drop-shadow(0 0 1px color-mix(in srgb, var(--app-text) 28%, transparent))
-    drop-shadow(0 0 24px color-mix(in srgb, var(--app-accent) 42%, transparent));
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--app-accent) 34%, transparent));
 }
 
 .vl-mark--brand .vl-mark__img {
   width: min(88vw, 340px);
   max-height: min(52vh, 360px);
-  filter: invert(1)
-    drop-shadow(0 0 1px color-mix(in srgb, var(--app-text) 22%, transparent))
-    drop-shadow(0 0 22px color-mix(in srgb, var(--app-accent) 36%, transparent));
-}
-
-.vl-mark--animate .vl-mark__img {
-  animation: vlMarkSplashIn 1.75s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
-  will-change: transform, opacity, filter;
-}
-
-@keyframes vlMarkSplashIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.86) translateY(22px);
-    filter: invert(1) brightness(0.78) blur(10px) drop-shadow(0 0 4px transparent);
-  }
-  58% {
-    opacity: 1;
-    transform: scale(1.05) translateY(0);
-    filter: invert(1) brightness(1.1) blur(0)
-      drop-shadow(0 0 40px color-mix(in srgb, var(--app-accent) 44%, transparent));
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: invert(1) brightness(1.05) blur(0)
-      drop-shadow(0 0 28px color-mix(in srgb, var(--app-accent) 32%, transparent));
-  }
-}
-
-@keyframes splashShimmer {
-  0% {
-    background-position: 0% 40%;
-  }
-  50% {
-    background-position: 100% 60%;
-  }
-  100% {
-    background-position: 0% 40%;
-  }
-}
-
-@keyframes splashAurora {
-  0% {
-    transform: translate3d(-5%, -3%, 0) scale(1) rotate(0deg);
-    opacity: 0.88;
-  }
-  100% {
-    transform: translate3d(6%, 4%, 0) scale(1.12) rotate(14deg);
-    opacity: 1;
-  }
-}
-
-@keyframes splashPulse {
-  0%, 100% {
-    transform: scale(0.9);
-    opacity: 0.55;
-  }
-  50% {
-    transform: scale(1.12);
-    opacity: 0.95;
-  }
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--app-accent) 30%, transparent));
 }
 
 @keyframes brandMarkBreathe {
@@ -289,14 +93,6 @@ body.vl-wheel-layout #root {
     transform: scale(1.04);
     opacity: 1;
   }
-}
-
-.splash-hint {
-  margin-top: 12px;
-  color: var(--app-hint);
-  font-size: 1rem;
-  font-family: var(--font-body);
-  text-shadow: 0 0 18px color-mix(in srgb, var(--app-accent) 22%, transparent);
 }
 
 /* Cards */
@@ -1461,45 +1257,8 @@ body.vl-wheel-layout .toast {
   }
 }
 
-@keyframes splashLogoIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.9);
-    filter: drop-shadow(0 0 8px transparent) blur(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-    filter: drop-shadow(0 0 28px color-mix(in srgb, var(--app-text) 22%, transparent)) blur(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card { animation: none; }
-  .splash {
-    animation: none !important;
-    background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 50% 50% !important;
-  }
-  .splash-bg,
-  .splash-shimmer,
-  .splash-brand::before {
-    animation: none !important;
-  }
-  .splash-shimmer {
-    opacity: 0.18;
-  }
-  .splash-logo {
-    animation: none;
-    opacity: 1;
-    transform: none;
-    filter: drop-shadow(0 0 12px color-mix(in srgb, var(--app-text) 15%, transparent));
-  }
-  .vl-mark--animate .vl-mark__img {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-    filter: invert(1) drop-shadow(0 0 18px color-mix(in srgb, var(--app-accent) 26%, transparent)) !important;
-  }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }
   .wheel-dock__btn {
