@@ -68,8 +68,29 @@ body.vl-wheel-layout #root {
   z-index: 50;
   display: grid;
   place-items: center;
-  background: var(--app-bg);
+  background:
+    radial-gradient(130% 90% at 50% 22%, color-mix(in srgb, var(--app-accent) 18%, transparent), transparent 52%),
+    radial-gradient(85% 70% at 50% 100%, color-mix(in srgb, #11172b 88%, var(--app-bg)), var(--app-bg));
   transition: opacity 240ms ease, transform 240ms ease;
+  overflow: hidden;
+}
+
+.splash-bg {
+  position: absolute;
+  inset: -24%;
+  background:
+    conic-gradient(
+      from 220deg at 50% 50%,
+      transparent 0deg,
+      color-mix(in srgb, var(--app-accent) 24%, transparent) 78deg,
+      transparent 150deg,
+      color-mix(in srgb, #7f8fff 18%, transparent) 220deg,
+      transparent 320deg
+    );
+  filter: blur(34px) saturate(112%);
+  opacity: 0.9;
+  animation: splashAurora 6.4s ease-in-out infinite alternate;
+  pointer-events: none;
 }
 
 .splash.is-hidden {
@@ -86,6 +107,19 @@ body.vl-wheel-layout #root {
   display: grid;
   place-items: center;
   margin-bottom: 8px;
+  position: relative;
+}
+
+.splash-brand::before {
+  content: "";
+  position: absolute;
+  width: min(54vw, 220px);
+  height: min(54vw, 220px);
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--app-accent) 22%, transparent) 0%, transparent 70%);
+  filter: blur(8px);
+  animation: splashPulse 2.2s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .splash-logo {
@@ -129,13 +163,13 @@ body.vl-wheel-layout #root {
 
 .vl-fleur-core {
   fill: currentColor;
-  opacity: 0.14;
+  opacity: 0.16;
 }
 
 .vl-fleur-stroke {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.9;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -180,7 +214,7 @@ body.vl-wheel-layout #root {
 .vl-fleur-mark--animate .vl-fleur-stroke {
   stroke-dasharray: var(--len, 160);
   stroke-dashoffset: var(--len, 160);
-  animation: vlFleurDraw 980ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: vlFleurDraw 1120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .vl-fleur-mark--animate .vl-fleur-stroke--left { animation-delay: 0.16s; }
@@ -239,11 +273,45 @@ body.vl-wheel-layout #root {
   }
 }
 
+@keyframes splashAurora {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1) rotate(0deg);
+    opacity: 0.78;
+  }
+  100% {
+    transform: translate3d(4%, 2%, 0) scale(1.08) rotate(12deg);
+    opacity: 1;
+  }
+}
+
+@keyframes splashPulse {
+  0%, 100% {
+    transform: scale(0.92);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.82;
+  }
+}
+
+@keyframes brandMarkBreathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
 .splash-hint {
   margin-top: 12px;
   color: var(--app-hint);
   font-size: 1rem;
   font-family: var(--font-body);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--app-accent) 22%, transparent);
 }
 
 /* Cards */
@@ -376,6 +444,11 @@ body.vl-wheel-layout #root {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--gothic-gold) 35%, transparent),
     0 6px 20px color-mix(in srgb, #000 55%, transparent);
+}
+
+.brand-mark--logo .vl-fleur-mark__svg {
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--app-accent) 24%, transparent));
+  animation: brandMarkBreathe 3.6s ease-in-out infinite;
 }
 
 .brand-mark__img {
@@ -1388,6 +1461,10 @@ body.vl-wheel-layout .toast {
 
 @media (prefers-reduced-motion: reduce) {
   .card { animation: none; }
+  .splash-bg,
+  .splash-brand::before {
+    animation: none !important;
+  }
   .splash-logo {
     animation: none;
     opacity: 1;
@@ -1404,6 +1481,9 @@ body.vl-wheel-layout .toast {
     filter: none !important;
     stroke-dashoffset: 0 !important;
     opacity: 1 !important;
+  }
+  .brand-mark--logo .vl-fleur-mark__svg {
+    animation: none !important;
   }
   .toast { transition: none; }
   .btn, .seg-btn, .plan-tile, .plan-btn, .proxy-btn { transition: none; }

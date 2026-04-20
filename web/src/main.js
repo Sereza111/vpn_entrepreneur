@@ -1,6 +1,11 @@
 import "./style.css";
 
 const root = document.getElementById("root");
+const SPLASH_MIN_DURATION_MS = 2200;
+
+function waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
 
 function escAttr(s) {
   return String(s ?? "")
@@ -10,11 +15,7 @@ function escAttr(s) {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Инлайн SVG fleur-de-lis:
- * - на сплэше рисуется по контуру и мягко заполняется;
- * - в шапке показывается как статичный знак.
- */
+/** Инлайн SVG fleur-de-lis для сплэша и шапки. */
 function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
   const base = variant === "brand" ? "vl-fleur-mark vl-fleur-mark--brand" : "vl-fleur-mark vl-fleur-mark--splash";
   const cls = animate ? `${base} vl-fleur-mark--animate` : base;
@@ -23,27 +24,27 @@ function vlFleurLogoBlock({ animate = false, variant = "splash" } = {}) {
     <svg class="vl-fleur-mark__svg" viewBox="0 0 128 128" role="img" aria-label="VL fleur">
       <path
         class="vl-fleur-core"
-        d="M64 22c-10 11-15 23-15 34 0 11 6 20 15 28 9-8 15-17 15-28 0-11-5-23-15-34Zm-36 61c0-13 11-23 25-23 7 0 14 3 19 9-4 4-7 8-8 12-8 0-14 5-14 12h-22c0-3 0-6 0-10Zm72 0c0-13-11-23-25-23-7 0-14 3-19 9 4 4 7 8 8 12 8 0 14 5 14 12h22c0-3 0-6 0-10Zm-44 3c-6 0-11 5-11 11 0 6 5 11 11 11h16c6 0 11-5 11-11 0-6-5-11-11-11H56Zm8 8c-5 0-9 4-9 9 0 5 4 9 9 9s9-4 9-9c0-5-4-9-9-9Z"
+        d="M64 17c-10 13-15 24-15 35 0 10 5 18 15 27 10-9 15-17 15-27 0-11-5-22-15-35Zm-11 73c3-2 7-3 11-3 4 0 8 1 11 3 0 6-5 10-11 10-6 0-11-4-11-10Z"
       />
       <path
         class="vl-fleur-stroke vl-fleur-stroke--center"
-        style="--len: 180"
-        d="M64 14c-14 14-22 30-22 44 0 14 8 25 22 36 14-11 22-22 22-36 0-14-8-30-22-44Z"
+        style="--len: 160"
+        d="M64 14c-13 14-21 28-21 41 0 14 7 25 21 37 14-12 21-23 21-37 0-13-8-27-21-41Z"
       />
       <path
         class="vl-fleur-stroke vl-fleur-stroke--left"
-        style="--len: 190"
-        d="M24 92c0-18 13-31 31-31 9 0 17 3 23 11m-54 20h26c0-9 6-15 14-15m-34-2c-5-4-8-10-8-16 0-13 10-23 24-23 8 0 14 3 18 9"
+        style="--len: 180"
+        d="M64 71c-8-10-17-16-27-16-11 0-19 6-23 15-2 5-2 10-1 16h35c1-7 6-12 16-15Zm-16 15c-5 0-9 2-12 5"
       />
       <path
         class="vl-fleur-stroke vl-fleur-stroke--right"
-        style="--len: 190"
-        d="M104 92c0-18-13-31-31-31-9 0-17 3-23 11m54 20H78c0-9-6-15-14-15m34-2c5-4 8-10 8-16 0-13-10-23-24-23-8 0-14 3-18 9"
+        style="--len: 180"
+        d="M64 71c8-10 17-16 27-16 11 0 19 6 23 15 2 5 2 10 1 16H80c-1-7-6-12-16-15Zm16 15c5 0 9 2 12 5"
       />
       <path
         class="vl-fleur-stroke vl-fleur-stroke--base"
-        style="--len: 130"
-        d="M45 92c0 12 8 22 19 22s19-10 19-22M39 108h50M52 100c0 5-3 10-8 12m32-12c0 5 3 10 8 12"
+        style="--len: 170"
+        d="M46 85c1 8 7 13 18 14 11-1 17-6 18-14m-36 0c-2 7-6 12-14 15 6 2 12 2 18-1m32-14c2 7 6 12 14 15-6 2-12 2-18-1m-37 7c2 6 7 11 13 13m15-13c-2 6-7 11-13 13m-11-20h22"
       />
     </svg>
   </div>
@@ -570,6 +571,7 @@ async function boot() {
 
   const splash = el(`
     <div class="splash" id="splash">
+      <div class="splash-bg" aria-hidden="true"></div>
       <div class="splash-simple">
         <div class="splash-brand" aria-hidden="true">
           <div class="splash-logo splash-logo--mark">${vlFleurLogoBlock({ animate: true, variant: "splash" })}</div>
@@ -579,6 +581,7 @@ async function boot() {
     </div>
   `);
   document.body.appendChild(splash);
+  const splashStartedAt = performance.now();
   root.innerHTML = `
       <div class="card">
         <div class="skeleton s1"></div>
@@ -618,6 +621,12 @@ async function boot() {
     document.getElementById("splash")?.remove();
     showError("Профиль: " + e.message);
     return;
+  }
+
+  // Сплэш обязан отыграться даже при очень быстром API.
+  const elapsed = performance.now() - splashStartedAt;
+  if (elapsed < SPLASH_MIN_DURATION_MS) {
+    await waitMs(SPLASH_MIN_DURATION_MS - elapsed);
   }
 
   // Remove splash smoothly
