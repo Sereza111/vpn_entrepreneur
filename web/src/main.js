@@ -986,8 +986,8 @@ async function boot() {
   }
 
   const cat = me.catalog;
-  const vpnFromNb =
-    cat?.source === "nocobase" && Array.isArray(cat.products) && cat.products.length
+  const catalogProducts =
+    Array.isArray(cat?.products) && cat.products.length
       ? [...cat.products].sort(
           (a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0),
         )
@@ -995,8 +995,8 @@ async function boot() {
   const payCfg = me.payment || {};
   const invoiceEnabled = Boolean(payCfg.telegramInvoiceEnabled);
 
-  const planTilesHtml = vpnFromNb
-    ? vpnFromNb
+  const planTilesHtml = catalogProducts
+    ? catalogProducts
         .map((p) => ({
           ...p,
           priceMinor: resolveKnownPriceMinor({
@@ -1059,8 +1059,8 @@ async function boot() {
         : `<p class="muted" style="margin-top:6px;line-height:1.45">Платежи временно недоступны, обратитесь в поддержку.</p>`
     }
     ${
-      vpnFromNb
-        ? `<p class="muted" style="margin-top:6px;font-size:0.78rem;line-height:1.45">Тарифы из NocoBase (<code>products</code>).</p>`
+      catalogProducts
+        ? `<p class="muted" style="margin-top:6px;font-size:0.78rem;line-height:1.45">Тарифы загружены из конфигурации сервиса.</p>`
         : ""
     }
     <div class="vpn-renew-card">

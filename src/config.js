@@ -121,20 +121,4 @@ export const config = {
   testGrantEnabled:
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "true",
-  nocobase: {
-    baseUrl: (process.env.NOCOBASE_BASE_URL || "").replace(/\/$/, ""),
-    apiToken: (process.env.NOCOBASE_API_TOKEN || "").trim(),
-    account: (process.env.NOCOBASE_ACCOUNT || "").trim(),
-    password: (process.env.NOCOBASE_PASSWORD || "").trim(),
-    collections: {
-      customers: process.env.NOCOBASE_COLLECTION_CUSTOMERS || "customers",
-      orders: process.env.NOCOBASE_COLLECTION_ORDERS || "orders",
-      products: process.env.NOCOBASE_COLLECTION_PRODUCTS || "products",
-      proxyInstances:
-        process.env.NOCOBASE_COLLECTION_PROXY_INSTANCES || "proxy_instances",
-      subscriptionBranding:
-        process.env.NOCOBASE_COLLECTION_SUBSCRIPTION_BRANDING ||
-        "subscription_branding",
-    },
-  },
 };

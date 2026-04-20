@@ -3,7 +3,7 @@
 ### Перед деплоем
 - **Секреты**
   - Убедиться, что `.env` и любые ключи/токены **не** лежат в Git.
-  - Если что-то светилось в чатах/логах — **ротировать** (BOT_TOKEN, SESSION_JWT_SECRET, XUI/NocoBase, SSH ключи прокси).
+  - Если что-то светилось в чатах/логах — **ротировать** (BOT_TOKEN, SESSION_JWT_SECRET, XUI, SSH ключи прокси).
 - **ENV sanity**
   - `PUBLIC_BASE_URL` указывает на внешний домен (https), доступный Telegram.
   - `WEB_APP_URL` = `${PUBLIC_BASE_URL}/app/` (или актуальный путь).

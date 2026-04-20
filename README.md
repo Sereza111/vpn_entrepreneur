@@ -3,15 +3,13 @@
 Telegram-бот и Web Mini App для VPS Premium/прокси:
 
 - выдача и обновление подписки через 3X-UI/Xray;
-- каталог тарифов и операционные данные через NocoBase;
 - выдача прокси (SOCKS5/HTTP) через SSH/3proxy;
-- дашборды по расходам/доходам в NocoBase.
+- встроенный каталог тарифов и мини-апп для покупки/продления.
 
 ## Что в проекте
 
-- `src/` — API бота, webhook-и, интеграция с 3X-UI, NocoBase, прокси.
+- `src/` — API бота, webhook-и, интеграция с 3X-UI и прокси.
 - `web/` — фронтенд мини-аппа (Vite), собирается в `public/`.
-- `import/` — шаблоны и скрипты для импорта в NocoBase.
 - `docs/` — эксплуатация, аналитика, маршрутизация и безопасность.
 
 ## Быстрый старт
@@ -40,26 +38,9 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 
 - Telegram: `BOT_TOKEN`, `WEBHOOK_SECRET`, `PUBLIC_BASE_URL`
 - 3X-UI: `XUI_PANEL_BASE_URL`, `XUI_WEB_BASE_PATH`, `XUI_USERNAME`, `XUI_PASSWORD`, `XUI_INBOUND_ID`
-- NocoBase: `NOCOBASE_BASE_URL`, `NOCOBASE_API_TOKEN`, `NOCOBASE_COLLECTION_*`
 - Прокси: `PROXY_SERVERS_JSON`
 - Платежи: `PAYMENT_WEBHOOK_SECRET`, `PAYMENT_CHECKOUT_URL_TEMPLATE`
 - Security/ops: `SESSION_JWT_EXPIRES_IN`, `RATE_LIMIT_RPM`
-
-## NocoBase: данные и аналитика
-
-Основная инструкция: [`docs/NOCOBASE.md`](docs/NOCOBASE.md).
-
-Что уже подготовлено в репозитории:
-
-- импорт тарифов и branding из `Товары.xlsx`:
-  - `import/xlsx_to_products_csv.py`
-  - `import/regenerate-products-csv.bat`
-- примеры для ручного/исторического заполнения:
-  - [`import/infra_costs.example.csv`](import/infra_costs.example.csv)
-  - [`import/orders.example.csv`](import/orders.example.csv)
-  - [`import/infra_costs-import-template.xlsx`](import/infra_costs-import-template.xlsx)
-- SQL-сниппет для графика расходов:
-  - [`docs/snippets/infra_costs_chart.sql`](docs/snippets/infra_costs_chart.sql)
 
 ## Маршрутизация и блокировка рекламы в Xray
 
@@ -73,11 +54,11 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 
 ## Безопасность (минимальный baseline)
 
-1. NocoBase и 3X-UI не держать на открытом HTTP в интернет.
+1. 3X-UI не держать на открытом HTTP в интернет.
 2. Выдавать доступ к админкам через HTTPS + ограничение по IP/Allowlist.
 3. API-ключи и `.env` не хранить в Git.
    - если токены/ключи случайно попали в чат/логи — считать скомпрометированными и ротировать.
-4. Делать регулярные бэкапы Postgres (NocoBase) и operational stores (`data/`).
+4. Делать регулярные бэкапы operational stores (`data/`).
 5. Перед правками маршрутизации/GeoSite сохранять backup текущего Xray config.
 
 Операционный чеклист: [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
@@ -85,13 +66,7 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 
 ## Мониторинг и эксплуатация
 
-- технический контур: Portainer, логи контейнеров, состояние сервисов, CPU/RAM;
-- бизнес-контур: графики в NocoBase (`orders`, `infra_costs`, `proxy_instances`).
-
-См. подробно:
-
-- [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
-- [`docs/NOCOBASE.md`](docs/NOCOBASE.md)
+- технический контур: Portainer, логи контейнеров, состояние сервисов, CPU/RAM.
 
 ## Команды
 
@@ -103,4 +78,3 @@ Telegram-бот и Web Mini App для VPS Premium/прокси:
 ## Примечания
 
 - В репозитории могут лежать локальные/операционные файлы, которые не должны попадать в удалённый origin (`$env`, `Товары.xlsx`, `.cursor/settings.json`).
-- Если после импорта NocoBase пишет про «заголовки не найдены», берите первую строку из **Экспорт → Excel** именно той коллекции и соблюдайте порядок колонок.

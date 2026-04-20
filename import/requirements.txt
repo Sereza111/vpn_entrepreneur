@@ -1,2 +1,0 @@
-# Опционально: пересборка products-nocobase.csv из Товары.xlsx
-openpyxl>=3.1.0

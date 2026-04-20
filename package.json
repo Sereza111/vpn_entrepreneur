@@ -7,10 +7,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "build:web": "npm --prefix web run build",
-    "build": "npm run build:web",
-    "nocobase:check": "node scripts/nocobase-analytics-check.mjs",
-    "nocobase:backfill:dry": "node scripts/nocobase-backfill-from-local.mjs --dry-run",
-    "nocobase:backfill": "node scripts/nocobase-backfill-from-local.mjs"
+    "build": "npm run build:web"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

@@ -17,7 +17,6 @@ import {
   generateProxyCredentials,
   parseProxyServers,
 } from "./proxyProvision.js";
-import * as nocobase from "./nocobase.js";
 import * as balanceStore from "./balanceStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
 
@@ -438,10 +437,6 @@ app.post("/api/auth/telegram", (req, res) => {
   const v = validateWebAppInitData(initData);
   if (!v.ok) return res.status(401).json({ error: v.error });
   const telegramId = v.user.id;
-  void nocobase.syncCustomerSnapshot({
-    telegramId,
-    username: v.user.username || null,
-  });
   const token = signSession({
     telegramId,
     username: v.user.username,
@@ -457,10 +452,6 @@ app.post("/api/auth/telegram", (req, res) => {
 });
 
 async function loadMe(telegramId, username = null) {
-  void nocobase.syncCustomerSnapshot({
-    telegramId,
-    username: username != null ? String(username) : undefined,
-  });
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
   let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
 
@@ -567,33 +558,8 @@ async function loadMe(telegramId, username = null) {
       .filter(Boolean),
   };
 
-  let catalog = { source: "fallback", products: [] };
-  let subscriptionUi = null;
-  if (nocobase.nocobaseEnabled()) {
-    try {
-      const products = await nocobase.fetchCatalogProducts();
-      if (Array.isArray(products) && products.length) {
-        catalog = {
-          source: "nocobase",
-          products: products.map((p) => ({
-            ...p,
-            priceMinor: resolvePlanPriceMinor({
-              productCode: p.code,
-              days: p.grantDays,
-              serviceType: String(p.productType || "").trim() === "proxy_access" ? "proxy" : "vps",
-            }),
-          })),
-        };
-      }
-    } catch {
-      // не ломаем /api/me
-    }
-    try {
-      subscriptionUi = await nocobase.fetchSubscriptionBranding();
-    } catch {
-      subscriptionUi = null;
-    }
-  }
+  const catalog = { source: "builtin", products: [] };
+  const subscriptionUi = null;
 
   let balancePayload = { enabled: false };
   if (config.balance.billingEnabled) {
@@ -704,11 +670,10 @@ function buildXuiClientRemark(telegramId, username, branding) {
   return out.slice(0, 120);
 }
 
-/** Подтягивает NocoBase → поле remark клиента 3X-UI (обновляет подписку в приложении после sync). */
+/** Обновляет поле remark клиента 3X-UI без внешних интеграций. */
 async function syncXuiClientRemarkIfNeeded(telegramId, username) {
   if (!Number(config.xui.inboundId)) return;
-  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
-  const want = buildXuiClientRemark(telegramId, username, branding);
+  const want = buildXuiClientRemark(telegramId, username, null);
   const found = await xui
     .findClientInInbound({
       inboundId: config.xui.inboundId,
@@ -965,8 +930,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   const existingExtraValues = Array.isArray(existing?.extraLinks)
     ? existing.extraLinks.map((x) => x?.value).filter(Boolean)
     : [];
-  const branding = await nocobase.fetchSubscriptionBranding().catch(() => null);
-  const baseRemark = buildXuiClientRemark(tid, username, branding);
+  const baseRemark = buildXuiClientRemark(tid, username, null);
   if (existing && !force) {
     // Even if already linked, keep NL in sync when secondary is enabled.
     const subId = extractSubIdFromStoredLink(existing);
@@ -1242,12 +1206,6 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
         expiresAt: rec?.creditExpiresAt || null,
       },
     });
-    void nocobase.syncProxyInstanceIssued({
-      telegramId: tid,
-      serverId,
-      country: server.country || "",
-      username: creds.username,
-    });
     const data = await loadMe(tid);
     return res.json({ ok: true, created: true, ...data });
   } catch (e) {
@@ -1277,10 +1235,8 @@ app.post("/api/test/proxy/grant", authMiddleware, async (req, res) => {
 /**
  * Webhook провайдера оплаты. Заголовок: x-webhook-secret = PAYMENT_WEBHOOK_SECRET.
  * Тело (JSON): telegramId (обяз.), extendDays или planDays, опционально addDeviceSlots,
- * amount, currency, externalPaymentId|paymentId, productCode, username,
- * feeAmount (комиссия платёжки), netAmount (чистая выручка; иначе считается amount−feeAmount),
- * serverId (привязка к серверу; иначе берётся из products.serverId по productCode).
- * Провайдер должен дергать этот URL после успешной оплаты; дальше — запись order в NocoBase и XUI provision.
+ * amount, currency, externalPaymentId|paymentId, productCode, username.
+ * Провайдер должен дергать этот URL после успешной оплаты; дальше — XUI provision.
  */
 app.post("/api/webhooks/payment", async (req, res) => {
   if (!config.paymentWebhookSecret) {
@@ -1295,15 +1251,10 @@ app.post("/api/webhooks/payment", async (req, res) => {
     extendDays,
     planDays,
     addDeviceSlots,
-    amount,
-    currency,
     externalPaymentId,
     paymentId,
     productCode,
     username,
-    feeAmount,
-    netAmount,
-    serverId,
   } = req.body || {};
   const idKey = String(externalPaymentId ?? paymentId ?? "").trim();
   const days = Number(extendDays || planDays || 0);
@@ -1328,20 +1279,6 @@ app.post("/api/webhooks/payment", async (req, res) => {
       return res.status(400).json({ error: "nothing_to_apply" });
     }
     await xuiProvisionCore(tid, { force: true, username: username ?? null });
-    void nocobase.syncPaymentOrder({
-      telegramId: tid,
-      extendDays: days,
-      addDeviceSlots: slots,
-      amount,
-      currency,
-      externalPaymentId: externalPaymentId ?? paymentId,
-      productCode,
-      username,
-      feeAmount,
-      netAmount,
-      serverId,
-      source: "payment_webhook",
-    });
     if (idKey) {
       await paymentWebhookStore.markProcessed(idKey, {
         telegramId: String(tid),
@@ -1401,31 +1338,12 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
 const bot = new Bot(config.botToken);
 
 async function getTelegramPlanOptions() {
-  const fallback = [
+  return [
     { days: 7, code: "vps_7", title: "7 дней", serviceType: "vps" },
     { days: 30, code: "vps_30", title: "30 дней", serviceType: "vps" },
     { days: 90, code: "vps_90", title: "90 дней", serviceType: "vps" },
     { days: 180, code: "vps_180", title: "180 дней", serviceType: "vps" },
   ];
-  try {
-    const rows = await nocobase.fetchCatalogProducts();
-    const list = Array.isArray(rows)
-      ? rows
-          .map((p) => ({
-            days: Number(p.grantDays || 0),
-            code: String(p.code || "").trim() || `vps_${Number(p.grantDays || 0)}`,
-            title: String(p.title || "").trim() || `${Number(p.grantDays || 0)} дней`,
-            sortOrder: Number(p.sortOrder || 0),
-            serviceType: String(p.productType || "").trim() === "proxy_access" ? "proxy" : "vps",
-          }))
-          .filter((p) => Number.isFinite(p.days) && p.days > 0)
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-      : [];
-    if (list.length) return list;
-  } catch {
-    // ignore and use fallback
-  }
-  return fallback;
 }
 
 function inferServiceTypeFromProductCode(productCode) {
@@ -1843,18 +1761,6 @@ bot.on("message:successful_payment", async (ctx) => {
         await balanceStore.credit(payload.telegramId, minor);
       }
       await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
-      void nocobase.syncPaymentOrder({
-        telegramId: payload.telegramId,
-        extendDays: 0,
-        addDeviceSlots: 0,
-        amount: Number(sp.total_amount || 0) / 100,
-        currency: sp.currency,
-        externalPaymentId:
-          sp.provider_payment_charge_id || sp.telegram_payment_charge_id || null,
-        productCode: "balance_topup",
-        username,
-        source: "telegram_successful_payment",
-      });
       await ctx.reply(
         `Баланс пополнен на ${(Number(sp.total_amount || 0) / 100).toFixed(0)} руб. Списание за VPS — почасово после активации баланса.`,
       );
@@ -1873,19 +1779,6 @@ bot.on("message:successful_payment", async (ctx) => {
     } else {
       await xuiProvisionCore(payload.telegramId, { force: true, username });
     }
-    void nocobase.syncPaymentOrder({
-      telegramId: payload.telegramId,
-      extendDays: payload.days,
-      addDeviceSlots: payload.serviceType === "proxy" ? 0 : 0,
-      amount: Number(sp.total_amount || 0) / 100,
-      currency: sp.currency,
-      externalPaymentId:
-        sp.provider_payment_charge_id || sp.telegram_payment_charge_id || null,
-      productCode: payload.productCode,
-      username,
-      serverId: payload.serverId || undefined,
-      source: "telegram_successful_payment",
-    });
     if (payload.serviceType === "proxy") {
       await ctx.reply(
         `Платёж успешно получен. Квота прокси выдана: +${payload.proxyCredits || 1} на ${payload.days} дней.`,
