@@ -65,6 +65,7 @@ export const config = {
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },
+  adminGrantSecret: String(process.env.ADMIN_GRANT_SECRET || "").trim(),
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   /**
    * Внутренний баланс + почасовое списание за VPS (после первого пополнения).

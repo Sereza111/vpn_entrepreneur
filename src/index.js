@@ -210,6 +210,17 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function adminGrantAuth(req, res, next) {
+  if (!config.adminGrantSecret) {
+    return res.status(503).json({ error: "admin_grant_disabled" });
+  }
+  const sec = String(req.headers["x-admin-secret"] || "").trim();
+  if (!sec || sec !== config.adminGrantSecret) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  next();
+}
+
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 // Warn for common misconfigurations (helps prod ops)
@@ -1332,6 +1343,46 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
     return res.json({ ok: true, addedSlots: slots, xuiLimitIp: r.next, ...data });
   } catch (e) {
     return res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Временная ручная выдача доступа админом (без платежки).
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, username?, addDeviceSlots? }
+ */
+app.post("/api/admin/grant-subscription", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const username = req.body?.username != null ? String(req.body.username || "").trim() || null : null;
+  const addDeviceSlots = Number(req.body?.addDeviceSlots || 0);
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (!Number.isFinite(addDeviceSlots) || addDeviceSlots < 0) {
+    return res.status(400).json({ error: "bad_addDeviceSlots" });
+  }
+  try {
+    const provisionResult = await xuiProvisionCore(telegramId, { force: true, username });
+    let xuiLimitIp = null;
+    if (addDeviceSlots > 0) {
+      const r = await xui.incrementClientLimitIp({
+        inboundId: config.xui.inboundId,
+        telegramId,
+        addSlots: addDeviceSlots,
+      });
+      xuiLimitIp = Number(r?.next || 0) || null;
+    }
+    const data = await loadMe(telegramId, username);
+    return res.json({
+      ok: true,
+      telegramId,
+      provisionResult,
+      addedSlots: addDeviceSlots,
+      xuiLimitIp,
+      data,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
