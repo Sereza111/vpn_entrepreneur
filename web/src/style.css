@@ -723,6 +723,14 @@ body.vl-wheel-layout #root {
   vertical-align: middle;
 }
 
+.proxy-item-region__flag {
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-text) 25%, transparent);
+}
+
 .proxy-item-region__name {
   font-weight: 600;
 }

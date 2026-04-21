@@ -20,14 +20,18 @@ function vlMarkHeroBlock() {
   </div>`;
 }
 
-/** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
-function countryCodeToFlagEmoji(countryCode) {
+function extractCountryAlpha2(countryCode) {
   const c = String(countryCode || "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
-  if (c.length < 2) return "🌐";
-  const cc = c.slice(0, 2);
+  return c.length >= 2 ? c.slice(0, 2) : "";
+}
+
+/** ISO 3166-1 alpha-2 → флаг (региональные индикаторы). Невалидный код → 🌐 */
+function countryCodeToFlagEmoji(countryCode) {
+  const cc = extractCountryAlpha2(countryCode);
+  if (!cc) return "🌐";
   const base = 0x1f1e6 - 0x41;
   try {
     return String.fromCodePoint(cc.charCodeAt(0) + base, cc.charCodeAt(1) + base);
@@ -36,11 +40,17 @@ function countryCodeToFlagEmoji(countryCode) {
   }
 }
 
+function countryCodeToFlagPngUrl(countryCode) {
+  const cc = extractCountryAlpha2(countryCode);
+  if (!cc) return "";
+  return `https://flagcdn.com/w40/${cc.toLowerCase()}.png`;
+}
+
 /** Русское имя страны по коду; explicitLabel из PROXY_SERVERS_JSON имеет приоритет. */
 function displayCountryName(countryCode, explicitLabel) {
   const manual = String(explicitLabel || "").trim();
   if (manual) return manual;
-  const cc = String(countryCode || "").trim().toUpperCase();
+  const cc = extractCountryAlpha2(countryCode);
   if (cc.length === 2 && typeof Intl !== "undefined" && Intl.DisplayNames) {
     try {
       const n = new Intl.DisplayNames(["ru-RU"], { type: "region" }).of(cc);
@@ -56,9 +66,13 @@ function displayCountryName(countryCode, explicitLabel) {
 function formatProxyRegionHtml(it, servers) {
   const srv = Array.isArray(servers) ? servers.find((x) => x.id === it.serverId) : null;
   const code = String(it.country || srv?.country || "").trim();
-  const flag = countryCodeToFlagEmoji(code);
+  const flagEmoji = countryCodeToFlagEmoji(code);
+  const flagPng = countryCodeToFlagPngUrl(code);
   const name = escAttr(displayCountryName(code, srv?.label || ""));
-  return `<span class="proxy-item-region" aria-hidden="true">${flag}<span class="proxy-item-region__name">${name}</span></span>`;
+  const flagPart = flagPng
+    ? `<img class="proxy-item-region__flag" src="${escAttr(flagPng)}" alt="" loading="lazy" decoding="async" />`
+    : `<span class="proxy-item-region__emoji">${flagEmoji}</span>`;
+  return `<span class="proxy-item-region" aria-hidden="true">${flagPart}<span class="proxy-item-region__name">${name}</span></span>`;
 }
 
 function buildSocksProxyUri(proxyItem, label = "Мой_прокси") {
@@ -74,6 +88,20 @@ function buildSocksProxyUri(proxyItem, label = "Мой_прокси") {
     .trim()
     .replace(/\s+/g, "_");
   return `socks://${userInfo}@${host}:${port}#${frag}`;
+}
+
+function buildHttpProxyUri(proxyItem, label = "Мой_прокси") {
+  const h = proxyItem?.http || {};
+  const host = String(h.host || "").trim();
+  const port = String(h.port || "").trim();
+  const username = String(h.username || "").trim();
+  const password = String(h.password || "").trim();
+  if (!host || !port || !username || !password) return "";
+  const userInfo = `${encodeURIComponent(username)}:${encodeURIComponent(password)}`;
+  const frag = String(label || "Мой_прокси")
+    .trim()
+    .replace(/\s+/g, "_");
+  return `http://${userInfo}@${host}:${port}#${frag}`;
 }
 
 function proxyServerPickButtonsHtml(servers) {
@@ -760,7 +788,7 @@ async function boot() {
                        <div class="link-block" style="margin-top:10px">
                          <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, me?.proxyServers || [])}</div>
                          <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
-                         <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
+                         <div class="link" style="margin-top:6px">${buildHttpProxyUri(it, "Мой_прокси") || `${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}`}</div>
                        </div>
                      `,
                    )
@@ -1028,7 +1056,7 @@ async function boot() {
                       <div class="link-block" style="margin-top:10px">
                         <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, servers)}</div>
                         <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
-                        <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
+                        <div class="link" style="margin-top:6px">${buildHttpProxyUri(it, "Мой_прокси") || `${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}`}</div>
                       </div>
                     `,
                   )
