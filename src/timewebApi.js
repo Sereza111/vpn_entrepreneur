@@ -66,19 +66,37 @@ export async function listServerIPs(serverId) {
 export async function addServerIPv4(serverId) {
   const sid = String(serverId || "").trim();
   if (!sid) throw new Error("timeweb_server_id_required");
-  // API may accept empty body, or type/version. Try type first.
+  // According to SDK/terraform, enum is `ipv4`/`ipv6`, but API may be strict / inconsistent.
+  // We try a small set of known variants to be robust.
+  const candidates = ["ipv4", "IPv4", "IPV4"];
+  let lastErr = null;
   let payload = null;
-  try {
-    payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
-      method: "POST",
-      body: { type: "ipv4" },
-    });
-  } catch {
-    payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
-      method: "POST",
-      body: {},
-    });
+  for (const t of candidates) {
+    try {
+      payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
+        method: "POST",
+        body: { type: t },
+      });
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+    }
   }
+  if (!payload) {
+    // Final attempt: sometimes backend accepts empty body (example in SDK docs),
+    // even though schema shows required `type`.
+    try {
+      payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
+        method: "POST",
+        body: {},
+      });
+      lastErr = null;
+    } catch (e2) {
+      lastErr = e2;
+    }
+  }
+  if (!payload && lastErr) throw lastErr;
   const ips = extractIps(payload).map(toIpInfo).filter(Boolean);
   if (ips.length) return ips[ips.length - 1];
   // fallback: read list and take non-main IPv4
