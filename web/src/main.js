@@ -155,6 +155,7 @@ function proxyAddonCardHtml(me) {
         <div style="margin-top:6px">${escAttr(rotateHint)}</div>
       </div>
       <div class="proxy-addon-card__actions">
+        <button type="button" class="btn" id="proxyCreateAccessBtn" ${proxyOn ? "" : "disabled"}>Получить прокси-доступ</button>
         <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Получить новый IP</button>
       </div>
     </div>
@@ -827,6 +828,7 @@ async function boot() {
     const bindProxyAddonButtons = () => {
       const proxyBtn = document.getElementById("proxyAcquireSharedBtn");
       const ipBtn = document.getElementById("proxyAcquireDedicatedBtn");
+      const createBtn = document.getElementById("proxyCreateAccessBtn");
       const rotBtn = document.getElementById("proxyRotateIpBtn");
       if (proxyBtn) proxyBtn.onclick = async () => {
         try {
@@ -850,6 +852,26 @@ async function boot() {
           window.location.reload();
         } catch (e) {
           showToast(`IP: ${e.message}`);
+        }
+      };
+      if (createBtn) createBtn.onclick = async () => {
+        try {
+          const selectedServer =
+            document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            me?.proxy?.dedicatedIp?.serverId ||
+            me?.proxyServers?.[0]?.id ||
+            "";
+          if (!selectedServer) throw new Error("server_not_selected");
+          await api("/api/proxy/provision", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ serverId: selectedServer }),
+          });
+          showToast("Прокси-доступ создан.");
+          window.location.reload();
+        } catch (e) {
+          showToast(`Прокси-доступ: ${e.message}`);
         }
       };
       if (rotBtn) rotBtn.onclick = async () => {
