@@ -111,6 +111,34 @@ export async function addProxyItem({ telegramId, item }) {
   return await setProxyForTelegramId(telegramId, rec);
 }
 
+export async function removeProxyItem({ telegramId, itemId, itemIndex }) {
+  const rec = (await getProxyByTelegramId(telegramId)) || {
+    telegramId: String(telegramId),
+    credits: { total: 0, used: 0 },
+    items: [],
+  };
+  const items = Array.isArray(rec.items) ? rec.items : [];
+  if (!items.length) throw new Error("proxy_item_not_found");
+
+  let idx = -1;
+  if (itemId) {
+    idx = items.findIndex((x) => String(x?.id || "") === String(itemId));
+  }
+  if (idx < 0 && Number.isFinite(Number(itemIndex))) {
+    const n = Number(itemIndex);
+    if (n >= 0 && n < items.length) idx = n;
+  }
+  if (idx < 0) throw new Error("proxy_item_not_found");
+
+  const removed = items[idx];
+  rec.items = items.filter((_, i) => i !== idx);
+  // Keep used in sync with actual amount of issued proxy entries.
+  rec.credits = rec.credits || { total: 0, used: 0 };
+  rec.credits.used = rec.items.length;
+  const saved = await setProxyForTelegramId(telegramId, rec);
+  return { rec: saved, removed };
+}
+
 export async function setProxyAddons({ telegramId, proxyEnabled, dedicatedIpEnabled }) {
   const rec = (await getProxyByTelegramId(telegramId)) || {
     telegramId: String(telegramId),

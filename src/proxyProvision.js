@@ -116,3 +116,38 @@ export async function ensureProxyUserOnServer({
   return { ok: true };
 }
 
+export async function removeProxyUserOnServer({
+  server,
+  username,
+}) {
+  const user = String(username || "").trim();
+  if (!user) throw new Error("proxy_username_required");
+  const pk = server.ssh.privateKeyB64
+    ? Buffer.from(server.ssh.privateKeyB64, "base64").toString("utf8")
+    : "";
+  if (!server.ssh.user || !pk) {
+    throw new Error("proxy_ssh_not_configured");
+  }
+
+  const escapedUser = user.replace(/[^a-zA-Z0-9_]/g, "");
+  if (!escapedUser) throw new Error("proxy_username_bad");
+  const cmd =
+    `set -e; ` +
+    `sudo test -f "${server.configPath}" || exit 2; ` +
+    `sudo sed -i '/^users ${escapedUser}:/d' "${server.configPath}"; ` +
+    `sudo docker restart "${server.containerName}" >/dev/null`;
+  const r = await sshExec(
+    {
+      host: server.ssh.host,
+      port: server.ssh.port,
+      user: server.ssh.user,
+      privateKey: pk,
+    },
+    cmd,
+  );
+  if (r.code !== 0) {
+    throw new Error(`proxy_ssh_failed: ${r.code} ${r.stderr || r.stdout}`.trim());
+  }
+  return { ok: true };
+}
+

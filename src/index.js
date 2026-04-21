@@ -16,6 +16,7 @@ import {
   ensureProxyUserOnServer,
   generateProxyCredentials,
   parseProxyServers,
+  removeProxyUserOnServer,
 } from "./proxyProvision.js";
 import * as balanceStore from "./balanceStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
@@ -1244,6 +1245,47 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
     return res.json({ ok: true, created: true, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/proxy/delete", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const itemId = String(req.body?.itemId || "").trim();
+    const itemIndex = Number(req.body?.itemIndex);
+    const current = await proxyStore.getProxyByTelegramId(tid);
+    const currentItems = Array.isArray(current?.items) ? current.items : [];
+    let target = null;
+    if (itemId) {
+      target = currentItems.find((x) => String(x?.id || "") === itemId) || null;
+    } else if (Number.isFinite(itemIndex) && itemIndex >= 0 && itemIndex < currentItems.length) {
+      target = currentItems[itemIndex] || null;
+    }
+    if (!target) return res.status(404).json({ error: "proxy_item_not_found" });
+
+    let removedFromServer = false;
+    try {
+      const servers = parseProxyServers(config.proxy.serversJson);
+      const srv = servers.find((s) => s.id === String(target.serverId || "").trim()) || null;
+      if (srv && target.username) {
+        await removeProxyUserOnServer({ server: srv, username: target.username });
+        removedFromServer = true;
+      }
+    } catch (e) {
+      console.warn("[proxy] remove on server failed:", e?.message || e);
+    }
+
+    await proxyStore.removeProxyItem({
+      telegramId: tid,
+      itemId: itemId || undefined,
+      itemIndex: Number.isFinite(itemIndex) ? itemIndex : undefined,
+    });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, removedFromServer, ...data });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg === "proxy_item_not_found") return res.status(404).json({ error: msg });
+    return res.status(500).json({ error: msg });
   }
 });
 

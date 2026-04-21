@@ -653,6 +653,36 @@ async function api(path, opts = {}) {
   return data;
 }
 
+function bindProxyDeleteButtons(token, tg) {
+  document.querySelectorAll(".proxy-delete-btn").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        const itemId = String(btn.getAttribute("data-proxy-item-id") || "").trim();
+        const itemIndex = Number(btn.getAttribute("data-proxy-item-index"));
+        if (!itemId && !Number.isFinite(itemIndex)) throw new Error("proxy_item_not_found");
+        const ok = typeof tg?.showConfirm === "function"
+          ? await new Promise((resolve) => tg.showConfirm("Удалить этот прокси?", (v) => resolve(Boolean(v))))
+          : window.confirm("Удалить этот прокси?");
+        if (!ok) return;
+        btn.disabled = true;
+        await api("/api/proxy/delete", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            itemId: itemId || undefined,
+            itemIndex: Number.isFinite(itemIndex) ? itemIndex : undefined,
+          }),
+        });
+        showToast("Прокси удалён.");
+        window.location.reload();
+      } catch (e) {
+        btn.disabled = false;
+        showToast(`Удаление прокси: ${e.message}`);
+      }
+    };
+  });
+}
+
 async function boot() {
   const tg = window.Telegram?.WebApp;
   if (!tg) {
@@ -824,10 +854,11 @@ async function boot() {
                  ${me.proxy.items
                    .map(
                      (it, i) => `
-                       <div class="link-block" style="margin-top:10px">
+                      <div class="link-block" style="margin-top:10px">
                          <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, me?.proxyServers || [])}</div>
                          <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
                          <div class="link" style="margin-top:6px">${buildHttpProxyUri(it, "Мой_прокси") || `${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}`}</div>
+                        <button type="button" class="btn secondary proxy-delete-btn" data-proxy-item-id="${escAttr(it?.id || "")}" data-proxy-item-index="${i}" style="margin-top:8px">Удалить</button>
                        </div>
                      `,
                    )
@@ -906,6 +937,7 @@ async function boot() {
     const supportHrefNoAcc = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
+    bindProxyDeleteButtons(token, tg);
 
     // Proxy addons (no account state still shows UI; API may return balance_not_started)
     const bindProxyAddonButtons = () => {
@@ -1096,6 +1128,7 @@ async function boot() {
                         <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, servers)}</div>
                         <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
                         <div class="link" style="margin-top:6px">${buildHttpProxyUri(it, "Мой_прокси") || `${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}`}</div>
+                        <button type="button" class="btn secondary proxy-delete-btn" data-proxy-item-id="${escAttr(it?.id || "")}" data-proxy-item-index="${i}" style="margin-top:8px">Удалить</button>
                       </div>
                     `,
                   )
@@ -1172,6 +1205,7 @@ async function boot() {
         showToast(`Прокси-доступ: ${e.message}`);
       }
     };
+    bindProxyDeleteButtons(token, tg);
   }
 
   const cat = me.catalog;
