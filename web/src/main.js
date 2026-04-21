@@ -128,35 +128,25 @@ function proxyAddonCardHtml(me) {
   const ded = me?.proxy?.dedicatedIp || null;
   const rotateAt = me?.proxy?.rotateIpRequestedAt || null;
   const rotateHint = rotateAt
-    ? `Запрос отправлен: ${new Date(rotateAt).toLocaleString("ru-RU")}`
-    : "Новый IP выдаётся вручную (пока без API Timeweb)";
+    ? `Запрос на новый IP: ${new Date(rotateAt).toLocaleString("ru-RU")}`
+    : "";
   return `
     <div class="proxy-addon-card">
       <div class="proxy-addon-card__head">
-        <div>
-          <div class="proxy-addon-card__title">Shared-прокси (почасово)</div>
-          <div class="proxy-addon-card__sub muted">Надбавка к VPS: ${proxyHr > 0 ? `${proxyHr.toFixed(2)} ₽/час` : "—"}</div>
-        </div>
-        <button type="button" class="btn ${proxyOn ? "secondary" : ""}" id="proxyAcquireSharedBtn" ${proxyOn ? "disabled" : ""}>
-          ${proxyOn ? "Получено" : "Получить"}
-        </button>
+        <div class="proxy-addon-card__title">Тип прокси</div>
+        <div class="proxy-addon-card__sub muted">Shared: +${proxyHr.toFixed(2)} ₽/час · Dedicated IP: +${ipHr.toFixed(2)} ₽/час</div>
       </div>
-      <div class="proxy-addon-card__row">
-        <div>
-          <div class="proxy-addon-card__title">Выделенный IP (доп. опция, почасово)</div>
-          <div class="proxy-addon-card__sub muted">Надбавка к shared: ${ipHr > 0 ? `${ipHr.toFixed(2)} ₽/час` : "—"}</div>
-        </div>
-        <button type="button" class="btn ${ipOn ? "secondary" : ""}" id="proxyAcquireDedicatedBtn" ${!proxyOn || ipOn ? "disabled" : ""}>
-          ${ipOn ? "Получено" : "Получить"}
-        </button>
+      <div class="proxy-addon-choice" role="radiogroup" aria-label="Тип прокси">
+        <button type="button" class="proxy-addon-choice__btn ${proxyOn && !ipOn ? "active" : ""}" id="proxyTypeSharedBtn" data-type="shared">Shared</button>
+        <button type="button" class="proxy-addon-choice__btn ${ipOn ? "active" : ""}" id="proxyTypeDedicatedBtn" data-type="dedicated">Dedicated IP</button>
       </div>
       <div class="proxy-addon-card__foot muted">
-        ${ded?.ip ? `Текущий IP: <b>${escAttr(ded.ip)}</b>` : "Текущий IP: —"}
-        <div style="margin-top:6px">${escAttr(rotateHint)}</div>
+        ${ded?.ip ? `Текущий IP: <b>${escAttr(ded.ip)}</b>` : ""}
+        ${rotateHint ? `<div style="margin-top:6px">${escAttr(rotateHint)}</div>` : ""}
       </div>
       <div class="proxy-addon-card__actions">
-        <button type="button" class="btn" id="proxyCreateAccessBtn" ${proxyOn ? "" : "disabled"}>Получить прокси-доступ</button>
-        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Получить новый IP</button>
+        <button type="button" class="btn" id="proxyCreateAccessBtn">Создать прокси-доступ</button>
+        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Новый IP</button>
       </div>
     </div>
   `;
@@ -826,36 +816,39 @@ async function boot() {
 
     // Proxy addons (no account state still shows UI; API may return balance_not_started)
     const bindProxyAddonButtons = () => {
-      const proxyBtn = document.getElementById("proxyAcquireSharedBtn");
-      const ipBtn = document.getElementById("proxyAcquireDedicatedBtn");
+      const sharedTypeBtn = document.getElementById("proxyTypeSharedBtn");
+      const dedicatedTypeBtn = document.getElementById("proxyTypeDedicatedBtn");
       const createBtn = document.getElementById("proxyCreateAccessBtn");
       const rotBtn = document.getElementById("proxyRotateIpBtn");
-      if (proxyBtn) proxyBtn.onclick = async () => {
-        try {
-          await api("/api/proxy/acquire-shared", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({}),
-          });
-          window.location.reload();
-        } catch (e) {
-          showToast(`Прокси: ${e.message}`);
-        }
+      let selectedType = Boolean(me?.proxy?.addons?.dedicatedIpEnabled) ? "dedicated" : "shared";
+      const markType = () => {
+        if (sharedTypeBtn) sharedTypeBtn.classList.toggle("active", selectedType === "shared");
+        if (dedicatedTypeBtn) dedicatedTypeBtn.classList.toggle("active", selectedType === "dedicated");
       };
-      if (ipBtn) ipBtn.onclick = async () => {
-        try {
-          await api("/api/proxy/acquire-dedicated", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({}),
-          });
-          window.location.reload();
-        } catch (e) {
-          showToast(`IP: ${e.message}`);
-        }
+      if (sharedTypeBtn) sharedTypeBtn.onclick = () => {
+        selectedType = "shared";
+        markType();
       };
+      if (dedicatedTypeBtn) dedicatedTypeBtn.onclick = () => {
+        selectedType = "dedicated";
+        markType();
+      };
+      markType();
       if (createBtn) createBtn.onclick = async () => {
         try {
+          if (selectedType === "dedicated") {
+            await api("/api/proxy/acquire-dedicated", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: JSON.stringify({}),
+            });
+          } else {
+            await api("/api/proxy/acquire-shared", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: JSON.stringify({}),
+            });
+          }
           const selectedServer =
             document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
             document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
@@ -1055,6 +1048,74 @@ async function boot() {
       }
     </div>`);
     root.appendChild(proxySec);
+
+    const sharedTypeBtn = document.getElementById("proxyTypeSharedBtn");
+    const dedicatedTypeBtn = document.getElementById("proxyTypeDedicatedBtn");
+    const createBtn = document.getElementById("proxyCreateAccessBtn");
+    const rotBtn = document.getElementById("proxyRotateIpBtn");
+    let selectedType = Boolean(me?.proxy?.addons?.dedicatedIpEnabled) ? "dedicated" : "shared";
+    const markType = () => {
+      if (sharedTypeBtn) sharedTypeBtn.classList.toggle("active", selectedType === "shared");
+      if (dedicatedTypeBtn) dedicatedTypeBtn.classList.toggle("active", selectedType === "dedicated");
+    };
+    if (sharedTypeBtn) sharedTypeBtn.onclick = () => {
+      selectedType = "shared";
+      markType();
+    };
+    if (dedicatedTypeBtn) dedicatedTypeBtn.onclick = () => {
+      selectedType = "dedicated";
+      markType();
+    };
+    markType();
+    if (createBtn) createBtn.onclick = async () => {
+      try {
+        if (selectedType === "dedicated") {
+          await api("/api/proxy/acquire-dedicated", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({}),
+          });
+        } else {
+          await api("/api/proxy/acquire-shared", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({}),
+          });
+        }
+        const selectedServer =
+          document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+          me?.proxy?.dedicatedIp?.serverId ||
+          me?.proxyServers?.[0]?.id ||
+          "";
+        if (!selectedServer) throw new Error("server_not_selected");
+        await api("/api/proxy/provision", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ serverId: selectedServer }),
+        });
+        showToast("Прокси-доступ создан.");
+        window.location.reload();
+      } catch (e) {
+        showToast(`Прокси-доступ: ${e.message}`);
+      }
+    };
+    if (rotBtn) rotBtn.onclick = async () => {
+      try {
+        const selectedServer =
+          document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+          me?.proxy?.dedicatedIp?.serverId ||
+          "";
+        await api("/api/proxy/rotate-ip", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ serverId: selectedServer }),
+        });
+        showToast("Новый IP получен (или отправлен запрос, если Timeweb API не настроен).");
+        window.location.reload();
+      } catch (e) {
+        showToast(`Новый IP: ${e.message}`);
+      }
+    };
   }
 
   const cat = me.catalog;

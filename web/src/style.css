@@ -670,6 +670,28 @@ body.vl-wheel-layout #root {
   margin-top: 10px;
 }
 
+.proxy-addon-choice {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.proxy-addon-choice__btn {
+  border: 1px solid color-mix(in srgb, var(--app-text) 16%, transparent);
+  background: color-mix(in srgb, var(--app-bg) 62%, var(--app-bg-secondary));
+  color: var(--app-text);
+  border-radius: 10px;
+  min-height: 42px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.proxy-addon-choice__btn.active {
+  border-color: color-mix(in srgb, var(--app-accent) 62%, var(--app-text));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-accent) 28%, transparent);
+}
+
 .proxy-addon-card__title {
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -689,8 +711,9 @@ body.vl-wheel-layout #root {
 
 .proxy-addon-card__actions {
   margin-top: 10px;
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .proxy-item-region {
