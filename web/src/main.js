@@ -134,20 +134,20 @@ function proxyAddonCardHtml(me) {
     <div class="proxy-addon-card">
       <div class="proxy-addon-card__head">
         <div>
-          <div class="proxy-addon-card__title">Прокси (почасово)</div>
+          <div class="proxy-addon-card__title">Shared-прокси (почасово)</div>
           <div class="proxy-addon-card__sub muted">Надбавка к VPS: ${proxyHr > 0 ? `${proxyHr.toFixed(2)} ₽/час` : "—"}</div>
         </div>
-        <button type="button" class="btn ${proxyOn ? "secondary" : ""}" id="proxyAddonToggle">
-          ${proxyOn ? "Выключить" : "Включить"}
+        <button type="button" class="btn ${proxyOn ? "secondary" : ""}" id="proxyAcquireSharedBtn" ${proxyOn ? "disabled" : ""}>
+          ${proxyOn ? "Получено" : "Получить"}
         </button>
       </div>
       <div class="proxy-addon-card__row">
         <div>
-          <div class="proxy-addon-card__title">Выделенный IP (почасово)</div>
-          <div class="proxy-addon-card__sub muted">Надбавка: ${ipHr > 0 ? `${ipHr.toFixed(2)} ₽/час` : "—"}</div>
+          <div class="proxy-addon-card__title">Выделенный IP (доп. опция, почасово)</div>
+          <div class="proxy-addon-card__sub muted">Надбавка к shared: ${ipHr > 0 ? `${ipHr.toFixed(2)} ₽/час` : "—"}</div>
         </div>
-        <button type="button" class="btn ${ipOn ? "secondary" : ""}" id="proxyDedicatedToggle" ${proxyOn ? "" : "disabled"}>
-          ${ipOn ? "Выключить" : "Включить"}
+        <button type="button" class="btn ${ipOn ? "secondary" : ""}" id="proxyAcquireDedicatedBtn" ${!proxyOn || ipOn ? "disabled" : ""}>
+          ${ipOn ? "Получено" : "Получить"}
         </button>
       </div>
       <div class="proxy-addon-card__foot muted">
@@ -155,7 +155,7 @@ function proxyAddonCardHtml(me) {
         <div style="margin-top:6px">${escAttr(rotateHint)}</div>
       </div>
       <div class="proxy-addon-card__actions">
-        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Новый IP</button>
+        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Получить новый IP</button>
       </div>
     </div>
   `;
@@ -748,7 +748,7 @@ async function boot() {
                      `,
                    )
                    .join("")}`
-              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку — после оплаты доступ создастся автоматически.</div>`
+              : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку и нажмите «Получить».</div>`
           }
           <div class="proxy-service-card">
             <div class="proxy-service-card__head">
@@ -825,16 +825,15 @@ async function boot() {
 
     // Proxy addons (no account state still shows UI; API may return balance_not_started)
     const bindProxyAddonButtons = () => {
-      const proxyBtn = document.getElementById("proxyAddonToggle");
-      const ipBtn = document.getElementById("proxyDedicatedToggle");
+      const proxyBtn = document.getElementById("proxyAcquireSharedBtn");
+      const ipBtn = document.getElementById("proxyAcquireDedicatedBtn");
       const rotBtn = document.getElementById("proxyRotateIpBtn");
       if (proxyBtn) proxyBtn.onclick = async () => {
         try {
-          const enabled = !Boolean(me?.proxy?.addons?.proxyEnabled);
-          await api("/api/proxy/addons", {
+          await api("/api/proxy/acquire-shared", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ proxyEnabled: enabled, dedicatedIpEnabled: enabled ? undefined : false }),
+            body: JSON.stringify({}),
           });
           window.location.reload();
         } catch (e) {
@@ -843,11 +842,10 @@ async function boot() {
       };
       if (ipBtn) ipBtn.onclick = async () => {
         try {
-          const enabled = !Boolean(me?.proxy?.addons?.dedicatedIpEnabled);
-          await api("/api/proxy/addons", {
+          await api("/api/proxy/acquire-dedicated", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ dedicatedIpEnabled: enabled, proxyEnabled: true }),
+            body: JSON.stringify({}),
           });
           window.location.reload();
         } catch (e) {
@@ -856,12 +854,17 @@ async function boot() {
       };
       if (rotBtn) rotBtn.onclick = async () => {
         try {
+          const selectedServer =
+            document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            me?.proxy?.dedicatedIp?.serverId ||
+            "";
           await api("/api/proxy/rotate-ip", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ serverId: selectedServer }),
           });
-          showToast("Запрос на новый IP отправлен. Ожидайте подтверждение.");
+          showToast("Новый IP получен (или отправлен запрос, если Timeweb API не настроен).");
           window.location.reload();
         } catch (e) {
           showToast(`Новый IP: ${e.message}`);
@@ -991,7 +994,7 @@ async function boot() {
     const items = Array.isArray(p.items) ? p.items : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
       <h2 class="section-title">Прокси</h2>
-      <p class="muted">SOCKS5 и HTTP прокси. Выберите площадку и тариф перед оплатой.</p>
+      <p class="muted">SOCKS5 и HTTP прокси. Shared включается как почасовой аддон, dedicated IP — отдельная доп. опция.</p>
 
       ${
         `${
@@ -1008,7 +1011,7 @@ async function boot() {
                     `,
                   )
                   .join("")}`
-             : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку — после оплаты доступ создастся автоматически.</div>`
+             : `<div class="muted" style="margin-top:8px;line-height:1.45">Прокси ещё не создан. Выберите площадку и нажмите «Получить».</div>`
          }
              <div class="proxy-service-card">
                <div class="proxy-service-card__head">

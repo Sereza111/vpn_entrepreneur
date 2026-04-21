@@ -21,6 +21,7 @@ export function parseProxyServers(envValue) {
       /** Подпись в мини-аппе (если пусто — имя страны по коду через Intl на клиенте). */
       label: String(s?.label || s?.name || "").trim(),
       host: String(s?.host || "").trim(),
+      timewebServerId: String(s?.timewebServerId || s?.timeweb?.serverId || "").trim(),
       socksPort: Number(s?.socksPort ?? 1080),
       httpPort: Number(s?.httpPort ?? 3128),
       ssh: {

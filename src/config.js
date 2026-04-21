@@ -65,6 +65,10 @@ export const config = {
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },
+  timeweb: {
+    apiBaseUrl: String(process.env.TIMEWEB_API_BASE_URL || "https://api.timeweb.cloud").replace(/\/$/, ""),
+    apiToken: String(process.env.TIMEWEB_API_TOKEN || "").trim(),
+  },
   adminGrantSecret: String(process.env.ADMIN_GRANT_SECRET || "").trim(),
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   /**

@@ -19,6 +19,7 @@ import {
 } from "./proxyProvision.js";
 import * as balanceStore from "./balanceStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
+import * as timewebApi from "./timewebApi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -1271,7 +1272,39 @@ app.post("/api/proxy/addons", authMiddleware, async (req, res) => {
   }
 });
 
-// User request: rotate dedicated IP (manual fulfillment for now).
+app.post("/api/proxy/acquire-shared", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const bal = await balanceStore.getRecord(tid);
+    const canEnableWithoutTopup = Boolean(bal?.freeMode);
+    if (!canEnableWithoutTopup && !bal?.billingStartedAt) {
+      return res.status(412).json({ error: "balance_not_started" });
+    }
+    await proxyStore.setProxyAddons({ telegramId: tid, proxyEnabled: true });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, acquired: "shared", ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/proxy/acquire-dedicated", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const bal = await balanceStore.getRecord(tid);
+    const canEnableWithoutTopup = Boolean(bal?.freeMode);
+    if (!canEnableWithoutTopup && !bal?.billingStartedAt) {
+      return res.status(412).json({ error: "balance_not_started" });
+    }
+    await proxyStore.setProxyAddons({ telegramId: tid, proxyEnabled: true, dedicatedIpEnabled: true });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, acquired: "dedicated", ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Rotate dedicated IP: if Timeweb configured, rotate immediately; otherwise create manual request.
 app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
   const tid = Number(req.tgSession.sub || req.tgSession.tg);
   try {
@@ -1279,9 +1312,49 @@ app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
     const addons = rec?.addons || {};
     if (!addons?.proxyEnabled) return res.status(403).json({ error: "proxy_not_enabled" });
     if (!addons?.dedicatedIpEnabled) return res.status(403).json({ error: "dedicated_ip_not_enabled" });
+    const requestedServerId = String(req.body?.serverId || "").trim();
+    const preferredServerId =
+      requestedServerId ||
+      String(rec?.dedicatedIp?.serverId || "").trim() ||
+      String(rec?.items?.[0]?.serverId || "").trim();
+    if (!preferredServerId) return res.status(400).json({ error: "server_not_selected" });
+    const servers = parseProxyServers(config.proxy.serversJson);
+    const srv = servers.find((s) => s.id === preferredServerId) || null;
+    if (!srv) return res.status(400).json({ error: "bad_serverId" });
+    const twServerId = String(srv.timewebServerId || srv.id || "").trim();
+
+    if (config.timeweb.apiToken && twServerId) {
+      if (rec?.dedicatedIp?.ipv4Id) {
+        await timewebApi
+          .deleteServerIP(twServerId, rec.dedicatedIp.ipv4Id)
+          .catch((e) => console.warn("[timeweb] delete old ip:", e?.message || e));
+      }
+      const ipInfo = await timewebApi.addServerIPv4(twServerId);
+      if (!ipInfo?.ip) throw new Error("timeweb_ip_create_failed");
+      await proxyStore.setProxyForTelegramId(tid, {
+        ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
+        dedicatedIp: {
+          serverId: srv.id,
+          ip: String(ipInfo.ip),
+          ipv4Id: ipInfo.id || null,
+          source: "timeweb",
+          updatedAt: new Date().toISOString(),
+        },
+        rotateIpRequestedAt: null,
+      });
+      const data = await loadMe(tid, req.tgSession?.u ?? null);
+      return res.json({ ok: true, rotated: true, dedicatedIp: data?.proxy?.dedicatedIp || null, ...data });
+    }
+
     const next = await proxyStore.setProxyForTelegramId(tid, {
       ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
       rotateIpRequestedAt: new Date().toISOString(),
+      dedicatedIp: rec?.dedicatedIp
+        ? {
+            ...rec.dedicatedIp,
+            serverId: preferredServerId,
+          }
+        : rec?.dedicatedIp || null,
     });
     const data = await loadMe(tid, req.tgSession?.u ?? null);
     return res.json({ ok: true, requestedAt: next.rotateIpRequestedAt, ...data });
@@ -1530,6 +1603,55 @@ app.post("/api/admin/proxy/dedicated-ip", adminGrantAuth, async (req, res) => {
     });
     const data = await loadMe(telegramId);
     return res.json({ ok: true, telegramId, dedicatedIp: next.dedicatedIp, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/timeweb/rotate-ip", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const serverId = String(req.body?.serverId || "").trim();
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (!serverId) return res.status(400).json({ error: "bad_serverId" });
+  try {
+    const servers = parseProxyServers(config.proxy.serversJson);
+    const srv = servers.find((s) => s.id === serverId) || null;
+    if (!srv) return res.status(400).json({ error: "server_not_found" });
+    const twServerId = String(srv.timewebServerId || srv.id || "").trim();
+    if (!config.timeweb.apiToken || !twServerId) {
+      return res.status(503).json({ error: "timeweb_not_configured_for_server" });
+    }
+    const cur = (await proxyStore.getProxyByTelegramId(telegramId)) || {
+      telegramId: String(telegramId),
+      credits: { total: 0, used: 0 },
+      items: [],
+    };
+    if (cur?.dedicatedIp?.ipv4Id) {
+      await timewebApi
+        .deleteServerIP(twServerId, cur.dedicatedIp.ipv4Id)
+        .catch((e) => console.warn("[timeweb-admin] delete old ip:", e?.message || e));
+    }
+    const ipInfo = await timewebApi.addServerIPv4(twServerId);
+    if (!ipInfo?.ip) throw new Error("timeweb_ip_create_failed");
+    await proxyStore.setProxyForTelegramId(telegramId, {
+      ...cur,
+      addons: {
+        proxyEnabled: true,
+        dedicatedIpEnabled: true,
+      },
+      dedicatedIp: {
+        serverId,
+        ip: String(ipInfo.ip),
+        ipv4Id: ipInfo.id || null,
+        source: "timeweb",
+        updatedAt: new Date().toISOString(),
+      },
+      rotateIpRequestedAt: null,
+    });
+    const data = await loadMe(telegramId);
+    return res.json({ ok: true, telegramId, dedicatedIp: data?.proxy?.dedicatedIp || null, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
