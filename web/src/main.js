@@ -606,6 +606,45 @@ function showToast(message) {
   setTimeout(() => toast.classList.remove("show"), 1400);
 }
 
+function parsePossiblyConcatenatedJson(text) {
+  const src = String(text || "");
+  try {
+    return src ? JSON.parse(src) : null;
+  } catch {
+    // Some reverse proxies occasionally append garbage after JSON.
+    // Try to parse first complete top-level JSON object/array.
+    const s = src.trim();
+    if (!s) return null;
+    const open = s[0];
+    const close = open === "{" ? "}" : open === "[" ? "]" : "";
+    if (!close) throw new Error("invalid_json_response");
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === "\"") inStr = false;
+        continue;
+      }
+      if (ch === "\"") {
+        inStr = true;
+        continue;
+      }
+      if (ch === open) depth++;
+      else if (ch === close) {
+        depth--;
+        if (depth === 0) {
+          return JSON.parse(s.slice(0, i + 1));
+        }
+      }
+    }
+    throw new Error("invalid_json_response");
+  }
+}
+
 async function api(path, opts = {}) {
   let r;
   try {
@@ -634,7 +673,7 @@ async function api(path, opts = {}) {
   const text = await r.text();
   let data;
   try {
-    data = text ? JSON.parse(text) : null;
+    data = parsePossiblyConcatenatedJson(text);
   } catch {
     data = { raw: text };
   }
@@ -802,8 +841,6 @@ async function boot() {
           <div class="brand-mark brand-mark--center" aria-hidden="true">
             ${vlMarkHeroBlock()}
           </div>
-          <h1 class="hero-title hero-title--center">VL</h1>
-          <div class="muted hero-tagline hero-tagline--center">Подписка и прокси в одном месте</div>
         </div>
       </div>
     </div>`,
