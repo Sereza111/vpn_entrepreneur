@@ -649,6 +649,50 @@ body.vl-wheel-layout #root {
   line-height: 1.35;
 }
 
+/* Прокси: почасовые аддоны */
+.proxy-addon-card {
+  margin-top: 12px;
+  padding: 12px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 12%, transparent);
+  background: color-mix(in srgb, var(--app-bg) 55%, var(--app-bg-secondary));
+  border-radius: var(--app-radius-sm);
+}
+
+.proxy-addon-card__head,
+.proxy-addon-card__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.proxy-addon-card__row {
+  margin-top: 10px;
+}
+
+.proxy-addon-card__title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.proxy-addon-card__sub {
+  margin-top: 2px;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  color: var(--app-hint);
+}
+
+.proxy-addon-card__foot {
+  margin-top: 10px;
+  line-height: 1.35;
+}
+
+.proxy-addon-card__actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
 .proxy-item-region {
   display: inline-flex;
   align-items: center;

@@ -47,6 +47,19 @@ export async function applyHourlyDeduction(telegramId, hourlyRateMinor) {
     };
   }
 
+  // Dev override: do not charge while freeMode is enabled.
+  if (rec?.freeMode === true) {
+    const bal = Number(rec?.balanceMinor || 0);
+    return {
+      billingActive: true,
+      balanceMinor: bal,
+      hourlyRateMinor: rate,
+      depleted: bal <= 0,
+      justDepleted: false,
+      freeMode: true,
+    };
+  }
+
   const now = Date.now();
   const last = Number(rec.lastAccruedMs || rec.billingStartedAt);
   const elapsedMs = Math.max(0, now - last);
@@ -118,6 +131,7 @@ export async function getDisplaySnapshot(telegramId, hourlyRateMinor) {
     hourlyRateMinor: rate,
     depleted: bal <= 0 && Boolean(rec?.billingStartedAt),
     justDepleted: false,
+    freeMode: rec?.freeMode === true,
   };
 }
 
@@ -127,4 +141,14 @@ export async function clearSuspendedForBilling(telegramId) {
   if (!db[t]) return;
   db[t].suspendedForBilling = false;
   await writeJson(db);
+}
+
+export async function setFreeMode(telegramId, enabled) {
+  const db = await readJson();
+  const t = String(telegramId);
+  const rec = db[t] || { balanceMinor: 0 };
+  rec.freeMode = Boolean(enabled);
+  db[t] = rec;
+  await writeJson(db);
+  return rec;
 }

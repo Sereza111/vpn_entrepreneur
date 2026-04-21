@@ -547,11 +547,18 @@ async function loadMe(telegramId, username = null) {
   const proxyRec = await proxyStore.getProxyByTelegramId(telegramId);
   const remaining = proxyStore.computeProxyRemaining(proxyRec);
   const proxyItems = Array.isArray(proxyRec?.items) ? proxyRec.items : [];
+  const proxyAddons = proxyRec?.addons || { proxyEnabled: false, dedicatedIpEnabled: false };
   const proxyPayload = {
     remaining,
     total: Number(proxyRec?.credits?.total || 0),
     used: Number(proxyRec?.credits?.used || 0),
     creditExpiresAt: proxyRec?.creditExpiresAt || null,
+    addons: {
+      proxyEnabled: Boolean(proxyAddons?.proxyEnabled),
+      dedicatedIpEnabled: Boolean(proxyAddons?.dedicatedIpEnabled),
+    },
+    dedicatedIp: proxyRec?.dedicatedIp || null,
+    rotateIpRequestedAt: proxyRec?.rotateIpRequestedAt || null,
     items: proxyItems
       .map((it) => {
         const srv = proxyServers.find((s) => s.id === it.serverId) || null;
@@ -577,9 +584,16 @@ async function loadMe(telegramId, username = null) {
     const shouldBillHourly =
       subscriptionStatus?.source === "xui" &&
       String(subscriptionStatus.panelStatus || "").toUpperCase() === "ACTIVE";
+    const addonProxy = Boolean(proxyAddons?.proxyEnabled) ? Number(config.balance.proxyHourlyMinor || 0) : 0;
+    const addonIp = Boolean(proxyAddons?.dedicatedIpEnabled)
+      ? Number(config.balance.dedicatedIpHourlyMinor || 0)
+      : 0;
+    const totalRateMinor = Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1))) +
+      Math.max(0, Math.floor(addonProxy || 0)) +
+      Math.max(0, Math.floor(addonIp || 0));
     const snap = shouldBillHourly
-      ? await balanceStore.applyHourlyDeduction(telegramId, config.balance.hourlyRateMinor)
-      : await balanceStore.getDisplaySnapshot(telegramId, config.balance.hourlyRateMinor);
+      ? await balanceStore.applyHourlyDeduction(telegramId, totalRateMinor)
+      : await balanceStore.getDisplaySnapshot(telegramId, totalRateMinor);
     const rec = await balanceStore.getRecord(telegramId);
     balancePayload = {
       enabled: true,
@@ -588,6 +602,12 @@ async function loadMe(telegramId, username = null) {
       balanceRub: snap.balanceMinor / 100,
       hourlyRateMinor: snap.hourlyRateMinor,
       hourlyRateRub: snap.hourlyRateMinor / 100,
+      hourlyRatePartsMinor: {
+        vps: Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1))),
+        proxy: Math.max(0, Math.floor(addonProxy || 0)),
+        dedicatedIp: Math.max(0, Math.floor(addonIp || 0)),
+      },
+      freeMode: Boolean(snap?.freeMode || rec?.freeMode),
       minTopupRub: config.payment.telegramMinInvoiceAmountMajor,
     };
     if (
@@ -1200,8 +1220,10 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
 
     const rec = await proxyStore.getProxyByTelegramId(tid);
     const remaining = proxyStore.computeProxyRemaining(rec);
-    if (remaining < 1) {
-      return res.status(402).json({ error: "proxy_quota_exhausted" });
+    const addons = rec?.addons || {};
+    const hasAddon = Boolean(addons?.proxyEnabled);
+    if (!hasAddon && remaining < 1) {
+      return res.status(402).json({ error: "proxy_not_enabled" });
     }
 
     const creds = generateProxyCredentials(tid);
@@ -1219,6 +1241,50 @@ app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
     });
     const data = await loadMe(tid);
     return res.json({ ok: true, created: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Proxy as an hourly addon (shared / dedicated IPv4).
+app.post("/api/proxy/addons", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  const proxyEnabled = req.body?.proxyEnabled;
+  const dedicatedIpEnabled = req.body?.dedicatedIpEnabled;
+  if (proxyEnabled === undefined && dedicatedIpEnabled === undefined) {
+    return res.status(400).json({ error: "nothing_to_change" });
+  }
+  if (dedicatedIpEnabled === true && proxyEnabled === false) {
+    return res.status(400).json({ error: "dedicated_requires_proxy" });
+  }
+  try {
+    const bal = await balanceStore.getRecord(tid);
+    const canEnableWithoutTopup = Boolean(bal?.freeMode);
+    if (!canEnableWithoutTopup && (proxyEnabled === true || dedicatedIpEnabled === true) && !bal?.billingStartedAt) {
+      return res.status(412).json({ error: "balance_not_started" });
+    }
+    await proxyStore.setProxyAddons({ telegramId: tid, proxyEnabled, dedicatedIpEnabled });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// User request: rotate dedicated IP (manual fulfillment for now).
+app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const rec = await proxyStore.getProxyByTelegramId(tid);
+    const addons = rec?.addons || {};
+    if (!addons?.proxyEnabled) return res.status(403).json({ error: "proxy_not_enabled" });
+    if (!addons?.dedicatedIpEnabled) return res.status(403).json({ error: "dedicated_ip_not_enabled" });
+    const next = await proxyStore.setProxyForTelegramId(tid, {
+      ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
+      rotateIpRequestedAt: new Date().toISOString(),
+    });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, requestedAt: next.rotateIpRequestedAt, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
@@ -1381,6 +1447,89 @@ app.post("/api/admin/grant-subscription", adminGrantAuth, async (req, res) => {
       xuiLimitIp,
       data,
     });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Dev/admin: enable/disable free mode (no billing) for a user.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, freeMode: true|false }
+ */
+app.post("/api/admin/free-mode", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const freeMode = req.body?.freeMode;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (freeMode !== true && freeMode !== false) {
+    return res.status(400).json({ error: "bad_freeMode" });
+  }
+  try {
+    await balanceStore.setFreeMode(telegramId, freeMode);
+    const data = await loadMe(telegramId);
+    return res.json({ ok: true, telegramId, freeMode, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Dev/admin: set proxy addons for user, bypassing balance checks.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, proxyEnabled?, dedicatedIpEnabled? }
+ */
+app.post("/api/admin/proxy/addons", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const proxyEnabled = req.body?.proxyEnabled;
+  const dedicatedIpEnabled = req.body?.dedicatedIpEnabled;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (proxyEnabled === undefined && dedicatedIpEnabled === undefined) {
+    return res.status(400).json({ error: "nothing_to_change" });
+  }
+  if (dedicatedIpEnabled === true && proxyEnabled === false) {
+    return res.status(400).json({ error: "dedicated_requires_proxy" });
+  }
+  try {
+    await proxyStore.setProxyAddons({ telegramId, proxyEnabled, dedicatedIpEnabled });
+    const data = await loadMe(telegramId);
+    return res.json({ ok: true, telegramId, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Dev/admin: fulfill dedicated IP info after you allocated it in Timeweb manually.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, serverId, ip, ipv4Id? }
+ */
+app.post("/api/admin/proxy/dedicated-ip", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const serverId = String(req.body?.serverId || "").trim();
+  const ip = String(req.body?.ip || "").trim();
+  const ipv4Id = req.body?.ipv4Id != null ? String(req.body.ipv4Id || "").trim() : "";
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (!serverId) return res.status(400).json({ error: "bad_serverId" });
+  if (!ip) return res.status(400).json({ error: "bad_ip" });
+  try {
+    const cur = (await proxyStore.getProxyByTelegramId(telegramId)) || {
+      telegramId: String(telegramId),
+      credits: { total: 0, used: 0 },
+      items: [],
+    };
+    const next = await proxyStore.setProxyForTelegramId(telegramId, {
+      ...cur,
+      dedicatedIp: { serverId, ip, ipv4Id: ipv4Id || null, updatedAt: new Date().toISOString() },
+      rotateIpRequestedAt: null,
+    });
+    const data = await loadMe(telegramId);
+    return res.json({ ok: true, telegramId, dedicatedIp: next.dedicatedIp, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }

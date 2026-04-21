@@ -82,6 +82,11 @@ export const config = {
           Math.ceil(2500 / (7 * 24)),
       ),
     ),
+    proxyHourlyMinor: Math.max(0, Math.floor(Number(process.env.BALANCE_PROXY_HOURLY_MINOR || 10))),
+    dedicatedIpHourlyMinor: Math.max(
+      0,
+      Math.floor(Number(process.env.BALANCE_DEDICATED_IP_HOURLY_MINOR || 25)),
+    ),
   },
   /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
   payment: {

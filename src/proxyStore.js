@@ -54,11 +54,21 @@ export async function getProxyByTelegramId(telegramId) {
   return rec;
 }
 
+function normalizeAddons(obj) {
+  const a = obj && typeof obj === "object" ? obj : {};
+  return {
+    proxyEnabled: Boolean(a.proxyEnabled),
+    dedicatedIpEnabled: Boolean(a.dedicatedIpEnabled),
+  };
+}
+
 export async function setProxyForTelegramId(telegramId, payload) {
   const db = await readJson();
+  const addons = normalizeAddons(payload?.addons || payload?.addOns || payload?.addon);
   db[String(telegramId)] = {
     telegramId: String(telegramId),
     ...payload,
+    addons,
     updatedAt: new Date().toISOString(),
   };
   await writeJson(db);
@@ -98,6 +108,19 @@ export async function addProxyItem({ telegramId, item }) {
   rec.credits = rec.credits || { total: 0, used: 0 };
   rec.items.push(item);
   rec.credits.used = Number(rec.credits.used || 0) + 1;
+  return await setProxyForTelegramId(telegramId, rec);
+}
+
+export async function setProxyAddons({ telegramId, proxyEnabled, dedicatedIpEnabled }) {
+  const rec = (await getProxyByTelegramId(telegramId)) || {
+    telegramId: String(telegramId),
+    credits: { total: 0, used: 0 },
+    items: [],
+  };
+  rec.addons = normalizeAddons({
+    proxyEnabled: proxyEnabled ?? rec.addons?.proxyEnabled,
+    dedicatedIpEnabled: dedicatedIpEnabled ?? rec.addons?.dedicatedIpEnabled,
+  });
   return await setProxyForTelegramId(telegramId, rec);
 }
 

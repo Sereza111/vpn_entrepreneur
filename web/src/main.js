@@ -117,6 +117,50 @@ function proxyPurchaseTileHtml(days, label, priceMinor = 0) {
   </button>`;
 }
 
+function proxyAddonCardHtml(me) {
+  const bal = me?.balance || {};
+  const parts = bal?.hourlyRatePartsMinor || {};
+  const proxyHr = Number(parts.proxy || 0) / 100;
+  const ipHr = Number(parts.dedicatedIp || 0) / 100;
+  const a = me?.proxy?.addons || {};
+  const proxyOn = Boolean(a.proxyEnabled);
+  const ipOn = Boolean(a.dedicatedIpEnabled);
+  const ded = me?.proxy?.dedicatedIp || null;
+  const rotateAt = me?.proxy?.rotateIpRequestedAt || null;
+  const rotateHint = rotateAt
+    ? `Запрос отправлен: ${new Date(rotateAt).toLocaleString("ru-RU")}`
+    : "Новый IP выдаётся вручную (пока без API Timeweb)";
+  return `
+    <div class="proxy-addon-card">
+      <div class="proxy-addon-card__head">
+        <div>
+          <div class="proxy-addon-card__title">Прокси (почасово)</div>
+          <div class="proxy-addon-card__sub muted">Надбавка к VPS: ${proxyHr > 0 ? `${proxyHr.toFixed(2)} ₽/час` : "—"}</div>
+        </div>
+        <button type="button" class="btn ${proxyOn ? "secondary" : ""}" id="proxyAddonToggle">
+          ${proxyOn ? "Выключить" : "Включить"}
+        </button>
+      </div>
+      <div class="proxy-addon-card__row">
+        <div>
+          <div class="proxy-addon-card__title">Выделенный IP (почасово)</div>
+          <div class="proxy-addon-card__sub muted">Надбавка: ${ipHr > 0 ? `${ipHr.toFixed(2)} ₽/час` : "—"}</div>
+        </div>
+        <button type="button" class="btn ${ipOn ? "secondary" : ""}" id="proxyDedicatedToggle" ${proxyOn ? "" : "disabled"}>
+          ${ipOn ? "Выключить" : "Включить"}
+        </button>
+      </div>
+      <div class="proxy-addon-card__foot muted">
+        ${ded?.ip ? `Текущий IP: <b>${escAttr(ded.ip)}</b>` : "Текущий IP: —"}
+        <div style="margin-top:6px">${escAttr(rotateHint)}</div>
+      </div>
+      <div class="proxy-addon-card__actions">
+        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Новый IP</button>
+      </div>
+    </div>
+  `;
+}
+
 function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
   const bal = Number(balanceRub) || 0;
   const rate = Number(hourlyRateRub) || 0;
@@ -398,24 +442,31 @@ function bindVpnRenewalActions({ tg, me }) {
   };
 
   bindGrid(document.getElementById("vpnPlanGrid"));
-  bindProxyPurchaseGrid(document.getElementById("proxyPlanGrid"), () =>
-    document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
-  );
-  bindProxyPurchaseGrid(document.getElementById("proxyPlanGridNoAcc"), () =>
-    document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
-  );
-  bindProxyInstantPay({
-    pickerRootSelector: "#section-proxy",
-    planGridId: "proxyPlanGrid",
-    selectedServerRef: () =>
+  // Proxy billing is hourly addons now; legacy plan grids removed.
+  const legacyProxyGrid = document.getElementById("proxyPlanGrid");
+  if (legacyProxyGrid) {
+    bindProxyPurchaseGrid(legacyProxyGrid, () =>
       document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
-  });
-  bindProxyInstantPay({
-    pickerRootSelector: "#proxyServerPickNoAcc",
-    planGridId: "proxyPlanGridNoAcc",
-    selectedServerRef: () =>
+    );
+    bindProxyInstantPay({
+      pickerRootSelector: "#section-proxy",
+      planGridId: "proxyPlanGrid",
+      selectedServerRef: () =>
+        document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server"),
+    });
+  }
+  const legacyProxyGridNoAcc = document.getElementById("proxyPlanGridNoAcc");
+  if (legacyProxyGridNoAcc) {
+    bindProxyPurchaseGrid(legacyProxyGridNoAcc, () =>
       document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
-  });
+    );
+    bindProxyInstantPay({
+      pickerRootSelector: "#proxyServerPickNoAcc",
+      planGridId: "proxyPlanGridNoAcc",
+      selectedServerRef: () =>
+        document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server"),
+    });
+  }
 
   const minTopupRub = Math.max(1, Math.floor(Number(me.balance?.minTopupRub ?? 60)));
 
@@ -713,11 +764,7 @@ async function boot() {
                 ${proxyServerPickButtonsHtml(me?.proxyServers)}
               </div>
             </div>
-            <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
-            <div class="plan-grid plan-grid--proxy" id="proxyPlanGridNoAcc">
-              ${proxyPurchaseTileHtml(7, "Прокси на неделю", proxyPrice7)}
-              ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
-            </div>
+            ${proxyAddonCardHtml(me)}
           </div>
           <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
@@ -775,6 +822,53 @@ async function boot() {
     const supportHrefNoAcc = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
+
+    // Proxy addons (no account state still shows UI; API may return balance_not_started)
+    const bindProxyAddonButtons = () => {
+      const proxyBtn = document.getElementById("proxyAddonToggle");
+      const ipBtn = document.getElementById("proxyDedicatedToggle");
+      const rotBtn = document.getElementById("proxyRotateIpBtn");
+      if (proxyBtn) proxyBtn.onclick = async () => {
+        try {
+          const enabled = !Boolean(me?.proxy?.addons?.proxyEnabled);
+          await api("/api/proxy/addons", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ proxyEnabled: enabled, dedicatedIpEnabled: enabled ? undefined : false }),
+          });
+          window.location.reload();
+        } catch (e) {
+          showToast(`Прокси: ${e.message}`);
+        }
+      };
+      if (ipBtn) ipBtn.onclick = async () => {
+        try {
+          const enabled = !Boolean(me?.proxy?.addons?.dedicatedIpEnabled);
+          await api("/api/proxy/addons", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ dedicatedIpEnabled: enabled, proxyEnabled: true }),
+          });
+          window.location.reload();
+        } catch (e) {
+          showToast(`IP: ${e.message}`);
+        }
+      };
+      if (rotBtn) rotBtn.onclick = async () => {
+        try {
+          await api("/api/proxy/rotate-ip", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: JSON.stringify({}),
+          });
+          showToast("Запрос на новый IP отправлен. Ожидайте подтверждение.");
+          window.location.reload();
+        } catch (e) {
+          showToast(`Новый IP: ${e.message}`);
+        }
+      };
+    };
+    bindProxyAddonButtons();
     return;
   }
 
@@ -930,11 +1024,7 @@ async function boot() {
                    ${proxyServerPickButtonsHtml(servers)}
                  </div>
                </div>
-              <div class="store-field-label" style="margin-top:12px">Тариф прокси</div>
-              <div class="plan-grid plan-grid--proxy" id="proxyPlanGrid">
-                ${proxyPurchaseTileHtml(7, "Прокси на неделю", proxyPrice7)}
-                ${proxyPurchaseTileHtml(30, "Прокси на месяц", proxyPrice30)}
-              </div>
+              ${proxyAddonCardHtml(me)}
              </div>
              `
       }
