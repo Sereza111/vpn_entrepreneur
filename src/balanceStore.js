@@ -8,13 +8,51 @@ async function ensureDir() {
   await fs.mkdir(dataDir, { recursive: true });
 }
 
+function safeParseDbJson(raw) {
+  const src = String(raw || "").trim();
+  if (!src) return {};
+  try {
+    const obj = JSON.parse(src);
+    return obj && typeof obj === "object" ? obj : {};
+  } catch {
+    if (src[0] !== "{") return {};
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === "\"") inStr = false;
+        continue;
+      }
+      if (ch === "\"") {
+        inStr = true;
+        continue;
+      }
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          try {
+            const obj = JSON.parse(src.slice(0, i + 1));
+            return obj && typeof obj === "object" ? obj : {};
+          } catch {
+            return {};
+          }
+        }
+      }
+    }
+    return {};
+  }
+}
+
 async function readJson() {
   await ensureDir();
   try {
     const raw = await fs.readFile(filePath, "utf8");
-    const obj = JSON.parse(raw || "{}");
-    if (!obj || typeof obj !== "object") return {};
-    return obj;
+    return safeParseDbJson(raw);
   } catch (e) {
     if (e && e.code === "ENOENT") return {};
     throw e;
