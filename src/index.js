@@ -1296,7 +1296,35 @@ app.post("/api/proxy/acquire-dedicated", authMiddleware, async (req, res) => {
     if (!canEnableWithoutTopup && !bal?.billingStartedAt) {
       return res.status(412).json({ error: "balance_not_started" });
     }
+    const requestedServerId = String(req.body?.serverId || "").trim();
+    if (!requestedServerId) return res.status(400).json({ error: "server_not_selected" });
+    const servers = parseProxyServers(config.proxy.serversJson);
+    const srv = servers.find((s) => s.id === requestedServerId) || null;
+    if (!srv) return res.status(400).json({ error: "bad_serverId" });
+    const twServerId = String(srv.timewebServerId || "").trim();
     await proxyStore.setProxyAddons({ telegramId: tid, proxyEnabled: true, dedicatedIpEnabled: true });
+    const rec = await proxyStore.getProxyByTelegramId(tid);
+    if (config.timeweb.apiToken) {
+      if (!twServerId) return res.status(503).json({ error: "timeweb_server_id_required" });
+      if (rec?.dedicatedIp?.ipv4Id) {
+        await timewebApi
+          .deleteServerIP(twServerId, rec.dedicatedIp.ipv4Id)
+          .catch((e) => console.warn("[timeweb] delete old ip (acquire):", e?.message || e));
+      }
+      const ipInfo = await timewebApi.addServerIPv4(twServerId);
+      if (!ipInfo?.ip) throw new Error("timeweb_ip_create_failed");
+      await proxyStore.setProxyForTelegramId(tid, {
+        ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
+        dedicatedIp: {
+          serverId: srv.id,
+          ip: String(ipInfo.ip),
+          ipv4Id: ipInfo.id || null,
+          source: "timeweb",
+          updatedAt: new Date().toISOString(),
+        },
+        rotateIpRequestedAt: null,
+      });
+    }
     const data = await loadMe(tid, req.tgSession?.u ?? null);
     return res.json({ ok: true, acquired: "dedicated", ...data });
   } catch (e) {
@@ -1321,9 +1349,10 @@ app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
     const servers = parseProxyServers(config.proxy.serversJson);
     const srv = servers.find((s) => s.id === preferredServerId) || null;
     if (!srv) return res.status(400).json({ error: "bad_serverId" });
-    const twServerId = String(srv.timewebServerId || srv.id || "").trim();
+    const twServerId = String(srv.timewebServerId || "").trim();
 
-    if (config.timeweb.apiToken && twServerId) {
+    if (config.timeweb.apiToken) {
+      if (!twServerId) return res.status(503).json({ error: "timeweb_server_id_required" });
       if (rec?.dedicatedIp?.ipv4Id) {
         await timewebApi
           .deleteServerIP(twServerId, rec.dedicatedIp.ipv4Id)

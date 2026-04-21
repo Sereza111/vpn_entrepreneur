@@ -146,7 +146,6 @@ function proxyAddonCardHtml(me) {
       </div>
       <div class="proxy-addon-card__actions">
         <button type="button" class="btn" id="proxyCreateAccessBtn">Создать прокси-доступ</button>
-        <button type="button" class="btn secondary" id="proxyRotateIpBtn" ${ipOn ? "" : "disabled"}>Новый IP</button>
       </div>
     </div>
   `;
@@ -819,7 +818,6 @@ async function boot() {
       const sharedTypeBtn = document.getElementById("proxyTypeSharedBtn");
       const dedicatedTypeBtn = document.getElementById("proxyTypeDedicatedBtn");
       const createBtn = document.getElementById("proxyCreateAccessBtn");
-      const rotBtn = document.getElementById("proxyRotateIpBtn");
       let selectedType = Boolean(me?.proxy?.addons?.dedicatedIpEnabled) ? "dedicated" : "shared";
       const markType = () => {
         if (sharedTypeBtn) sharedTypeBtn.classList.toggle("active", selectedType === "shared");
@@ -836,11 +834,18 @@ async function boot() {
       markType();
       if (createBtn) createBtn.onclick = async () => {
         try {
+          const selectedServer =
+            document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+            me?.proxy?.dedicatedIp?.serverId ||
+            me?.proxyServers?.[0]?.id ||
+            "";
+          if (!selectedServer) throw new Error("server_not_selected");
           if (selectedType === "dedicated") {
             await api("/api/proxy/acquire-dedicated", {
               method: "POST",
               headers: { Authorization: `Bearer ${token}` },
-              body: JSON.stringify({}),
+              body: JSON.stringify({ serverId: selectedServer }),
             });
           } else {
             await api("/api/proxy/acquire-shared", {
@@ -849,13 +854,6 @@ async function boot() {
               body: JSON.stringify({}),
             });
           }
-          const selectedServer =
-            document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-            document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-            me?.proxy?.dedicatedIp?.serverId ||
-            me?.proxyServers?.[0]?.id ||
-            "";
-          if (!selectedServer) throw new Error("server_not_selected");
           await api("/api/proxy/provision", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
@@ -865,24 +863,6 @@ async function boot() {
           window.location.reload();
         } catch (e) {
           showToast(`Прокси-доступ: ${e.message}`);
-        }
-      };
-      if (rotBtn) rotBtn.onclick = async () => {
-        try {
-          const selectedServer =
-            document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-            document.querySelector("#proxyServerPickNoAcc .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-            me?.proxy?.dedicatedIp?.serverId ||
-            "";
-          await api("/api/proxy/rotate-ip", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ serverId: selectedServer }),
-          });
-          showToast("Новый IP получен (или отправлен запрос, если Timeweb API не настроен).");
-          window.location.reload();
-        } catch (e) {
-          showToast(`Новый IP: ${e.message}`);
         }
       };
     };
@@ -1052,7 +1032,6 @@ async function boot() {
     const sharedTypeBtn = document.getElementById("proxyTypeSharedBtn");
     const dedicatedTypeBtn = document.getElementById("proxyTypeDedicatedBtn");
     const createBtn = document.getElementById("proxyCreateAccessBtn");
-    const rotBtn = document.getElementById("proxyRotateIpBtn");
     let selectedType = Boolean(me?.proxy?.addons?.dedicatedIpEnabled) ? "dedicated" : "shared";
     const markType = () => {
       if (sharedTypeBtn) sharedTypeBtn.classList.toggle("active", selectedType === "shared");
@@ -1069,11 +1048,17 @@ async function boot() {
     markType();
     if (createBtn) createBtn.onclick = async () => {
       try {
+        const selectedServer =
+          document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
+          me?.proxy?.dedicatedIp?.serverId ||
+          me?.proxyServers?.[0]?.id ||
+          "";
+        if (!selectedServer) throw new Error("server_not_selected");
         if (selectedType === "dedicated") {
           await api("/api/proxy/acquire-dedicated", {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
-            body: JSON.stringify({}),
+            body: JSON.stringify({ serverId: selectedServer }),
           });
         } else {
           await api("/api/proxy/acquire-shared", {
@@ -1082,12 +1067,6 @@ async function boot() {
             body: JSON.stringify({}),
           });
         }
-        const selectedServer =
-          document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-          me?.proxy?.dedicatedIp?.serverId ||
-          me?.proxyServers?.[0]?.id ||
-          "";
-        if (!selectedServer) throw new Error("server_not_selected");
         await api("/api/proxy/provision", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -1097,23 +1076,6 @@ async function boot() {
         window.location.reload();
       } catch (e) {
         showToast(`Прокси-доступ: ${e.message}`);
-      }
-    };
-    if (rotBtn) rotBtn.onclick = async () => {
-      try {
-        const selectedServer =
-          document.querySelector("#section-proxy .proxy-btn.active")?.getAttribute("data-proxy-server") ||
-          me?.proxy?.dedicatedIp?.serverId ||
-          "";
-        await api("/api/proxy/rotate-ip", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ serverId: selectedServer }),
-        });
-        showToast("Новый IP получен (или отправлен запрос, если Timeweb API не настроен).");
-        window.location.reload();
-      } catch (e) {
-        showToast(`Новый IP: ${e.message}`);
       }
     };
   }
