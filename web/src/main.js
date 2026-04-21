@@ -607,13 +607,30 @@ function showToast(message) {
 }
 
 async function api(path, opts = {}) {
-  const r = await fetch(path, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
-  });
+  let r;
+  try {
+    const controller = new AbortController();
+    const timeoutMs = Number(opts.timeoutMs || 15000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    r = await fetch(path, {
+      ...opts,
+      headers: {
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+      signal: opts.signal || controller.signal,
+    });
+    clearTimeout(timer);
+  } catch (e) {
+    const msg = String(e?.message || "");
+    if (e?.name === "AbortError") {
+      throw new Error("Сеть недоступна: API не ответил вовремя");
+    }
+    if (/failed to fetch/i.test(msg) || /network/i.test(msg)) {
+      throw new Error("Сеть недоступна: не удалось достучаться до API");
+    }
+    throw e;
+  }
   const text = await r.text();
   let data;
   try {
