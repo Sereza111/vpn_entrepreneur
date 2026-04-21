@@ -60,6 +60,18 @@ function formatProxyRegionHtml(it, servers) {
   return `<span class="proxy-item-region" aria-hidden="true">${flag}<span class="proxy-item-region__name">${name}</span></span>`;
 }
 
+function buildSocksProxyUri(proxyItem, label = "Мой_прокси") {
+  const s = proxyItem?.socks5 || {};
+  const host = String(s.host || "").trim();
+  const port = String(s.port || "").trim();
+  const username = String(s.username || "").trim();
+  const password = String(s.password || "").trim();
+  if (!host || !port || !username || !password) return "";
+  const userInfo = `${encodeURIComponent(username)}:${encodeURIComponent(password)}`;
+  const frag = encodeURIComponent(String(label || "Мой_прокси").trim());
+  return `socks://${userInfo}@${host}:${port}#${frag}`;
+}
+
 function proxyServerPickButtonsHtml(servers) {
   const list = Array.isArray(servers) ? servers : [];
   if (!list.length) {
@@ -555,7 +567,18 @@ async function api(path, opts = {}) {
   } catch {
     data = { raw: text };
   }
-  if (!r.ok) throw new Error(data.error || data.raw || r.status);
+  if (!r.ok) {
+    const code = data?.error || "";
+    if (code === "timeweb_no_balance_for_month") {
+      const need = Number(data?.requiredBalance || 0);
+      const rub = Number.isFinite(need) && need > 0 ? ` (нужно пополнить Timeweb минимум на ${need} ₽)` : "";
+      throw new Error(`Timeweb: нет баланса для выдачи IPv4${rub}`);
+    }
+    if (code === "timeweb_server_id_required") {
+      throw new Error("Timeweb: для этой площадки не задан timewebServerId (в PROXY_SERVERS_JSON)");
+    }
+    throw new Error(code || data?.raw || r.status);
+  }
   return data;
 }
 
@@ -732,7 +755,7 @@ async function boot() {
                      (it, i) => `
                        <div class="link-block" style="margin-top:10px">
                          <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, me?.proxyServers || [])}</div>
-                         <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
+                         <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
                          <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
                        </div>
                      `,
@@ -1000,7 +1023,7 @@ async function boot() {
                     (it, i) => `
                       <div class="link-block" style="margin-top:10px">
                         <div class="label">#${i + 1} • ${formatProxyRegionHtml(it, servers)}</div>
-                        <div class="link">${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}</div>
+                        <div class="link">${buildSocksProxyUri(it, "Мой_прокси") || `${it.socks5.host}:${it.socks5.port}  ${it.socks5.username}:${it.socks5.password}`}</div>
                         <div class="link" style="margin-top:6px">${it.http.host}:${it.http.port}  ${it.http.username}:${it.http.password}</div>
                       </div>
                     `,

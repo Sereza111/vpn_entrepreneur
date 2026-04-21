@@ -1311,7 +1311,19 @@ app.post("/api/proxy/acquire-dedicated", authMiddleware, async (req, res) => {
           .deleteServerIP(twServerId, rec.dedicatedIp.ipv4Id)
           .catch((e) => console.warn("[timeweb] delete old ip (acquire):", e?.message || e));
       }
-      const ipInfo = await timewebApi.addServerIPv4(twServerId);
+      let ipInfo;
+      try {
+        ipInfo = await timewebApi.addServerIPv4(twServerId);
+      } catch (e) {
+        if (e instanceof timewebApi.TimewebApiError && e.message === "timeweb_no_balance_for_month") {
+          return res.status(402).json({
+            error: "timeweb_no_balance_for_month",
+            requiredBalance: e.details?.required_balance ?? null,
+            responseId: e.responseId || null,
+          });
+        }
+        throw e;
+      }
       if (!ipInfo?.ip) throw new Error("timeweb_ip_create_failed");
       await proxyStore.setProxyForTelegramId(tid, {
         ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
@@ -1358,7 +1370,19 @@ app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
           .deleteServerIP(twServerId, rec.dedicatedIp.ipv4Id)
           .catch((e) => console.warn("[timeweb] delete old ip:", e?.message || e));
       }
-      const ipInfo = await timewebApi.addServerIPv4(twServerId);
+      let ipInfo;
+      try {
+        ipInfo = await timewebApi.addServerIPv4(twServerId);
+      } catch (e) {
+        if (e instanceof timewebApi.TimewebApiError && e.message === "timeweb_no_balance_for_month") {
+          return res.status(402).json({
+            error: "timeweb_no_balance_for_month",
+            requiredBalance: e.details?.required_balance ?? null,
+            responseId: e.responseId || null,
+          });
+        }
+        throw e;
+      }
       if (!ipInfo?.ip) throw new Error("timeweb_ip_create_failed");
       await proxyStore.setProxyForTelegramId(tid, {
         ...(rec || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),

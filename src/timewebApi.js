@@ -1,5 +1,17 @@
 import { config } from "./config.js";
 
+export class TimewebApiError extends Error {
+  constructor(message, { status, errorCode, responseId, details, raw } = {}) {
+    super(message);
+    this.name = "TimewebApiError";
+    this.status = status;
+    this.errorCode = errorCode;
+    this.responseId = responseId;
+    this.details = details;
+    this.raw = raw;
+  }
+}
+
 function authHeaders() {
   if (!config.timeweb.apiToken) throw new Error("timeweb_not_configured");
   return {
@@ -24,7 +36,12 @@ async function twFetch(path, { method = "GET", body } = {}) {
     json = null;
   }
   if (!res.ok) {
-    throw new Error(`timeweb_${method.toLowerCase()}_${path}:${res.status}:${text || "failed"}`);
+    const status = res.status;
+    const errorCode = json?.error_code || json?.errorCode || null;
+    const responseId = json?.response_id || json?.responseId || null;
+    const details = json?.details || null;
+    const msg = `timeweb_${method.toLowerCase()}_${path}:${status}:${text || "failed"}`;
+    throw new TimewebApiError(msg, { status, errorCode, responseId, details, raw: json || text });
   }
   return json;
 }
@@ -66,37 +83,26 @@ export async function listServerIPs(serverId) {
 export async function addServerIPv4(serverId) {
   const sid = String(serverId || "").trim();
   if (!sid) throw new Error("timeweb_server_id_required");
-  // According to SDK/terraform, enum is `ipv4`/`ipv6`, but API may be strict / inconsistent.
-  // We try a small set of known variants to be robust.
-  const candidates = ["ipv4", "IPv4", "IPV4"];
-  let lastErr = null;
-  let payload = null;
-  for (const t of candidates) {
-    try {
-      payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
-        method: "POST",
-        body: { type: t },
+  // Dedicated IP here is IPv4. If Timeweb refuses due to balance, surface it explicitly.
+  let payload;
+  try {
+    payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
+      method: "POST",
+      body: { type: "ipv4" },
+    });
+  } catch (e) {
+    if (e instanceof TimewebApiError && e.errorCode === "no_balance_for_month") {
+      const required = Number(e.details?.required_balance || 0) || null;
+      throw new TimewebApiError("timeweb_no_balance_for_month", {
+        status: e.status,
+        errorCode: e.errorCode,
+        responseId: e.responseId,
+        details: { required_balance: required },
+        raw: e.raw,
       });
-      lastErr = null;
-      break;
-    } catch (e) {
-      lastErr = e;
     }
+    throw e;
   }
-  if (!payload) {
-    // Final attempt: sometimes backend accepts empty body (example in SDK docs),
-    // even though schema shows required `type`.
-    try {
-      payload = await twFetch(`/api/v1/servers/${encodeURIComponent(sid)}/ips`, {
-        method: "POST",
-        body: {},
-      });
-      lastErr = null;
-    } catch (e2) {
-      lastErr = e2;
-    }
-  }
-  if (!payload && lastErr) throw lastErr;
   const ips = extractIps(payload).map(toIpInfo).filter(Boolean);
   if (ips.length) return ips[ips.length - 1];
   // fallback: read list and take non-main IPv4
