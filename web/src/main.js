@@ -46,9 +46,31 @@ function countryCodeToFlagPngUrl(countryCode) {
   return `https://flagcdn.com/w40/${cc.toLowerCase()}.png`;
 }
 
+function normalizeCountryLabel(explicitLabel, fallbackCountryCode) {
+  const raw = String(explicitLabel || "").trim();
+  if (!raw) return "";
+  // Common case in config/data: "nl Нидерланды" -> "Нидерланды"
+  const stripped = raw.replace(/^[A-Za-z]{2}(?:[\s._:/\\|,-]+)(.+)$/u, "$1").trim();
+  if (stripped && stripped !== raw) return stripped;
+  // If label is only country code, prefer localized name from code.
+  const onlyCode = raw.match(/^[A-Za-z]{2}$/);
+  if (onlyCode) {
+    const cc = extractCountryAlpha2(fallbackCountryCode || raw);
+    if (cc && typeof Intl !== "undefined" && Intl.DisplayNames) {
+      try {
+        const n = new Intl.DisplayNames(["ru-RU"], { type: "region" }).of(cc);
+        if (n) return n;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return raw;
+}
+
 /** Русское имя страны по коду; explicitLabel из PROXY_SERVERS_JSON имеет приоритет. */
 function displayCountryName(countryCode, explicitLabel) {
-  const manual = String(explicitLabel || "").trim();
+  const manual = normalizeCountryLabel(explicitLabel, countryCode);
   if (manual) return manual;
   const cc = extractCountryAlpha2(countryCode);
   if (cc.length === 2 && typeof Intl !== "undefined" && Intl.DisplayNames) {
