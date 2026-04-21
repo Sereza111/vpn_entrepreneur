@@ -26,10 +26,11 @@ function countryCodeToFlagEmoji(countryCode) {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
-  if (c.length !== 2) return "🌐";
+  if (c.length < 2) return "🌐";
+  const cc = c.slice(0, 2);
   const base = 0x1f1e6 - 0x41;
   try {
-    return String.fromCodePoint(c.charCodeAt(0) + base, c.charCodeAt(1) + base);
+    return String.fromCodePoint(cc.charCodeAt(0) + base, cc.charCodeAt(1) + base);
   } catch {
     return "🌐";
   }
@@ -68,7 +69,10 @@ function buildSocksProxyUri(proxyItem, label = "Мой_прокси") {
   const password = String(s.password || "").trim();
   if (!host || !port || !username || !password) return "";
   const userInfo = `${encodeURIComponent(username)}:${encodeURIComponent(password)}`;
-  const frag = encodeURIComponent(String(label || "Мой_прокси").trim());
+  // Keep fragment human-readable in UI (Telegram users copy this value manually).
+  const frag = String(label || "Мой_прокси")
+    .trim()
+    .replace(/\s+/g, "_");
   return `socks://${userInfo}@${host}:${port}#${frag}`;
 }
 
