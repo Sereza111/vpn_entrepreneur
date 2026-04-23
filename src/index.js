@@ -922,6 +922,7 @@ async function ensureSecondaryXuiClient({
   telegramId,
   subId,
   baseRemark,
+  expiryTimeMs = null,
 }) {
   if (!config.xuiSecondary.enabled) return;
   if (!Number(config.xuiSecondary.inboundId)) return;
@@ -960,6 +961,9 @@ async function ensureSecondaryXuiClient({
       tgId: tid,
       subId,
       remark,
+      ...(Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
+        ? { expiryTime: Number(expiryTimeMs) }
+        : {}),
     };
     const upd = await secondaryFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientId)}`, {
       method: "POST",
@@ -981,7 +985,10 @@ async function ensureSecondaryXuiClient({
     enable: true,
     limitIp: 0,
     totalGB: 0,
-    expiryTime: 0,
+    expiryTime:
+      Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
+        ? Number(expiryTimeMs)
+        : 0,
     tgId: tid,
     subId,
     remark,
@@ -1133,6 +1140,17 @@ async function extendXuiClientDays({ telegramId, days, username = null }) {
     clientId,
     client: patch,
   });
+  const linked = await xuiStore.getXuiLinkByTelegramId(tid).catch(() => null);
+  const subId = extractSubIdFromStoredLink(linked) || String(found.client.subId || "").trim();
+  const baseRemark = buildXuiClientRemark(tid, username, null);
+  if (subId) {
+    await ensureSecondaryXuiClient({
+      telegramId: tid,
+      subId,
+      baseRemark,
+      expiryTimeMs: nextExpiryMs,
+    }).catch((e) => console.warn("[xui-secondary] extend sync:", e?.message || e));
+  }
   return {
     previousExpiryMs: Number.isFinite(curExpiryMs) ? curExpiryMs : 0,
     nextExpiryMs,
