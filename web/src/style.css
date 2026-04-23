@@ -270,6 +270,44 @@ body.vl-wheel-layout #root {
   transition: width 380ms ease;
 }
 
+.mini-gauges {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mini-gauge {
+  border: 1px solid var(--app-stroke-soft);
+  border-radius: var(--app-radius-sm);
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--app-bg) 72%, transparent);
+}
+
+.mini-gauge__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.83rem;
+  color: var(--app-hint);
+}
+
+.mini-gauge__bar {
+  margin-top: 7px;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--app-text) 9%, transparent);
+}
+
+.mini-gauge__fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gothic-gold), var(--app-accent));
+  transition: width 260ms ease;
+}
+
 .muted {
   color: var(--app-hint);
   font-size: 0.95rem;

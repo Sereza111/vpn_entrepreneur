@@ -131,4 +131,14 @@ export const config = {
   testGrantEnabled:
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "true",
+  referral: {
+    enabled:
+      String(process.env.REFERRAL_ENABLED || "1").toLowerCase() === "1" ||
+      String(process.env.REFERRAL_ENABLED || "").toLowerCase() === "true",
+    bonusMinor: Math.max(0, Math.floor(Number(process.env.REFERRAL_BONUS_MINOR || 5000))),
+    minQualifyingTopupMinor: Math.max(
+      0,
+      Math.floor(Number(process.env.REFERRAL_MIN_TOPUP_MINOR || 6000)),
+    ),
+  },
 };

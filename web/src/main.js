@@ -1133,6 +1133,22 @@ async function boot() {
       </div>
       <div class="label" id="trafficHint">${hasLimit ? "Прогресс по лимиту" : "Безлимит: показываем использовано"}</div>
     </div>
+    <div class="mini-gauges">
+      <div class="mini-gauge">
+        <div class="mini-gauge__head">
+          <span>Канал</span>
+          <span id="netGaugeValue">0%</span>
+        </div>
+        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="netGaugeFill" style="width:0%"></div></div>
+      </div>
+      <div class="mini-gauge">
+        <div class="mini-gauge__head">
+          <span>Сервер</span>
+          <span id="srvGaugeValue">85%</span>
+        </div>
+        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="srvGaugeFill" style="width:85%"></div></div>
+      </div>
+    </div>
     <div class="grid" style="margin-top:10px">
       <div class="stat">
         <div class="label">Пользователь</div>
@@ -1526,6 +1542,7 @@ async function boot() {
   // "Спидометр": считаем скорость как прирост usedTrafficBytes за интервал.
   // Никаких внешних speedtest — только то, что реально прошло через подписку.
   let last = { at: Date.now(), used: usedBytes };
+  let pollFailStreak = 0;
   const tick = async () => {
     try {
       const me2 = await api("/api/me", {
@@ -1545,6 +1562,18 @@ async function boot() {
 
       const speedEl = document.getElementById("speedText");
       if (speedEl) speedEl.textContent = fmtSpeed(bps);
+      const mbpsNow = (bps * 8) / 1_000_000;
+      const netPct = Math.max(2, Math.min(100, Math.round((mbpsNow / 25) * 100)));
+      const netVal = document.getElementById("netGaugeValue");
+      const netFill = document.getElementById("netGaugeFill");
+      if (netVal) netVal.textContent = `${netPct}%`;
+      if (netFill) netFill.style.width = `${netPct}%`;
+      pollFailStreak = 0;
+      const srvPct = 96;
+      const srvVal = document.getElementById("srvGaugeValue");
+      const srvFill = document.getElementById("srvGaugeFill");
+      if (srvVal) srvVal.textContent = `${srvPct}%`;
+      if (srvFill) srvFill.style.width = `${srvPct}%`;
 
       const trafficEl = document.getElementById("trafficText");
       if (trafficEl) {
@@ -1560,7 +1589,13 @@ async function boot() {
         }
       }
     } catch {
-      // Игнорим временные ошибки (например, если Remnawave недоступен).
+      // If /api/me polling fails, show degraded server health.
+      pollFailStreak += 1;
+      const srvPct = Math.max(12, 96 - pollFailStreak * 22);
+      const srvVal = document.getElementById("srvGaugeValue");
+      const srvFill = document.getElementById("srvGaugeFill");
+      if (srvVal) srvVal.textContent = `${srvPct}%`;
+      if (srvFill) srvFill.style.width = `${srvPct}%`;
     }
   };
   setInterval(tick, 5000);

@@ -19,6 +19,7 @@ import {
   removeProxyUserOnServer,
 } from "./proxyProvision.js";
 import * as balanceStore from "./balanceStore.js";
+import * as referralStore from "./referralStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
 import * as timewebApi from "./timewebApi.js";
 
@@ -63,6 +64,40 @@ function parsePriceMapFromConfig(raw) {
 }
 
 const PAYMENT_PRICE_MAP_MINOR = parsePriceMapFromConfig(config.payment.priceMapJson);
+
+function extractStartPayload(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const m = /^\/start(?:@\w+)?(?:\s+(.+))?$/i.exec(raw);
+  return String(m?.[1] || "").trim();
+}
+
+function parseRefInviterId(payload) {
+  const p = String(payload || "").trim();
+  const m = /^ref_(\d{5,20})$/i.exec(p);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+async function maybeAwardReferralBonus({ inviteeTelegramId, paidMinor }) {
+  if (!config.referral.enabled) return null;
+  const amount = Math.max(0, Math.floor(Number(paidMinor || 0)));
+  if (amount < config.referral.minQualifyingTopupMinor) return null;
+  const ref = await referralStore.getByInvitee(inviteeTelegramId);
+  const inviterId = Number(ref?.inviterTelegramId || 0);
+  if (!ref || !inviterId || inviterId === Number(inviteeTelegramId || 0)) return null;
+  if (ref.rewardedAt) return null;
+  const bonusMinor = Math.max(0, Math.floor(Number(config.referral.bonusMinor || 0)));
+  if (bonusMinor < 1) return null;
+  await balanceStore.credit(inviterId, bonusMinor);
+  await referralStore.markRewarded({
+    inviteeTelegramId,
+    qualifyingPaymentMinor: amount,
+    bonusMinor,
+  });
+  return { inviterId, bonusMinor };
+}
 
 function resolvePlanPriceMinor(selection = {}) {
   const code = String(selection.productCode || "").trim().toLowerCase();
@@ -580,6 +615,11 @@ async function loadMe(telegramId, username = null) {
 
   const catalog = { source: "builtin", products: [] };
   const subscriptionUi = null;
+  const referralStats = await referralStore.getInviterStats(telegramId).catch(() => ({
+    invitedTotal: 0,
+    rewardedTotal: 0,
+    rewardMinorTotal: 0,
+  }));
 
   let balancePayload = { enabled: false };
   if (config.balance.billingEnabled) {
@@ -663,6 +703,16 @@ async function loadMe(telegramId, username = null) {
     })),
     catalog,
     balance: balancePayload,
+    referral: {
+      enabled: Boolean(config.referral.enabled),
+      bonusMinor: Number(config.referral.bonusMinor || 0),
+      minQualifyingTopupMinor: Number(config.referral.minQualifyingTopupMinor || 0),
+      invitedTotal: Number(referralStats.invitedTotal || 0),
+      rewardedTotal: Number(referralStats.rewardedTotal || 0),
+      rewardMinorTotal: Number(referralStats.rewardMinorTotal || 0),
+      refStartParam: `ref_${telegramId}`,
+      refLink: `https://t.me/VL_VPNbot?start=ref_${telegramId}`,
+    },
     payment: {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
       defaultProductCode: config.payment.defaultProductCode || "vps_30",
@@ -1507,6 +1557,8 @@ app.post("/api/webhooks/payment", async (req, res) => {
     paymentId,
     productCode,
     username,
+    amountMinor,
+    amount,
   } = req.body || {};
   const idKey = String(externalPaymentId ?? paymentId ?? "").trim();
   const days = Number(extendDays || planDays || 0);
@@ -1531,6 +1583,19 @@ app.post("/api/webhooks/payment", async (req, res) => {
       return res.status(400).json({ error: "nothing_to_apply" });
     }
     await xuiProvisionCore(tid, { force: true, username: username ?? null });
+    const paidMinor =
+      Number.isFinite(Number(amountMinor)) && Number(amountMinor) > 0
+        ? Math.floor(Number(amountMinor))
+        : Number.isFinite(Number(amount)) && Number(amount) > 0
+          ? Math.floor(Number(amount) * 100)
+          : 0;
+    const refAward = await maybeAwardReferralBonus({ inviteeTelegramId: tid, paidMinor });
+    if (refAward?.inviterId) {
+      await bot.api.sendMessage(
+        Number(refAward.inviterId),
+        `Реферал оплатил подписку. Начислено ${(refAward.bonusMinor / 100).toFixed(0)} ₽ бонуса.`,
+      ).catch(() => null);
+    }
     if (idKey) {
       await paymentWebhookStore.markProcessed(idKey, {
         telegramId: String(tid),
@@ -2112,6 +2177,14 @@ app.post("/api/payments/balance/invoice-link", authMiddleware, async (req, res) 
 });
 
 bot.command("start", async (ctx) => {
+  const payload = extractStartPayload(ctx.message?.text || "");
+  const inviterId = parseRefInviterId(payload);
+  const inviteeId = Number(ctx.from?.id || 0);
+  if (inviterId && inviteeId > 0 && inviterId !== inviteeId) {
+    await referralStore
+      .bindInviterIfEmpty({ inviteeTelegramId: inviteeId, inviterTelegramId: inviterId })
+      .catch(() => null);
+  }
   const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
   await ctx.reply(
     "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
@@ -2183,6 +2256,16 @@ bot.on("message:successful_payment", async (ctx) => {
       const minor = Number(sp.total_amount || 0);
       if (Number.isFinite(minor) && minor > 0) {
         await balanceStore.credit(payload.telegramId, minor);
+        const refAward = await maybeAwardReferralBonus({
+          inviteeTelegramId: payload.telegramId,
+          paidMinor: minor,
+        });
+        if (refAward?.inviterId) {
+          await ctx.api.sendMessage(
+            Number(refAward.inviterId),
+            `Реферал пополнил баланс. Начислено ${(refAward.bonusMinor / 100).toFixed(0)} ₽ бонуса.`,
+          ).catch(() => null);
+        }
       }
       await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
       await ctx.reply(
