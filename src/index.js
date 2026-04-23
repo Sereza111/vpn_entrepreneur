@@ -1107,6 +1107,38 @@ async function setXuiClientEnabled(telegramId, enabled) {
   });
 }
 
+async function extendXuiClientDays({ telegramId, days, username = null }) {
+  const tid = Number(telegramId);
+  const addDays = Math.floor(Number(days || 0));
+  if (!Number.isFinite(tid) || tid < 1) throw new Error("bad_telegram_id");
+  if (!Number.isFinite(addDays) || addDays < 1) throw new Error("bad_days");
+  if (!config.xui.inboundId) throw new Error("xui_inbound_id_required");
+
+  await xuiProvisionCore(tid, { force: true, username });
+  const found = await xui.findClientInInbound({
+    inboundId: config.xui.inboundId,
+    telegramId: tid,
+  });
+  if (!found?.client) throw new Error("xui_client_not_found");
+  const clientId = String(found.client.id || found.client.ID || "").trim();
+  if (!clientId) throw new Error("xui_client_id_missing");
+
+  const now = Date.now();
+  const curExpiryMs = Number(found.client.expiryTime || 0);
+  const baseMs = Number.isFinite(curExpiryMs) && curExpiryMs > now ? curExpiryMs : now;
+  const nextExpiryMs = baseMs + addDays * 86400_000;
+  const patch = { ...found.client, enable: true, expiryTime: nextExpiryMs };
+  await xui.updateClientInInbound({
+    inboundId: config.xui.inboundId,
+    clientId,
+    client: patch,
+  });
+  return {
+    previousExpiryMs: Number.isFinite(curExpiryMs) ? curExpiryMs : 0,
+    nextExpiryMs,
+  };
+}
+
 function parseTelegramPaymentPayload(raw) {
   const shortKey = String(raw || "").trim();
   if (shortKey.startsWith("p:")) {
@@ -1685,6 +1717,37 @@ app.post("/api/admin/grant-subscription", adminGrantAuth, async (req, res) => {
       provisionResult,
       addedSlots: addDeviceSlots,
       xuiLimitIp,
+      data,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Admin: extend XUI client expiry by exact number of days.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, days, username? }
+ */
+app.post("/api/admin/grant-days", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const days = Number(req.body?.days || 0);
+  const username = req.body?.username != null ? String(req.body.username || "").trim() || null : null;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  if (!Number.isFinite(days) || days < 1) {
+    return res.status(400).json({ error: "bad_days" });
+  }
+  try {
+    const r = await extendXuiClientDays({ telegramId, days, username });
+    const data = await loadMe(telegramId, username);
+    return res.json({
+      ok: true,
+      telegramId,
+      grantedDays: Math.floor(days),
+      previousExpireAt: r.previousExpiryMs > 0 ? new Date(r.previousExpiryMs).toISOString() : null,
+      nextExpireAt: new Date(r.nextExpiryMs).toISOString(),
       data,
     });
   } catch (e) {
