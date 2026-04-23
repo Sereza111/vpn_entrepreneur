@@ -1157,6 +1157,33 @@ async function extendXuiClientDays({ telegramId, days, username = null }) {
   };
 }
 
+async function syncSecondaryExpiryFromPrimary({ telegramId, username = null }) {
+  const tid = Number(telegramId);
+  if (!Number.isFinite(tid) || tid < 1) throw new Error("bad_telegram_id");
+  if (!config.xui.inboundId) throw new Error("xui_inbound_id_required");
+
+  await xuiProvisionCore(tid, { force: true, username });
+  const found = await xui.findClientInInbound({
+    inboundId: config.xui.inboundId,
+    telegramId: tid,
+  });
+  if (!found?.client) throw new Error("xui_client_not_found");
+  const primaryExpiryMs = Number(found.client.expiryTime || 0);
+  const linked = await xuiStore.getXuiLinkByTelegramId(tid).catch(() => null);
+  const subId = extractSubIdFromStoredLink(linked) || String(found.client.subId || "").trim();
+  if (!subId) throw new Error("xui_subid_missing");
+  const baseRemark = buildXuiClientRemark(tid, username, null);
+  await ensureSecondaryXuiClient({
+    telegramId: tid,
+    subId,
+    baseRemark,
+    expiryTimeMs: Number.isFinite(primaryExpiryMs) ? primaryExpiryMs : 0,
+  });
+  return {
+    primaryExpireAt: primaryExpiryMs > 0 ? new Date(primaryExpiryMs).toISOString() : null,
+  };
+}
+
 function parseTelegramPaymentPayload(raw) {
   const shortKey = String(raw || "").trim();
   if (shortKey.startsWith("p:")) {
@@ -1766,6 +1793,32 @@ app.post("/api/admin/grant-days", adminGrantAuth, async (req, res) => {
       grantedDays: Math.floor(days),
       previousExpireAt: r.previousExpiryMs > 0 ? new Date(r.previousExpiryMs).toISOString() : null,
       nextExpireAt: new Date(r.nextExpiryMs).toISOString(),
+      data,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Admin: sync secondary(NL bypass) expiry to current primary expiry without adding days.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { telegramId, username? }
+ */
+app.post("/api/admin/sync-secondary-expiry", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const username = req.body?.username != null ? String(req.body.username || "").trim() || null : null;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  try {
+    const r = await syncSecondaryExpiryFromPrimary({ telegramId, username });
+    const data = await loadMe(telegramId, username);
+    return res.json({
+      ok: true,
+      telegramId,
+      synced: true,
+      primaryExpireAt: r.primaryExpireAt,
       data,
     });
   } catch (e) {
