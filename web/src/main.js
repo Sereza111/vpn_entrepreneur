@@ -1237,6 +1237,7 @@ async function boot() {
                </div>
               ${proxyAddonCardHtml(me)}
              </div>
+             ${mtprotoCardHtml(me)}
              `
       }
     </div>`);
