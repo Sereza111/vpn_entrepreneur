@@ -162,6 +162,57 @@ function mtprotoCardHtml(me) {
   `;
 }
 
+function referralCardHtml(me) {
+  const ref = me?.referral || {};
+  if (!ref?.enabled) return "";
+  const link = String(ref.refLink || "").trim();
+  const invited = Number(ref.invitedTotal || 0);
+  const rewarded = Number(ref.rewardedTotal || 0);
+  const paidRub = (Number(ref.rewardMinorTotal || 0) / 100).toFixed(0);
+  return `
+    <div class="link-block" style="margin-top:10px">
+      <div class="label">Рефералы</div>
+      <p class="muted" style="margin-top:6px;line-height:1.45">Бонус ${((Number(ref.bonusMinor || 0)) / 100).toFixed(0)} ₽ за приглашённого после его первого реального пополнения.</p>
+      <div class="grid" style="margin-top:8px">
+        <div class="stat"><div class="label">Приглашено</div><div class="value">${invited}</div></div>
+        <div class="stat"><div class="label">Оплатили</div><div class="value">${rewarded}</div></div>
+        <div class="stat"><div class="label">Начислено</div><div class="value">${paidRub} ₽</div></div>
+      </div>
+      ${
+        link
+          ? `<div class="link-block" style="margin-top:10px">
+               <div class="label">Ваша реф-ссылка</div>
+               <div class="link" id="refLink">${escAttr(link)}</div>
+             </div>
+             <div class="proxy-addon-card__actions">
+               <button type="button" class="btn secondary" id="refCopyBtn">Скопировать ссылку</button>
+               <button type="button" class="btn secondary" id="refOpenBtn">Открыть</button>
+             </div>`
+          : ""
+      }
+    </div>
+  `;
+}
+
+function bindReferralButtons(tg) {
+  const refLinkEl = document.getElementById("refLink");
+  const refCopyBtn = document.getElementById("refCopyBtn");
+  const refOpenBtn = document.getElementById("refOpenBtn");
+  if (!refLinkEl) return;
+  const link = String(refLinkEl.textContent || "").trim();
+  if (refCopyBtn) {
+    refCopyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("Реф-ссылка скопирована");
+      } catch {
+        showToast("Не удалось скопировать");
+      }
+    };
+  }
+  if (refOpenBtn) refOpenBtn.onclick = () => tg.openLink(link);
+}
+
 function proxyServerPickButtonsHtml(servers) {
   const list = Array.isArray(servers) ? servers : [];
   if (!list.length) {
@@ -913,6 +964,7 @@ async function boot() {
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>`
           }
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
+          ${referralCardHtml(me)}
         </div>
       `),
     );
@@ -1012,6 +1064,7 @@ async function boot() {
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
     bindProxyDeleteButtons(token, tg);
+    bindReferralButtons(tg);
     const mtOpen1 = document.getElementById("mtprotoOpenBtn");
     const mtCopy1 = document.getElementById("mtprotoCopyBtn");
     const mtLink1 = document.getElementById("mtprotoLink");
@@ -1136,19 +1189,20 @@ async function boot() {
     <div class="mini-gauges">
       <div class="mini-gauge">
         <div class="mini-gauge__head">
-          <span>Канал</span>
+          <span>Канал*</span>
           <span id="netGaugeValue">0%</span>
         </div>
         <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="netGaugeFill" style="width:0%"></div></div>
       </div>
       <div class="mini-gauge">
         <div class="mini-gauge__head">
-          <span>Сервер</span>
-          <span id="srvGaugeValue">85%</span>
+          <span>API*</span>
+          <span id="srvGaugeValue">100%</span>
         </div>
-        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="srvGaugeFill" style="width:85%"></div></div>
+        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="srvGaugeFill" style="width:100%"></div></div>
       </div>
     </div>
+    <div class="muted" style="margin-top:6px;font-size:0.78rem">*Не CPU сервера: это индикаторы активности канала и доступности API.</div>
     <div class="grid" style="margin-top:10px">
       <div class="stat">
         <div class="label">Пользователь</div>
@@ -1388,6 +1442,7 @@ async function boot() {
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
+    ${referralCardHtml(me)}
   </div>`
       : `<div class="card section" id="section-extend">
     <h2 class="section-title">Покупка VPS Premium</h2>
@@ -1423,6 +1478,7 @@ async function boot() {
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
+    ${referralCardHtml(me)}
   </div>`,
   );
   root.appendChild(extend);
@@ -1432,6 +1488,7 @@ async function boot() {
   if (balanceMode) document.body.classList.add("vl-balance-mode");
 
   bindVpnRenewalActions({ tg, me });
+  bindReferralButtons(tg);
 
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.onclick = () => {
