@@ -653,6 +653,13 @@ async function loadMe(telegramId, username = null) {
       id: s.id,
       country: s.country,
       label: s.label || "",
+      mtproto: s.mtprotoSecret && Number(s.mtprotoPort) > 0
+        ? {
+            host: s.host,
+            port: Number(s.mtprotoPort),
+            secret: s.mtprotoSecret,
+          }
+        : null,
     })),
     catalog,
     balance: balancePayload,

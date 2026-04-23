@@ -24,6 +24,8 @@ export function parseProxyServers(envValue) {
       timewebServerId: String(s?.timewebServerId || s?.timeweb?.serverId || "").trim(),
       socksPort: Number(s?.socksPort ?? 1080),
       httpPort: Number(s?.httpPort ?? 3128),
+      mtprotoPort: Number(s?.mtprotoPort ?? s?.mtproto?.port ?? 0),
+      mtprotoSecret: String(s?.mtprotoSecret || s?.mtproto?.secret || "").trim(),
       ssh: {
         host: String(s?.ssh?.host || s?.host || "").trim(),
         port: Number(s?.ssh?.port ?? 22),

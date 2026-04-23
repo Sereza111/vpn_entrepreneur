@@ -126,6 +126,42 @@ function buildHttpProxyUri(proxyItem, label = "Мой_прокси") {
   return `http://${userInfo}@${host}:${port}#${frag}`;
 }
 
+function buildMtprotoLinks(mt) {
+  const host = String(mt?.host || "").trim();
+  const port = String(mt?.port || "").trim();
+  const secret = String(mt?.secret || "").trim();
+  if (!host || !port || !secret) return null;
+  const tg = `tg://proxy?server=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+  const tm = `https://t.me/proxy?server=${encodeURIComponent(host)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+  return { tg, tm };
+}
+
+function mtprotoCardHtml(me) {
+  const servers = Array.isArray(me?.proxyServers) ? me.proxyServers : [];
+  const first = servers.find((s) => s?.mtproto?.secret && s?.mtproto?.host && s?.mtproto?.port) || null;
+  const links = buildMtprotoLinks(first?.mtproto);
+  if (!links) return "";
+  return `
+    <div class="proxy-service-card" style="margin-top:12px">
+      <div class="proxy-service-card__head">
+        <span class="proxy-service-card__glyph" aria-hidden="true">✈</span>
+        <div>
+          <div class="proxy-service-card__title">MTProto (Telegram)</div>
+          <div class="proxy-service-card__sub">Shared · добавляется прямо в Telegram</div>
+        </div>
+      </div>
+      <div class="link-block" style="margin-top:10px">
+        <div class="label">Ссылка</div>
+        <div class="link" id="mtprotoLink">${escAttr(links.tm)}</div>
+      </div>
+      <div class="proxy-addon-card__actions">
+        <button type="button" class="btn secondary" id="mtprotoOpenBtn">Добавить в Telegram</button>
+        <button type="button" class="btn secondary" id="mtprotoCopyBtn">Скопировать</button>
+      </div>
+    </div>
+  `;
+}
+
 function proxyServerPickButtonsHtml(servers) {
   const list = Array.isArray(servers) ? servers : [];
   if (!list.length) {
@@ -918,6 +954,7 @@ async function boot() {
             </div>
             ${proxyAddonCardHtml(me)}
           </div>
+          ${mtprotoCardHtml(me)}
           <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
         </div>
       `),
@@ -975,6 +1012,18 @@ async function boot() {
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
     bindProxyDeleteButtons(token, tg);
+    const mtOpen1 = document.getElementById("mtprotoOpenBtn");
+    const mtCopy1 = document.getElementById("mtprotoCopyBtn");
+    const mtLink1 = document.getElementById("mtprotoLink");
+    if (mtOpen1 && mtLink1) mtOpen1.onclick = () => tg.openLink(String(mtLink1.textContent || "").trim());
+    if (mtCopy1 && mtLink1) mtCopy1.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(String(mtLink1.textContent || "").trim());
+        showToast("Скопировано");
+      } catch {
+        showToast("Не удалось скопировать");
+      }
+    };
 
     // Proxy addons (no account state still shows UI; API may return balance_not_started)
     const bindProxyAddonButtons = () => {
@@ -1243,6 +1292,18 @@ async function boot() {
       }
     };
     bindProxyDeleteButtons(token, tg);
+    const mtOpen2 = document.getElementById("mtprotoOpenBtn");
+    const mtCopy2 = document.getElementById("mtprotoCopyBtn");
+    const mtLink2 = document.getElementById("mtprotoLink");
+    if (mtOpen2 && mtLink2) mtOpen2.onclick = () => tg.openLink(String(mtLink2.textContent || "").trim());
+    if (mtCopy2 && mtLink2) mtCopy2.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(String(mtLink2.textContent || "").trim());
+        showToast("Скопировано");
+      } catch {
+        showToast("Не удалось скопировать");
+      }
+    };
   }
 
   const cat = me.catalog;
