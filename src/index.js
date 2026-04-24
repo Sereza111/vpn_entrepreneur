@@ -22,6 +22,7 @@ import * as balanceStore from "./balanceStore.js";
 import * as referralStore from "./referralStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
 import * as timewebApi from "./timewebApi.js";
+import * as yookassaApi from "./yookassaApi.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -722,6 +723,7 @@ async function loadMe(telegramId, username = null) {
       prices: PAYMENT_PRICE_MAP_MINOR,
       testGrantEnabled: config.testGrantEnabled,
       allowTestTools: config.payment.mode === "test" && config.testGrantEnabled,
+      yookassaEnabled: isYookassaEnabled(),
     },
   };
 }
@@ -1974,6 +1976,10 @@ function inferServiceTypeFromProductCode(productCode) {
   return code.startsWith("proxy_") ? "proxy" : "vps";
 }
 
+function isYookassaEnabled() {
+  return Boolean(config.yookassa.shopId && config.yookassa.secretKey);
+}
+
 function parseProxyProductCode(productCode) {
   const code = String(productCode || "").trim().toLowerCase();
   const m = /^proxy_([^_]+)_(\d+)$/i.exec(code);
@@ -2069,6 +2075,36 @@ async function createBalanceTopupInvoiceLink({ telegramId, username, amountMinor
   const env = buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
   const invoiceLink = await createTelegramInvoiceLinkWithRetries(env);
   return { invoiceLink, amountMinor: env.amountMinor };
+}
+
+async function applySuccessfulBusinessPayload({ payload, paidMinor = 0, username = null }) {
+  if (!payload) throw new Error("payment_payload_missing");
+  if (payload.kind === "balance_topup") {
+    const minor = Math.max(0, Math.floor(Number(paidMinor || 0)));
+    if (minor > 0) {
+      await balanceStore.credit(payload.telegramId, minor);
+      await maybeAwardReferralBonus({
+        inviteeTelegramId: payload.telegramId,
+        paidMinor: minor,
+      }).catch(() => null);
+    }
+    await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
+    return { serviceType: "balance_topup", grantedDays: 0 };
+  }
+  if (payload.serviceType === "proxy") {
+    const grantDays = Number.isFinite(payload.days) ? payload.days : 30;
+    const grantCount = Number.isFinite(payload.proxyCredits) && payload.proxyCredits > 0
+      ? payload.proxyCredits
+      : 1;
+    await proxyStore.grantProxyCredits({
+      telegramId: payload.telegramId,
+      addCount: grantCount,
+      days: grantDays,
+    });
+    return { serviceType: "proxy", grantedDays: grantDays };
+  }
+  await xuiProvisionCore(payload.telegramId, { force: true, username });
+  return { serviceType: "vps", grantedDays: Number(payload.days || 0) || 0 };
 }
 
 async function sendTelegramInvoiceForSelection({
@@ -2173,6 +2209,86 @@ async function sendTelegramInvoiceFromCtx(ctx, selected = null) {
     await ctx.reply(`Не удалось отправить счёт: ${msg}`);
   }
 }
+
+app.post("/api/payments/checkout-link", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  const username = req.tgSession?.u ?? null;
+  const selected = buildInvoiceSelection(req.body || {});
+  try {
+    if (isYookassaEnabled()) {
+      const amountMinor = resolvePlanPriceMinor(selected);
+      if (!Number.isFinite(amountMinor) || amountMinor < 1) {
+        return res.status(400).json({ error: "bad_amount" });
+      }
+      const payloadKey = savePaymentPayload({
+        kind: "telegram_payment",
+        telegramId: tid,
+        username: username || null,
+        days: selected.days,
+        productCode: selected.productCode,
+        serviceType: selected.serviceType,
+        serverId: selected.serverId,
+        proxyCredits: selected.serviceType === "proxy" ? 1 : 0,
+        at: Date.now(),
+      });
+      const yk = await yookassaApi.createRedirectPayment({
+        amountMinor,
+        description: `VL ${selected.serviceType.toUpperCase()} ${selected.days}d`,
+        returnUrl: config.yookassa.returnUrl || `${String(config.publicBaseUrl || "").replace(/\/$/, "")}/app/`,
+        metadata: { payloadKey, telegramId: String(tid), serviceType: selected.serviceType },
+      });
+      return res.json({
+        ok: true,
+        provider: "yookassa",
+        invoiceLink: String(yk?.confirmation?.confirmation_url || "").trim(),
+        paymentId: String(yk?.id || "").trim(),
+      });
+    }
+    const r = await createTelegramInvoiceLinkForSelection({
+      telegramId: tid,
+      username,
+      selected,
+    });
+    return res.json({ ok: true, provider: "telegram", invoiceLink: r.invoiceLink, ...r.normalized });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/payments/yookassa/webhook", async (req, res) => {
+  if (!isYookassaEnabled()) return res.status(503).json({ error: "yookassa_disabled" });
+  try {
+    const event = req.body || {};
+    const obj = event?.object || {};
+    const paymentId = String(obj?.id || "").trim();
+    if (!paymentId) return res.status(400).json({ error: "payment_id_required" });
+    const dedupKey = `yk:${paymentId}`;
+    if (await paymentWebhookStore.wasProcessed(dedupKey)) {
+      return res.json({ ok: true, duplicate: true });
+    }
+    const payment = await yookassaApi.getPayment(paymentId);
+    if (String(payment?.status || "").toLowerCase() !== "succeeded" || payment?.paid !== true) {
+      return res.json({ ok: true, skipped: true, status: payment?.status || null });
+    }
+    const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
+    const payload = parseTelegramPaymentPayload(payloadKey);
+    if (!payload) return res.status(400).json({ error: "payload_not_found" });
+    const paidMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
+    await applySuccessfulBusinessPayload({
+      payload,
+      paidMinor: Number.isFinite(paidMinor) ? paidMinor : 0,
+      username: payload?.username || null,
+    });
+    await paymentWebhookStore.markProcessed(dedupKey, {
+      provider: "yookassa",
+      telegramId: String(payload.telegramId || ""),
+      payloadKey,
+    });
+    return res.json({ ok: true });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
 
 app.post("/api/payments/telegram/invoice", authMiddleware, async (req, res) => {
   if (!config.payment.telegramProviderToken) {
@@ -2310,6 +2426,48 @@ app.post("/api/payments/balance/invoice-link", authMiddleware, async (req, res) 
   }
 });
 
+app.post("/api/payments/balance/checkout-link", authMiddleware, async (req, res) => {
+  if (!config.balance.billingEnabled) {
+    return res.status(503).json({ error: "balance_billing_disabled" });
+  }
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  const username = req.tgSession?.u ?? null;
+  const amountRub = Number(req.body?.amountRub || 0);
+  const minRub = Math.max(1, config.payment.telegramMinInvoiceAmountMajor);
+  if (!Number.isFinite(amountRub) || amountRub < minRub) {
+    return res.status(400).json({ error: "amount_too_small", minRub });
+  }
+  const amountMinor = Math.floor(amountRub * 100);
+  try {
+    if (isYookassaEnabled()) {
+      const env = buildBalanceTopupInvoiceEnvelope(tid, username, amountMinor);
+      const yk = await yookassaApi.createRedirectPayment({
+        amountMinor: env.amountMinor,
+        description: "Пополнение баланса VL",
+        returnUrl: config.yookassa.returnUrl || `${String(config.publicBaseUrl || "").replace(/\/$/, "")}/app/`,
+        metadata: { payloadKey: env.payload, telegramId: String(tid), kind: "balance_topup" },
+      });
+      return res.json({
+        ok: true,
+        provider: "yookassa",
+        invoiceLink: String(yk?.confirmation?.confirmation_url || "").trim(),
+        amountMinor: env.amountMinor,
+      });
+    }
+    if (!config.payment.telegramProviderToken) {
+      return res.status(503).json({ error: "telegram_payments_disabled" });
+    }
+    const r = await createBalanceTopupInvoiceLink({
+      telegramId: tid,
+      username,
+      amountMinor,
+    });
+    return res.json({ ok: true, provider: "telegram", invoiceLink: r.invoiceLink, amountMinor: r.amountMinor });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 bot.command("start", async (ctx) => {
   const payload = extractStartPayload(ctx.message?.text || "");
   const inviterId = parseRefInviterId(payload);
@@ -2386,41 +2544,18 @@ bot.on("message:successful_payment", async (ctx) => {
   if (dedupKey) processedPayments.add(dedupKey);
   const username = ctx.from?.username || null;
   try {
-    if (payload.kind === "balance_topup") {
-      const minor = Number(sp.total_amount || 0);
-      if (Number.isFinite(minor) && minor > 0) {
-        await balanceStore.credit(payload.telegramId, minor);
-        const refAward = await maybeAwardReferralBonus({
-          inviteeTelegramId: payload.telegramId,
-          paidMinor: minor,
-        });
-        if (refAward?.inviterId) {
-          await ctx.api.sendMessage(
-            Number(refAward.inviterId),
-            `Реферал пополнил баланс. Начислено ${(refAward.bonusMinor / 100).toFixed(0)} ₽ бонуса.`,
-          ).catch(() => null);
-        }
-      }
-      await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
+    const applied = await applySuccessfulBusinessPayload({
+      payload,
+      paidMinor: Number(sp.total_amount || 0),
+      username,
+    });
+    if (applied.serviceType === "balance_topup") {
       await ctx.reply(
         `Баланс пополнен на ${(Number(sp.total_amount || 0) / 100).toFixed(0)} руб. Списание за VPS — почасово после активации баланса.`,
       );
       return;
     }
-    if (payload.serviceType === "proxy") {
-      const grantDays = Number.isFinite(payload.days) ? payload.days : 30;
-      const grantCount = Number.isFinite(payload.proxyCredits) && payload.proxyCredits > 0
-        ? payload.proxyCredits
-        : 1;
-      await proxyStore.grantProxyCredits({
-        telegramId: payload.telegramId,
-        addCount: grantCount,
-        days: grantDays,
-      });
-    } else {
-      await xuiProvisionCore(payload.telegramId, { force: true, username });
-    }
-    if (payload.serviceType === "proxy") {
+    if (applied.serviceType === "proxy") {
       await ctx.reply(
         `Платёж успешно получен. Квота прокси выдана: +${payload.proxyCredits || 1} на ${payload.days} дней.`,
       );

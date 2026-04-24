@@ -475,7 +475,7 @@ function bindVpnRenewalActions({ tg, me }) {
   const openInvoiceInMiniApp = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
     const token = window.__vlToken || "";
     if (!token) throw new Error("auth_token_missing");
-    const r = await api("/api/payments/telegram/invoice-link", {
+    const r = await api("/api/payments/checkout-link", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -625,7 +625,7 @@ function bindVpnRenewalActions({ tg, me }) {
     }
     const token = window.__vlToken || "";
     if (!token) throw new Error("auth_token_missing");
-    const r = await api("/api/payments/balance/invoice-link", {
+    const r = await api("/api/payments/balance/checkout-link", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ amountRub: n }),
@@ -1032,7 +1032,7 @@ async function boot() {
     if (payBtnNoAcc) payBtnNoAcc.onclick = async () => {
       const pay = me.payment || {};
       try {
-        const r = await api("/api/payments/telegram/invoice-link", {
+        const r = await api("/api/payments/checkout-link", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           body: JSON.stringify({

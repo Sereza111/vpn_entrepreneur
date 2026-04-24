@@ -127,6 +127,12 @@ export const config = {
       ),
     ),
   },
+  yookassa: {
+    shopId: String(process.env.YK_SHOP_ID || process.env.YOOKASSA_SHOP_ID || "").trim(),
+    secretKey: String(process.env.YK_SECRET_KEY || process.env.YOOKASSA_SECRET_KEY || "").trim(),
+    returnUrl: String(process.env.YK_RETURN_URL || process.env.YOOKASSA_RETURN_URL || "").trim(),
+    apiBaseUrl: String(process.env.YK_API_BASE_URL || "https://api.yookassa.ru").replace(/\/$/, ""),
+  },
   corsOrigin: process.env.CORS_ORIGIN || "",
   testGrantEnabled:
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||
