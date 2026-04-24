@@ -491,7 +491,7 @@ function bindVpnRenewalActions({ tg, me }) {
     }
     const link = String(r?.invoiceLink || "").trim();
     if (!link) throw new Error("invoice_link_missing");
-    if (typeof tg.openInvoice === "function") {
+    if (isTelegramInvoiceUrl(link) && typeof tg.openInvoice === "function") {
       tg.openInvoice(link, (status) => {
         if (status === "failed") {
           showPaymentMessage("Не удалось открыть окно оплаты. Счёт отправлен в чат с ботом.");
@@ -636,7 +636,7 @@ function bindVpnRenewalActions({ tg, me }) {
     }
     const link = String(r?.invoiceLink || "").trim();
     if (!link) throw new Error("invoice_link_missing");
-    if (typeof tg.openInvoice === "function") {
+    if (isTelegramInvoiceUrl(link) && typeof tg.openInvoice === "function") {
       tg.openInvoice(link, (status) => {
         if (status === "failed") {
           showPaymentMessage("Не удалось открыть оплату. Проверьте чат с ботом.");
@@ -691,6 +691,12 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add("show");
   setTimeout(() => toast.classList.remove("show"), 1400);
+}
+
+function isTelegramInvoiceUrl(url) {
+  const raw = String(url || "").trim();
+  if (!raw) return false;
+  return /^https:\/\/t\.me\/\$|^https:\/\/t\.me\/invoice\/|^https:\/\/telegram\.me\/\$|^https:\/\/telegram\.me\/invoice\//i.test(raw);
 }
 
 function parsePossiblyConcatenatedJson(text) {
@@ -1047,7 +1053,7 @@ async function boot() {
         }
         const link = String(r?.invoiceLink || "").trim();
         if (!link) throw new Error("invoice_link_missing");
-        if (typeof tg.openInvoice === "function") tg.openInvoice(link);
+        if (isTelegramInvoiceUrl(link) && typeof tg.openInvoice === "function") tg.openInvoice(link);
         else tg.openLink(link);
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
