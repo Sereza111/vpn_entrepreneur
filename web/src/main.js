@@ -745,29 +745,44 @@ function parsePossiblyConcatenatedJson(text) {
 }
 
 async function api(path, opts = {}) {
+  const method = String(opts.method || "GET").toUpperCase();
+  const maxAttempts = method === "GET" ? Math.max(1, Number(opts.retries || 2)) : 1;
+  const timeoutMs = Math.max(5000, Number(opts.timeoutMs || 25000));
   let r;
-  try {
-    const controller = new AbortController();
-    const timeoutMs = Number(opts.timeoutMs || 15000);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    r = await fetch(path, {
-      ...opts,
-      headers: {
-        "Content-Type": "application/json",
-        ...(opts.headers || {}),
-      },
-      signal: opts.signal || controller.signal,
-    });
-    clearTimeout(timer);
-  } catch (e) {
-    const msg = String(e?.message || "");
-    if (e?.name === "AbortError") {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        r = await fetch(path, {
+          ...opts,
+          headers: {
+            "Content-Type": "application/json",
+            ...(opts.headers || {}),
+          },
+          signal: opts.signal || controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= maxAttempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+    }
+  }
+  if (!r) {
+    const msg = String(lastErr?.message || "");
+    if (lastErr?.name === "AbortError") {
       throw new Error("Сеть недоступна: API не ответил вовремя");
     }
     if (/failed to fetch/i.test(msg) || /network/i.test(msg)) {
       throw new Error("Сеть недоступна: не удалось достучаться до API");
     }
-    throw e;
+    throw lastErr || new Error("network_failed");
   }
   const text = await r.text();
   let data;
