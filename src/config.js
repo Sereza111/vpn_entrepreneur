@@ -73,7 +73,7 @@ export const config = {
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   /**
    * Внутренний баланс + почасовое списание за VPS (после первого пополнения).
-   * Ставка по умолчанию: цена vps_7 за неделю / (7*24) в копейках/час.
+   * Ставка по умолчанию: около 199 ₽/мес (~28 коп/час).
    */
   balance: {
     billingEnabled:
@@ -83,7 +83,7 @@ export const config = {
       1,
       Number(
         process.env.BALANCE_VPS_HOURLY_MINOR ||
-          Math.ceil(2500 / (7 * 24)),
+          Math.round(19900 / (30 * 24)),
       ),
     ),
     proxyHourlyMinor: Math.max(0, Math.floor(Number(process.env.BALANCE_PROXY_HOURLY_MINOR || 10))),

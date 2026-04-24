@@ -956,9 +956,11 @@ async function ensureSecondaryXuiClient({
   if (found) {
     const clientId = String(found.id || found.ID || "").trim();
     if (!clientId) throw new Error("xui_secondary_client_id_missing");
+    const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
     const patch = {
       ...found,
       enable: true,
+      limitIp: nextLimitIp,
       email: stableEmail,
       tgId: tid,
       subId,
@@ -985,7 +987,7 @@ async function ensureSecondaryXuiClient({
     id: crypto.randomUUID(),
     email: stableEmail,
     enable: true,
-    limitIp: 0,
+    limitIp: 2,
     totalGB: 0,
     expiryTime:
       Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
@@ -1051,6 +1053,18 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     })
     .catch(() => null);
   if (found?.client) {
+    const currentLimitIp = Number(found.client.limitIp ?? 0);
+    if (!Number.isFinite(currentLimitIp) || currentLimitIp < 2) {
+      const clientId = String(found.client.id || found.client.ID || "").trim();
+      if (clientId) {
+        const patch = { ...found.client, limitIp: 2 };
+        await xui.updateClientInInbound({
+          inboundId: config.xui.inboundId,
+          clientId,
+          client: patch,
+        }).catch((e) => console.warn("[xui] enforce min limitIp:", e?.message || e));
+      }
+    }
     const subFromClient = found.client.subId ? String(found.client.subId) : "";
     const effective =
       subFromClient ||
@@ -1080,6 +1094,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
   const created = await xui.addClientToInbound({
     inboundId: config.xui.inboundId,
     telegramId: tid,
+    limitIp: 2,
     remark,
   });
 
