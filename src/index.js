@@ -628,7 +628,7 @@ async function loadMe(telegramId, username = null) {
     const shouldBillHourly =
       subscriptionStatus?.source === "xui" &&
       String(subscriptionStatus.panelStatus || "").toUpperCase() === "ACTIVE";
-    const proxyItemsCount = Array.isArray(proxy?.items) ? proxy.items.length : 0;
+    const proxyItemsCount = Array.isArray(proxyPayload?.items) ? proxyPayload.items.length : 0;
     const addonProxyUnitMinor = Boolean(proxyAddons?.proxyEnabled)
       ? Number(config.balance.proxyHourlyMinor || 0)
       : 0;
