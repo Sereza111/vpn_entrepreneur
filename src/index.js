@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import net from "node:net";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { Agent } from "undici";
 import helmet from "helmet";
@@ -129,6 +130,30 @@ function resolvePlanPriceMinor(selection = {}) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function checkTcpReachable(host, port, timeoutMs = 3500) {
+  return new Promise((resolve) => {
+    const p = Number(port);
+    if (!host || !Number.isFinite(p) || p <= 0) return resolve(false);
+    const socket = new net.Socket();
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try {
+        socket.destroy();
+      } catch {
+        // ignore
+      }
+      resolve(Boolean(ok));
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+    socket.connect(p, String(host));
+  });
 }
 
 /** Не даём упасть всему процессу из‑за сети до api.telegram.org (502 у nginx). */
@@ -1534,8 +1559,17 @@ app.post("/api/proxy/repair", authMiddleware, async (req, res) => {
         console.warn("[proxy] repair failed:", e?.message || e);
       }
     }
+    const mtServer = servers.find((s) => s?.mtprotoSecret && Number(s?.mtprotoPort) > 0) || null;
+    const mtproto = mtServer
+      ? {
+          configured: true,
+          host: String(mtServer.host || ""),
+          port: Number(mtServer.mtprotoPort),
+          reachable: await checkTcpReachable(mtServer.host, mtServer.mtprotoPort),
+        }
+      : { configured: false, reachable: false };
     const data = await loadMe(tid, req.tgSession?.u ?? null);
-    return res.json({ ok: true, repaired, failed, ...data });
+    return res.json({ ok: true, repaired, failed, mtproto, ...data });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }

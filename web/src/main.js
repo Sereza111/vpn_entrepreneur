@@ -463,6 +463,33 @@ function bindWheelSwipe(dock) {
   );
 }
 
+async function openInvoiceInMiniApp({ tg, productCode, grantDays, serviceType = "vps", serverId = "" }) {
+  const token = window.__vlToken || "";
+  if (!token) throw new Error("auth_token_missing");
+  const r = await api("/api/payments/checkout-link", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      productCode,
+      grantDays: Number(grantDays),
+      serviceType,
+      serverId: serverId || undefined,
+    }),
+  });
+  if (r?.sentToChat || r?.fallbackToChat) {
+    throw new Error("Счёт отправлен в чат с ботом");
+  }
+  const link = String(r?.invoiceLink || "").trim();
+  if (!link) throw new Error("invoice_link_missing");
+  if (isTelegramInvoiceUrl(link) && typeof tg.openInvoice === "function") {
+    tg.openInvoice(link, (status) => {
+      if (status === "failed") showToast("Не удалось открыть окно оплаты");
+    });
+  } else {
+    tg.openLink(link);
+  }
+}
+
 function bindVpnRenewalActions({ tg, me }) {
   const payCfg = me.payment || {};
   const showPaymentMessage = (text) => {
@@ -478,36 +505,6 @@ function bindVpnRenewalActions({ tg, me }) {
     }
     showToast(msg);
   };
-  const openInvoiceInMiniApp = async ({ productCode, grantDays, serviceType = "vps", serverId = "" }) => {
-    const token = window.__vlToken || "";
-    if (!token) throw new Error("auth_token_missing");
-    const r = await api("/api/payments/checkout-link", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        productCode,
-        grantDays: Number(grantDays),
-        serviceType,
-        serverId: serverId || undefined,
-      }),
-    });
-    if (r?.sentToChat || r?.fallbackToChat) {
-      showPaymentMessage("Счёт отправлен в чат с ботом. Откройте диалог и оплатите там.");
-      return;
-    }
-    const link = String(r?.invoiceLink || "").trim();
-    if (!link) throw new Error("invoice_link_missing");
-    if (isTelegramInvoiceUrl(link) && typeof tg.openInvoice === "function") {
-      tg.openInvoice(link, (status) => {
-        if (status === "failed") {
-          showPaymentMessage("Не удалось открыть окно оплаты. Счёт отправлен в чат с ботом.");
-        }
-      });
-    } else {
-      tg.openLink(link);
-    }
-  };
-
   const bindGrid = (rootEl) => {
     if (!rootEl) return;
     rootEl.querySelectorAll(".plan-tile[data-days]").forEach((b) => {
@@ -516,7 +513,7 @@ function bindVpnRenewalActions({ tg, me }) {
         const code =
           b.getAttribute("data-product-code") || payCfg.defaultProductCode || "vps_30";
         try {
-          await openInvoiceInMiniApp({ productCode: code, grantDays: days });
+          await openInvoiceInMiniApp({ tg, productCode: code, grantDays: days });
         } catch (e) {
           showToast(`Ошибка: ${e.message}`);
         }
@@ -533,6 +530,7 @@ function bindVpnRenewalActions({ tg, me }) {
         if (!serverId) return showToast("Сначала выберите площадку прокси");
         try {
           await openInvoiceInMiniApp({
+            tg,
             productCode: `proxy_${serverId}_${days}`,
             grantDays: days,
             serviceType: "proxy",
@@ -578,6 +576,7 @@ function bindVpnRenewalActions({ tg, me }) {
         if (!serverId) return;
         try {
           await openInvoiceInMiniApp({
+            tg,
             productCode: `proxy_${serverId}_${selectedProxyDays}`,
             grantDays: selectedProxyDays,
             serviceType: "proxy",
@@ -873,7 +872,13 @@ function bindProxyMaintenanceButtons(token, tg) {
         });
         const repaired = Number(r?.repaired || 0);
         const failed = Number(r?.failed || 0);
-        showToast(`Прокси обновлены: ${repaired} ок, ${failed} с ошибкой`);
+        const mt = r?.mtproto || null;
+        const mtInfo = mt?.configured
+          ? mt?.reachable
+            ? " · MTProto: доступен"
+            : " · MTProto: недоступен"
+          : "";
+        showToast(`Прокси обновлены: ${repaired} ок, ${failed} с ошибкой${mtInfo}`);
         window.location.reload();
       } catch (e) {
         repairBtn.disabled = false;
@@ -1527,9 +1532,9 @@ async function boot() {
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>`
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Это разовая покупка (не почасовая). Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1563,9 +1568,9 @@ async function boot() {
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>`
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Это разовая покупка (не почасовая). Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1669,6 +1674,7 @@ async function boot() {
     addDev.onclick = async () => {
       try {
         await openInvoiceInMiniApp({
+          tg,
           productCode: "device_1",
           grantDays: 1,
           serviceType: "device_slot",
