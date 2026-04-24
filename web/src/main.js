@@ -158,6 +158,9 @@ function mtprotoCardHtml(me) {
         <button type="button" class="btn secondary" id="mtprotoOpenBtn">Добавить в Telegram</button>
         <button type="button" class="btn secondary" id="mtprotoCopyBtn">Скопировать</button>
       </div>
+      <div class="muted" style="margin-top:8px;line-height:1.45">
+        MTProto бесплатный. Если у вас уже включен VPN, Telegram может ходить через него, и MTProto в этот момент не используется.
+      </div>
     </div>
   `;
 }
@@ -274,6 +277,8 @@ function proxyAddonCardHtml(me) {
   const bal = me?.balance || {};
   const parts = bal?.hourlyRatePartsMinor || {};
   const proxyHr = Number(parts.proxy || 0) / 100;
+  const proxyPerItemHr = Number(parts.proxyPerItem || 0) / 100;
+  const proxyItemsCount = Math.max(0, Number(parts.proxyItemsCount || 0));
   const ipHr = Number(parts.dedicatedIp || 0) / 100;
   const a = me?.proxy?.addons || {};
   const proxyOn = Boolean(a.proxyEnabled);
@@ -288,6 +293,7 @@ function proxyAddonCardHtml(me) {
       <div class="proxy-addon-card__head">
         <div class="proxy-addon-card__title">Тип прокси</div>
         <div class="proxy-addon-card__sub muted">Shared: +${proxyHr.toFixed(2)} ₽/час · Dedicated IP: +${ipHr.toFixed(2)} ₽/час</div>
+        <div class="proxy-addon-card__sub muted">Shared считается по количеству выданных прокси: ${proxyItemsCount} × ${proxyPerItemHr.toFixed(2)} ₽/час</div>
       </div>
       <div class="proxy-addon-choice" role="radiogroup" aria-label="Тип прокси">
         <button type="button" class="proxy-addon-choice__btn ${proxyOn && !ipOn ? "active" : ""}" id="proxyTypeSharedBtn" data-type="shared">Shared</button>
@@ -815,6 +821,54 @@ function bindProxyDeleteButtons(token, tg) {
   });
 }
 
+function bindProxyMaintenanceButtons(token, tg) {
+  const deleteAllBtn = document.getElementById("proxyDeleteAllBtn");
+  if (deleteAllBtn) {
+    deleteAllBtn.onclick = async () => {
+      try {
+        const ok = typeof tg?.showConfirm === "function"
+          ? await new Promise((resolve) => tg.showConfirm("Удалить ВСЕ ваши прокси?", (v) => resolve(Boolean(v))))
+          : window.confirm("Удалить ВСЕ ваши прокси?");
+        if (!ok) return;
+        deleteAllBtn.disabled = true;
+        await api("/api/proxy/delete-all", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        });
+        showToast("Все прокси удалены.");
+        window.location.reload();
+      } catch (e) {
+        deleteAllBtn.disabled = false;
+        showToast(`Массовое удаление: ${e.message}`);
+      }
+    };
+  }
+
+  const repairBtn = document.getElementById("proxyRepairBtn");
+  if (repairBtn) {
+    repairBtn.onclick = async () => {
+      try {
+        repairBtn.disabled = true;
+        repairBtn.textContent = "Восстанавливаем...";
+        const r = await api("/api/proxy/repair", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({}),
+        });
+        const repaired = Number(r?.repaired || 0);
+        const failed = Number(r?.failed || 0);
+        showToast(`Прокси обновлены: ${repaired} ок, ${failed} с ошибкой`);
+        window.location.reload();
+      } catch (e) {
+        repairBtn.disabled = false;
+        repairBtn.textContent = "Восстановить прокси";
+        showToast(`Восстановление: ${e.message}`);
+      }
+    };
+  }
+}
+
 async function boot() {
   const tg = window.Telegram?.WebApp;
   if (!tg) {
@@ -905,6 +959,12 @@ async function boot() {
     days: 30,
     serviceType: "proxy",
   });
+  const deviceSlotPriceMinor = resolveKnownPriceMinor({
+    code: "device_1",
+    days: 1,
+    serviceType: "device_slot",
+  });
+  const deviceSlotPriceRub = (Number(deviceSlotPriceMinor || 15000) / 100).toFixed(0);
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -1013,7 +1073,11 @@ async function boot() {
             ${proxyAddonCardHtml(me)}
           </div>
           ${mtprotoCardHtml(me)}
-          <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить</button>
+          <div class="actions-stack" style="margin-top:10px">
+            <button class="btn secondary" type="button" id="proxyRepairBtn">Восстановить прокси</button>
+            <button class="btn secondary" type="button" id="proxyDeleteAllBtn">Удалить все прокси</button>
+            <button class="btn secondary" type="button" id="refreshProxyBtn">Обновить экран</button>
+          </div>
         </div>
       `),
     );
@@ -1070,6 +1134,7 @@ async function boot() {
     document.getElementById("supportBtnNoAcc").onclick = () => tg.openLink(supportHrefNoAcc);
     bindVpnRenewalActions({ tg, me });
     bindProxyDeleteButtons(token, tg);
+    bindProxyMaintenanceButtons(token, tg);
     bindReferralButtons(tg);
     const mtOpen1 = document.getElementById("mtprotoOpenBtn");
     const mtCopy1 = document.getElementById("mtprotoCopyBtn");
@@ -1314,6 +1379,10 @@ async function boot() {
               ${proxyAddonCardHtml(me)}
              </div>
              ${mtprotoCardHtml(me)}
+             <div class="actions-stack" style="margin-top:10px">
+               <button class="btn secondary" type="button" id="proxyRepairBtn">Восстановить прокси</button>
+               <button class="btn secondary" type="button" id="proxyDeleteAllBtn">Удалить все прокси</button>
+             </div>
              `
       }
     </div>`);
@@ -1369,6 +1438,7 @@ async function boot() {
       }
     };
     bindProxyDeleteButtons(token, tg);
+    bindProxyMaintenanceButtons(token, tg);
     const mtOpen2 = document.getElementById("mtprotoOpenBtn");
     const mtCopy2 = document.getElementById("mtprotoCopyBtn");
     const mtLink2 = document.getElementById("mtprotoLink");
@@ -1438,13 +1508,13 @@ async function boot() {
       ? `<div class="card section" id="section-extend">
     <h2 class="section-title section-title--balance">Баланс VPS</h2>
     ${balanceTopupBlockHtml(me.balance)}
-    <p class="balance-footnote">${invoiceEnabled ? "Оплата через Telegram — счёт можно открыть здесь или в чате с ботом." : "Платежи временно недоступны."}</p>
+    <p class="balance-footnote">${invoiceEnabled ? "Оплата через Telegram — счёт можно открыть здесь или в чате с ботом. При балансе 0 ₽ доступ к VPN временно отключается автоматически и включится снова после пополнения." : "Платежи временно недоступны."}</p>
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (IP лимит)</button>
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>
            <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1478,9 +1548,9 @@ async function boot() {
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (IP лимит)</button>
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>
            <p class="muted" style="margin-top:10px;line-height:1.45">Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство</button>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">Докупить +1 устройство (${deviceSlotPriceRub} ₽)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1580,16 +1650,15 @@ async function boot() {
     };
   }
   const addDev = document.getElementById("addDeviceBtn");
-  if (addDev && payCfg.allowTestTools) {
+  if (addDev && invoiceEnabled) {
     addDev.onclick = async () => {
       try {
-        await api("/api/test/add-device-slot", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ slots: 1 }),
+        await openInvoiceInMiniApp({
+          productCode: "device_1",
+          grantDays: 1,
+          serviceType: "device_slot",
         });
-        showToast("Лимит устройств увеличен на +1");
-        setTimeout(() => window.location.reload(), 700);
+        showToast("Откройте счёт и оплатите докупку +1 устройства");
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
       }

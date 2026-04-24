@@ -35,6 +35,7 @@ const DEFAULT_PRICE_MAP_MINOR = {
   vps_180: 60000,
   proxy_7: 1800,
   proxy_30: 7200,
+  device_1: 15000,
 };
 
 function parsePriceMapFromConfig(raw) {
@@ -627,7 +628,12 @@ async function loadMe(telegramId, username = null) {
     const shouldBillHourly =
       subscriptionStatus?.source === "xui" &&
       String(subscriptionStatus.panelStatus || "").toUpperCase() === "ACTIVE";
-    const addonProxy = Boolean(proxyAddons?.proxyEnabled) ? Number(config.balance.proxyHourlyMinor || 0) : 0;
+    const proxyItemsCount = Array.isArray(proxy?.items) ? proxy.items.length : 0;
+    const addonProxyUnitMinor = Boolean(proxyAddons?.proxyEnabled)
+      ? Number(config.balance.proxyHourlyMinor || 0)
+      : 0;
+    const addonProxy = Math.max(0, Math.floor(addonProxyUnitMinor || 0)) *
+      Math.max(0, Math.floor(proxyItemsCount || 0));
     const addonIp = Boolean(proxyAddons?.dedicatedIpEnabled)
       ? Number(config.balance.dedicatedIpHourlyMinor || 0)
       : 0;
@@ -648,6 +654,8 @@ async function loadMe(telegramId, username = null) {
       hourlyRatePartsMinor: {
         vps: Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1))),
         proxy: Math.max(0, Math.floor(addonProxy || 0)),
+        proxyPerItem: Math.max(0, Math.floor(addonProxyUnitMinor || 0)),
+        proxyItemsCount: Math.max(0, Math.floor(proxyItemsCount || 0)),
         dedicatedIp: Math.max(0, Math.floor(addonIp || 0)),
       },
       freeMode: Boolean(snap?.freeMode || rec?.freeMode),
@@ -720,7 +728,10 @@ async function loadMe(telegramId, username = null) {
       mode: config.payment.mode,
       currency: config.payment.telegramCurrency || "RUB",
       telegramInvoiceEnabled: Boolean(config.payment.telegramProviderToken),
-      prices: PAYMENT_PRICE_MAP_MINOR,
+      prices: {
+        ...PAYMENT_PRICE_MAP_MINOR,
+        device_1: Math.max(1, Math.floor(Number(config.payment.deviceSlotMinor || 15000))),
+      },
       testGrantEnabled: config.testGrantEnabled,
       allowTestTools: config.payment.mode === "test" && config.testGrantEnabled,
       yookassaEnabled: isYookassaEnabled(),
@@ -1221,16 +1232,23 @@ function parseTelegramPaymentPayload(raw) {
     const serviceType = String(saved.serviceType || "vps").trim().toLowerCase();
     const serverId = String(saved.serverId || "").trim();
     const proxyCredits = Number(saved.proxyCredits || 0);
+    const addDeviceSlots = Number(saved.addDeviceSlots || 0);
     if (!Number.isFinite(telegramId) || telegramId < 1) return null;
-    if (!Number.isFinite(days) || days < 1) return null;
+    if (
+      serviceType !== "device_slot" &&
+      (!Number.isFinite(days) || days < 1)
+    ) return null;
     return {
       kind: "plan",
       telegramId,
-      days,
+      days: Number.isFinite(days) && days > 0 ? Math.floor(days) : 0,
       productCode,
-      serviceType: serviceType === "proxy" ? "proxy" : "vps",
+      serviceType: serviceType === "proxy" ? "proxy" : serviceType === "device_slot" ? "device_slot" : "vps",
       serverId: serverId || null,
       proxyCredits: Number.isFinite(proxyCredits) && proxyCredits > 0 ? Math.floor(proxyCredits) : 0,
+      addDeviceSlots: Number.isFinite(addDeviceSlots) && addDeviceSlots > 0
+        ? Math.floor(addDeviceSlots)
+        : 0,
     };
   }
   try {
@@ -1250,15 +1268,22 @@ function parseTelegramPaymentPayload(raw) {
     const serviceType = String(obj.serviceType || "vps").trim().toLowerCase();
     const serverId = String(obj.serverId || "").trim();
     const proxyCredits = Number(obj.proxyCredits || 0);
-    if (!Number.isFinite(days) || days < 1) return null;
+    const addDeviceSlots = Number(obj.addDeviceSlots || 0);
+    if (
+      serviceType !== "device_slot" &&
+      (!Number.isFinite(days) || days < 1)
+    ) return null;
     return {
       kind: "plan",
       telegramId,
-      days,
+      days: Number.isFinite(days) && days > 0 ? Math.floor(days) : 0,
       productCode,
-      serviceType: serviceType === "proxy" ? "proxy" : "vps",
+      serviceType: serviceType === "proxy" ? "proxy" : serviceType === "device_slot" ? "device_slot" : "vps",
       serverId: serverId || null,
       proxyCredits: Number.isFinite(proxyCredits) && proxyCredits > 0 ? Math.floor(proxyCredits) : 0,
+      addDeviceSlots: Number.isFinite(addDeviceSlots) && addDeviceSlots > 0
+        ? Math.floor(addDeviceSlots)
+        : 0,
     };
   } catch {
     return null;
@@ -1437,6 +1462,82 @@ app.post("/api/proxy/delete", authMiddleware, async (req, res) => {
     const msg = String(e?.message || e);
     if (msg === "proxy_item_not_found") return res.status(404).json({ error: msg });
     return res.status(500).json({ error: msg });
+  }
+});
+
+app.post("/api/proxy/delete-all", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const current = await proxyStore.getProxyByTelegramId(tid);
+    const currentItems = Array.isArray(current?.items) ? current.items : [];
+    if (!currentItems.length) {
+      const data = await loadMe(tid, req.tgSession?.u ?? null);
+      return res.json({ ok: true, removed: 0, removedFromServer: 0, ...data });
+    }
+
+    const servers = parseProxyServers(config.proxy.serversJson);
+    let removedFromServer = 0;
+    for (const item of currentItems) {
+      try {
+        const srv = servers.find((s) => s.id === String(item?.serverId || "").trim()) || null;
+        if (!srv || !item?.username) continue;
+        await removeProxyUserOnServer({ server: srv, username: item.username });
+        removedFromServer += 1;
+      } catch (e) {
+        console.warn("[proxy] bulk remove on server failed:", e?.message || e);
+      }
+    }
+
+    const next = {
+      ...(current || { telegramId: String(tid), credits: { total: 0, used: 0 }, items: [] }),
+      items: [],
+      credits: {
+        total: Number(current?.credits?.total || 0),
+        used: 0,
+      },
+    };
+    await proxyStore.setProxyForTelegramId(tid, next);
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, removed: currentItems.length, removedFromServer, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/proxy/repair", authMiddleware, async (req, res) => {
+  const tid = Number(req.tgSession.sub || req.tgSession.tg);
+  try {
+    const current = await proxyStore.getProxyByTelegramId(tid);
+    const items = Array.isArray(current?.items) ? current.items : [];
+    if (!items.length) {
+      const data = await loadMe(tid, req.tgSession?.u ?? null);
+      return res.json({ ok: true, repaired: 0, failed: 0, ...data });
+    }
+    const servers = parseProxyServers(config.proxy.serversJson);
+    let repaired = 0;
+    let failed = 0;
+    for (const item of items) {
+      try {
+        const srv = servers.find((s) => s.id === String(item?.serverId || "").trim()) || null;
+        if (!srv) {
+          failed += 1;
+          continue;
+        }
+        await ensureProxyUserOnServer({
+          server: srv,
+          username: String(item?.username || ""),
+          password: String(item?.password || ""),
+        });
+        repaired += 1;
+      } catch (e) {
+        failed += 1;
+        console.warn("[proxy] repair failed:", e?.message || e);
+      }
+    }
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, repaired, failed, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
   }
 });
 
@@ -1988,6 +2089,7 @@ async function getTelegramPlanOptions() {
 
 function inferServiceTypeFromProductCode(productCode) {
   const code = String(productCode || "").trim().toLowerCase();
+  if (code.startsWith("device_")) return "device_slot";
   return code.startsWith("proxy_") ? "proxy" : "vps";
 }
 
@@ -2029,29 +2131,44 @@ function buildInvoiceSelection(input = {}) {
     input.productCode || config.payment.defaultProductCode || "vps_30",
   ).trim();
   const fromProxyCode = parseProxyProductCode(productCode);
-  const selectedDays = Number(input.days ?? input.grantDays ?? fromProxyCode.days ?? 0);
-  const days = Number.isFinite(selectedDays) && selectedDays > 0
-    ? Math.floor(selectedDays)
-    : Math.max(1, Number(config.payment.telegramTestDays || 30));
-  const serviceType = String(
+  const rawServiceType = String(
     input.serviceType || inferServiceTypeFromProductCode(productCode),
-  ).trim().toLowerCase() === "proxy"
-    ? "proxy"
-    : "vps";
+  ).trim().toLowerCase();
+  const serviceType =
+    rawServiceType === "proxy"
+      ? "proxy"
+      : rawServiceType === "device_slot"
+        ? "device_slot"
+        : "vps";
+  const selectedDays = Number(input.days ?? input.grantDays ?? fromProxyCode.days ?? 0);
+  const days = serviceType === "device_slot"
+    ? 1
+    : Number.isFinite(selectedDays) && selectedDays > 0
+      ? Math.floor(selectedDays)
+      : Math.max(1, Number(config.payment.telegramTestDays || 30));
   const serverId = String(input.serverId || fromProxyCode.serverId || "").trim() || null;
   return { days, productCode, serviceType, serverId };
 }
 
 function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
   const normalized = buildInvoiceSelection(selected);
-  const amountMinor = resolvePlanPriceMinor(normalized);
+  const amountMinor = normalized.serviceType === "device_slot"
+    ? Math.max(1, Math.floor(Number(config.payment.deviceSlotMinor || 15000)))
+    : resolvePlanPriceMinor(normalized);
   const titlePrefix = config.payment.mode === "test"
     ? "VPS Premium — тестовый платёж"
     : "VPS Premium — оплата";
-  const title = `${titlePrefix} · ${normalized.days} дней`;
-  const desc = normalized.serviceType === "proxy"
+  const title = normalized.serviceType === "device_slot"
+    ? "VPS Premium — +1 устройство"
+    : `${titlePrefix} · ${normalized.days} дней`;
+  const desc = normalized.serviceType === "device_slot"
+    ? "Разовое увеличение лимита устройств: +1 слот."
+    : normalized.serviceType === "proxy"
     ? `Оплата доступа к прокси\nТариф: ${normalized.days} дней (${normalized.productCode})`
     : `Оплата доступа к VPS Premium\nТариф: ${normalized.days} дней (${normalized.productCode})`;
+  const priceLabel = normalized.serviceType === "device_slot"
+    ? "+1 устройство"
+    : `${envDaysLabel(normalized.days)}`;
   const payloadData = {
     kind: "telegram_payment",
     telegramId,
@@ -2061,10 +2178,15 @@ function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
     serviceType: normalized.serviceType,
     serverId: normalized.serverId,
     proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
+    addDeviceSlots: normalized.serviceType === "device_slot" ? 1 : 0,
     at: Date.now(),
   };
   const payload = savePaymentPayload(payloadData);
-  return { normalized, title, desc, payload, amountMinor };
+  return { normalized, title, desc, payload, amountMinor, priceLabel };
+}
+
+function envDaysLabel(days) {
+  return `${days} дней`;
 }
 
 function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
@@ -2118,6 +2240,18 @@ async function applySuccessfulBusinessPayload({ payload, paidMinor = 0, username
     });
     return { serviceType: "proxy", grantedDays: grantDays };
   }
+  if (payload.serviceType === "device_slot") {
+    const addSlots = Number.isFinite(payload.addDeviceSlots) && payload.addDeviceSlots > 0
+      ? Math.floor(payload.addDeviceSlots)
+      : 1;
+    await xuiProvisionCore(payload.telegramId, { force: true, username });
+    await xui.incrementClientLimitIp({
+      telegramId: payload.telegramId,
+      addSlots,
+      minFloor: 2,
+    });
+    return { serviceType: "device_slot", grantedDays: 0, addDeviceSlots: addSlots };
+  }
   await xuiProvisionCore(payload.telegramId, { force: true, username });
   return { serviceType: "vps", grantedDays: Number(payload.days || 0) || 0 };
 }
@@ -2135,7 +2269,7 @@ async function sendTelegramInvoiceForSelection({
     env.desc,
     env.payload,
     config.payment.telegramCurrency,
-    [{ label: `${env.normalized.days} дней`, amount: env.amountMinor }],
+    [{ label: env.priceLabel || `${env.normalized.days} дней`, amount: env.amountMinor }],
     { provider_token: config.payment.telegramProviderToken },
   );
 }
@@ -2161,7 +2295,7 @@ async function createTelegramInvoiceLinkWithRetries(env) {
     payload: env.payload,
     provider_token: config.payment.telegramProviderToken,
     currency: config.payment.telegramCurrency,
-    prices: [{ label: `${env.normalized.days} дней`, amount: env.amountMinor }],
+    prices: [{ label: env.priceLabel || `${env.normalized.days} дней`, amount: env.amountMinor }],
   });
   const maxAttempts = Math.max(1, Number(process.env.TG_INVOICE_LINK_RETRIES || 4));
   let lastErr = "unknown";
@@ -2231,7 +2365,9 @@ app.post("/api/payments/checkout-link", authMiddleware, async (req, res) => {
   const selected = buildInvoiceSelection(req.body || {});
   try {
     if (isYookassaEnabled()) {
-      const amountMinor = resolvePlanPriceMinor(selected);
+      const amountMinor = selected.serviceType === "device_slot"
+        ? Math.max(1, Math.floor(Number(config.payment.deviceSlotMinor || 15000)))
+        : resolvePlanPriceMinor(selected);
       if (!Number.isFinite(amountMinor) || amountMinor < 1) {
         return res.status(400).json({ error: "bad_amount" });
       }
@@ -2239,16 +2375,19 @@ app.post("/api/payments/checkout-link", authMiddleware, async (req, res) => {
         kind: "telegram_payment",
         telegramId: tid,
         username: username || null,
-        days: selected.days,
+        days: selected.serviceType === "device_slot" ? 0 : selected.days,
         productCode: selected.productCode,
         serviceType: selected.serviceType,
         serverId: selected.serverId,
         proxyCredits: selected.serviceType === "proxy" ? 1 : 0,
+        addDeviceSlots: selected.serviceType === "device_slot" ? 1 : 0,
         at: Date.now(),
       });
       const yk = await yookassaApi.createRedirectPayment({
         amountMinor,
-        description: `VL ${selected.serviceType.toUpperCase()} ${selected.days}d`,
+        description: selected.serviceType === "device_slot"
+          ? "VL +1 устройство"
+          : `VL ${selected.serviceType.toUpperCase()} ${selected.days}d`,
         returnUrl: config.yookassa.returnUrl || `${String(config.publicBaseUrl || "").replace(/\/$/, "")}/app/`,
         metadata: { payloadKey, telegramId: String(tid), serviceType: selected.serviceType },
       });
@@ -2574,6 +2713,8 @@ bot.on("message:successful_payment", async (ctx) => {
       await ctx.reply(
         `Платёж успешно получен. Квота прокси выдана: +${payload.proxyCredits || 1} на ${payload.days} дней.`,
       );
+    } else if (applied.serviceType === "device_slot") {
+      await ctx.reply("Платёж успешно получен. Лимит устройств увеличен на +1.");
     } else {
       await ctx.reply(
         `Платёж успешно получен. Доступ к VPS Premium активирован на ${payload.days} дней.`,

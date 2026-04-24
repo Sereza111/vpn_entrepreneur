@@ -110,6 +110,7 @@ export const config = {
       "Тестовая оплата доступа к VPS Premium через Telegram Payments"
     ).trim(),
     priceMapJson: String(process.env.TG_PAYMENT_PRICE_MAP_JSON || "").trim(),
+    deviceSlotMinor: Math.max(1, Math.floor(Number(process.env.TG_PAYMENT_DEVICE_SLOT_MINOR || 15000))),
     /**
      * Минимальная сумма одного счёта Telegram Payments в **основных единицах валюты** (для RUB — рубли).
      * У ЮKassa/Telegram для RUB часто ~60 ₽; иначе sendInvoice даёт CURRENCY_TOTAL_AMOUNT_INVALID.
