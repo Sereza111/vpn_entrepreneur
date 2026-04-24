@@ -641,7 +641,9 @@ async function loadMe(telegramId, username = null) {
   };
 
   const catalog = { source: "builtin", products: [] };
-  const subscriptionUi = null;
+  const supportUsername = String(config.support?.telegramUsername || "VL_VPNbot").trim().replace(/^@+/, "");
+  const supportUrl = `https://t.me/${supportUsername}`;
+  const subscriptionUi = { supportUrl };
   const referralStats = await referralStore.getInviterStats(telegramId).catch(() => ({
     invitedTotal: 0,
     rewardedTotal: 0,
@@ -662,9 +664,19 @@ async function loadMe(telegramId, username = null) {
     const addonIp = Boolean(proxyAddons?.dedicatedIpEnabled)
       ? Number(config.balance.dedicatedIpHourlyMinor || 0)
       : 0;
+    const ipLimitNow = Number(subscriptionStatus?.ipLimit ?? 0);
+    const extraDeviceSlots = Number.isFinite(ipLimitNow) && ipLimitNow > 2
+      ? Math.floor(ipLimitNow - 2)
+      : 0;
+    const addonDeviceSlotUnitMinor = Math.max(
+      0,
+      Math.floor(Number(config.balance.deviceSlotHourlyMinor || 0)),
+    );
+    const addonDeviceSlots = addonDeviceSlotUnitMinor * Math.max(0, extraDeviceSlots);
     const totalRateMinor = Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1))) +
       Math.max(0, Math.floor(addonProxy || 0)) +
-      Math.max(0, Math.floor(addonIp || 0));
+      Math.max(0, Math.floor(addonIp || 0)) +
+      Math.max(0, Math.floor(addonDeviceSlots || 0));
     const snap = shouldBillHourly
       ? await balanceStore.applyHourlyDeduction(telegramId, totalRateMinor)
       : await balanceStore.getDisplaySnapshot(telegramId, totalRateMinor);
@@ -681,6 +693,9 @@ async function loadMe(telegramId, username = null) {
         proxy: Math.max(0, Math.floor(addonProxy || 0)),
         proxyPerItem: Math.max(0, Math.floor(addonProxyUnitMinor || 0)),
         proxyItemsCount: Math.max(0, Math.floor(proxyItemsCount || 0)),
+        deviceSlots: Math.max(0, Math.floor(addonDeviceSlots || 0)),
+        deviceSlotPerItem: Math.max(0, Math.floor(addonDeviceSlotUnitMinor || 0)),
+        deviceSlotsCount: Math.max(0, Math.floor(extraDeviceSlots || 0)),
         dedicatedIp: Math.max(0, Math.floor(addonIp || 0)),
       },
       freeMode: Boolean(snap?.freeMode || rec?.freeMode),
@@ -745,7 +760,7 @@ async function loadMe(telegramId, username = null) {
       rewardedTotal: Number(referralStats.rewardedTotal || 0),
       rewardMinorTotal: Number(referralStats.rewardMinorTotal || 0),
       refStartParam: `ref_${telegramId}`,
-      refLink: `https://t.me/VL_VPNbot?start=ref_${telegramId}`,
+      refLink: `https://t.me/${supportUsername}?start=ref_${telegramId}`,
     },
     payment: {
       checkoutUrlTemplate: config.payment.checkoutUrlTemplate || "",
@@ -1408,6 +1423,34 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
       return res.status(503).json({ error: msg });
     }
+    return res.status(500).json({ error: msg });
+  }
+});
+
+app.post("/api/xui/add-device-slot", authMiddleware, async (req, res) => {
+  try {
+    const tid = Number(req.tgSession.sub || req.tgSession.tg);
+    const slots = Number(req.body?.slots || 1);
+    if (!Number.isFinite(slots) || slots < 1) return res.status(400).json({ error: "bad_slots" });
+    if (!config.xui.inboundId) return res.status(503).json({ error: "xui_inbound_id_required" });
+    const bal = await balanceStore.getRecord(tid);
+    const canEnableWithoutTopup = Boolean(bal?.freeMode);
+    if (!canEnableWithoutTopup && !bal?.billingStartedAt) {
+      return res.status(412).json({ error: "balance_not_started" });
+    }
+    await xuiProvisionCore(tid, { force: true, username: req.tgSession?.u ?? null });
+    const r = await xui.incrementClientLimitIp({
+      inboundId: config.xui.inboundId,
+      telegramId: tid,
+      addSlots: Math.floor(slots),
+      minFloor: 2,
+    });
+    const data = await loadMe(tid, req.tgSession?.u ?? null);
+    return res.json({ ok: true, addedSlots: Math.floor(slots), xuiLimitIp: r.next, ...data });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg === "xui_client_not_found") return res.status(404).json({ error: msg });
+    if (msg === "bad_slots") return res.status(400).json({ error: msg });
     return res.status(500).json({ error: msg });
   }
 });

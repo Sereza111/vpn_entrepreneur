@@ -12,6 +12,11 @@ export const config = {
   botToken: req("BOT_TOKEN"),
   webAppUrl: req("WEB_APP_URL"),
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
+  support: {
+    telegramUsername: String(process.env.SUPPORT_TELEGRAM_USERNAME || "VL_VPNbot")
+      .trim()
+      .replace(/^@+/, ""),
+  },
   webhookSecret: process.env.WEBHOOK_SECRET || "",
   sessionJwtSecret: req("SESSION_JWT_SECRET"),
   sessionJwtExpiresIn: String(process.env.SESSION_JWT_EXPIRES_IN || "7d").trim() || "7d",
@@ -87,6 +92,10 @@ export const config = {
       ),
     ),
     proxyHourlyMinor: Math.max(0, Math.floor(Number(process.env.BALANCE_PROXY_HOURLY_MINOR || 10))),
+    deviceSlotHourlyMinor: Math.max(
+      0,
+      Math.floor(Number(process.env.BALANCE_DEVICE_SLOT_HOURLY_MINOR || 8)),
+    ),
     dedicatedIpHourlyMinor: Math.max(
       0,
       Math.floor(Number(process.env.BALANCE_DEDICATED_IP_HOURLY_MINOR || 25)),

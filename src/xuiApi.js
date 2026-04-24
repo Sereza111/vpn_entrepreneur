@@ -363,7 +363,7 @@ export async function updateClientInInbound({ inboundId, clientId, client }) {
   return await parseResponseJson(res).catch(() => ({}));
 }
 
-export async function incrementClientLimitIp({ inboundId, telegramId, addSlots = 1 }) {
+export async function incrementClientLimitIp({ inboundId, telegramId, addSlots = 1, minFloor = 1 }) {
   const found = await findClientInInbound({ inboundId, telegramId });
   if (!found?.client) throw new Error("xui_client_not_found");
 
@@ -372,7 +372,10 @@ export async function incrementClientLimitIp({ inboundId, telegramId, addSlots =
   if (!Number.isFinite(inc) || inc < 1) throw new Error("bad_slots");
 
   // В 3X-UI limitIp: 0 = без лимита. Для «+1 устройство» переводим в лимитный режим.
-  const base = Number.isFinite(cur) && cur > 0 ? cur : 1;
+  const floor = Number.isFinite(Number(minFloor)) && Number(minFloor) > 0
+    ? Math.floor(Number(minFloor))
+    : 1;
+  const base = Number.isFinite(cur) && cur > 0 ? cur : floor;
   const next = base + inc;
 
   const clientId = String(found.client.id || found.client.ID || "").trim();

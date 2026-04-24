@@ -800,6 +800,9 @@ async function api(path, opts = {}) {
     if (code === "timeweb_server_id_required") {
       throw new Error("Timeweb: для этой площадки не задан timewebServerId (в PROXY_SERVERS_JSON)");
     }
+    if (code === "balance_not_started") {
+      throw new Error("Сначала пополните баланс: после первого пополнения включится почасовая оплата");
+    }
     throw new Error(code || data?.raw || r.status);
   }
   return data;
@@ -979,12 +982,8 @@ async function boot() {
     days: 30,
     serviceType: "proxy",
   });
-  const deviceSlotPriceMinor = resolveKnownPriceMinor({
-    code: "device_1",
-    days: 1,
-    serviceType: "device_slot",
-  });
-  const deviceSlotPriceRub = (Number(deviceSlotPriceMinor || 15000) / 100).toFixed(0);
+  const deviceSlotPerItemMinor = Number(me?.balance?.hourlyRatePartsMinor?.deviceSlotPerItem || 0);
+  const deviceSlotPerItemRub = (Math.max(0, deviceSlotPerItemMinor) / 100).toFixed(2);
   root.innerHTML = "";
 
   const fmtBytes = (bytes) => {
@@ -1532,9 +1531,9 @@ async function boot() {
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Это разовая покупка (не почасовая). Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>`
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Почасовая надбавка. Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1568,9 +1567,9 @@ async function boot() {
     <div class="actions-stack">
     ${
       isXuiPrimary
-        ? `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Это разовая покупка (не почасовая). Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
-        : `<button class="btn secondary" type="button" id="addDeviceBtn">Разово: +1 устройство (${deviceSlotPriceRub} ₽)</button>`
+        ? `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>
+           <p class="muted" style="margin-top:10px;line-height:1.45">Почасовая надбавка. Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+        : `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
     </div>
@@ -1670,22 +1669,20 @@ async function boot() {
     };
   }
   const addDev = document.getElementById("addDeviceBtn");
-  if (addDev && invoiceEnabled) {
+  if (addDev) {
     addDev.onclick = async () => {
       try {
-        await openInvoiceInMiniApp({
-          tg,
-          productCode: "device_1",
-          grantDays: 1,
-          serviceType: "device_slot",
+        await api("/api/xui/add-device-slot", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ slots: 1 }),
         });
-        showToast("Откройте счёт и оплатите докупку +1 устройства");
+        showToast("Лимит устройств увеличен на +1. Почасовая надбавка применена.");
+        setTimeout(() => window.location.reload(), 700);
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
       }
     };
-  } else if (addDev) {
-    addDev.style.display = "none";
   }
   const supportHref = String(me?.subscriptionUi?.supportUrl || "https://t.me/VL_VPNbot");
   document.getElementById("supportBtn").onclick = () => {
