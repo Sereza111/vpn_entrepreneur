@@ -2335,9 +2335,7 @@ app.post("/api/admin/yookassa/reconcile", adminGrantAuth, async (req, res) => {
     if (await paymentWebhookStore.wasProcessed(dedupKey)) {
       return res.json({ ok: true, duplicate: true });
     }
-    const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
-    if (!payloadKey) return res.status(400).json({ error: "payloadKey_missing" });
-    const payload = parseTelegramPaymentPayload(payloadKey);
+    const payload = resolveYookassaPaymentPayload(payment);
     if (!payload) return res.status(400).json({ error: "payment_payload_missing" });
     const amountMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
     await applySuccessfulBusinessPayload({
@@ -2371,6 +2369,20 @@ function inferServiceTypeFromProductCode(productCode) {
 
 function isYookassaEnabled() {
   return Boolean(config.yookassa.shopId && config.yookassa.secretKey);
+}
+
+function resolveYookassaPaymentPayload(payment) {
+  const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
+  if (payloadKey) {
+    const parsed = parseTelegramPaymentPayload(payloadKey);
+    if (parsed) return parsed;
+  }
+  const kind = String(payment?.metadata?.kind || "").trim().toLowerCase();
+  const telegramId = Number(payment?.metadata?.telegramId || 0);
+  if (kind === "balance_topup" && Number.isFinite(telegramId) && telegramId > 0) {
+    return { kind: "balance_topup", telegramId, username: null };
+  }
+  return null;
 }
 
 function parseProxyProductCode(productCode) {
@@ -2701,7 +2713,7 @@ app.post("/api/payments/yookassa/webhook", async (req, res) => {
       return res.json({ ok: true, skipped: true, status: payment?.status || null });
     }
     const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
-    const payload = parseTelegramPaymentPayload(payloadKey);
+    const payload = resolveYookassaPaymentPayload(payment);
     if (!payload) return res.status(400).json({ error: "payload_not_found" });
     const paidMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
     await applySuccessfulBusinessPayload({
