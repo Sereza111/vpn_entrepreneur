@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import net from "node:net";
+import fs from "fs/promises";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { Agent } from "undici";
 import helmet from "helmet";
@@ -130,6 +131,76 @@ function resolvePlanPriceMinor(selection = {}) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function safeParseDbJson(raw) {
+  const src = String(raw || "").trim();
+  if (!src) return {};
+  try {
+    const obj = JSON.parse(src);
+    return obj && typeof obj === "object" ? obj : {};
+  } catch {
+    if (src[0] !== "{") return {};
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === "\"") inStr = false;
+        continue;
+      }
+      if (ch === "\"") {
+        inStr = true;
+        continue;
+      }
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          try {
+            const obj = JSON.parse(src.slice(0, i + 1));
+            return obj && typeof obj === "object" ? obj : {};
+          } catch {
+            return {};
+          }
+        }
+      }
+    }
+    return {};
+  }
+}
+
+async function readDataDbFile(filename) {
+  const fp = path.join(process.cwd(), "data", filename);
+  try {
+    const raw = await fs.readFile(fp, "utf8");
+    return safeParseDbJson(raw);
+  } catch (e) {
+    if (e && e.code === "ENOENT") return {};
+    throw e;
+  }
+}
+
+async function collectKnownTelegramIds() {
+  const files = [
+    "xui-links.json",
+    "balance.json",
+    "proxy-links.json",
+    "referrals.json",
+    "payment-webhook.json",
+  ];
+  const ids = new Set();
+  for (const f of files) {
+    const db = await readDataDbFile(f).catch(() => ({}));
+    for (const k of Object.keys(db || {})) {
+      const n = Number(k);
+      if (Number.isFinite(n) && n > 0) ids.add(n);
+    }
+  }
+  return [...ids].sort((a, b) => a - b);
 }
 
 function checkTcpReachable(host, port, timeoutMs = 3500) {
@@ -2148,6 +2219,80 @@ app.post("/api/admin/timeweb/rotate-ip", adminGrantAuth, async (req, res) => {
     });
     const data = await loadMe(telegramId);
     return res.json({ ok: true, telegramId, dedicatedIp: data?.proxy?.dedicatedIp || null, ...data });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Admin: notify users whose subscription expires soon.
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { daysLeftMax?, daysLeftMin?, dryRun?, text? }
+ */
+app.post("/api/admin/notify-expiring", adminGrantAuth, async (req, res) => {
+  const daysLeftMax = Number(req.body?.daysLeftMax ?? 4);
+  const daysLeftMin = Number(req.body?.daysLeftMin ?? 0);
+  const dryRun = req.body?.dryRun === true;
+  const customText = req.body?.text != null ? String(req.body.text || "").trim() : "";
+  const msgText = customText ||
+    "Напоминание: у вас скоро заканчивается подписка VL. Откройте мини‑приложение и продлите доступ заранее, чтобы не потерять связь.";
+
+  if (!Number.isFinite(daysLeftMax) || daysLeftMax < 0 || daysLeftMax > 365) {
+    return res.status(400).json({ error: "bad_daysLeftMax" });
+  }
+  if (!Number.isFinite(daysLeftMin) || daysLeftMin < 0 || daysLeftMin > daysLeftMax) {
+    return res.status(400).json({ error: "bad_daysLeftMin" });
+  }
+
+  try {
+    const ids = await collectKnownTelegramIds();
+    const now = Date.now();
+    const targets = [];
+    const errors = [];
+    for (const tid of ids) {
+      try {
+        const me = await loadMe(tid).catch(() => null);
+        const exp = me?.subscriptionStatus?.expireAt;
+        const status = String(me?.subscriptionStatus?.panelStatus || "").toUpperCase();
+        if (!exp || status !== "ACTIVE") continue;
+        const expMs = Date.parse(String(exp));
+        if (!Number.isFinite(expMs) || expMs <= 0) continue;
+        const daysLeft = Math.floor((expMs - now) / 86400_000);
+        if (daysLeft < daysLeftMin || daysLeft > daysLeftMax) continue;
+        targets.push({ telegramId: tid, daysLeft, expireAt: exp });
+      } catch (e) {
+        errors.push({ telegramId: tid, error: String(e?.message || e) });
+      }
+    }
+
+    let sent = 0;
+    let failed = 0;
+    if (!dryRun) {
+      for (const t of targets) {
+        try {
+          await bot.api.sendMessage(
+            t.telegramId,
+            `${msgText}\n\nОсталось дней: ${t.daysLeft}`,
+          );
+          sent += 1;
+        } catch (e) {
+          failed += 1;
+          errors.push({ telegramId: t.telegramId, error: String(e?.description || e?.message || e) });
+        }
+        await sleep(80);
+      }
+    }
+
+    return res.json({
+      ok: true,
+      dryRun,
+      candidates: ids.length,
+      matched: targets.length,
+      sent,
+      failed,
+      sample: targets.slice(0, 20),
+      errors: errors.slice(0, 50),
+    });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
