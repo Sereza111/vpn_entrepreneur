@@ -157,4 +157,12 @@ export const config = {
       Math.floor(Number(process.env.REFERRAL_MIN_TOPUP_MINOR || 6000)),
     ),
   },
+  notifyExpiring: {
+    enabled:
+      String(process.env.NOTIFY_EXPIRING_ENABLED || "").toLowerCase() === "1" ||
+      String(process.env.NOTIFY_EXPIRING_ENABLED || "").toLowerCase() === "true",
+    hourUtc: Math.max(0, Math.min(23, Math.floor(Number(process.env.NOTIFY_EXPIRING_HOUR_UTC || 9)))),
+    daysLeftMax: Math.max(0, Math.min(365, Math.floor(Number(process.env.NOTIFY_EXPIRING_DAYS_MAX || 4)))),
+    daysLeftMin: Math.max(0, Math.min(365, Math.floor(Number(process.env.NOTIFY_EXPIRING_DAYS_MIN || 0)))),
+  },
 };

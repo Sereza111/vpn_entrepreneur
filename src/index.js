@@ -203,6 +203,71 @@ async function collectKnownTelegramIds() {
   return [...ids].sort((a, b) => a - b);
 }
 
+async function readNotifyState() {
+  const fp = path.join(process.cwd(), "data", "notify-expiring.json");
+  try {
+    const raw = await fs.readFile(fp, "utf8");
+    return safeParseDbJson(raw);
+  } catch (e) {
+    if (e && e.code === "ENOENT") return {};
+    throw e;
+  }
+}
+
+async function writeNotifyState(obj) {
+  const dir = path.join(process.cwd(), "data");
+  await fs.mkdir(dir, { recursive: true });
+  const fp = path.join(dir, "notify-expiring.json");
+  const tmp = `${fp}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(obj || {}, null, 2), "utf8");
+  await fs.rename(tmp, fp);
+}
+
+async function runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text, dryRun }) {
+  const now = Date.now();
+  const ids = await collectKnownTelegramIds();
+  const msgText = String(text || "").trim() ||
+    "Напоминание: у вас скоро заканчивается подписка VL. Откройте мини‑приложение и продлите доступ заранее, чтобы не потерять связь.";
+  const state = await readNotifyState().catch(() => ({}));
+  const targets = [];
+  for (const tid of ids) {
+    const me = await loadMe(tid).catch(() => null);
+    const exp = me?.subscriptionStatus?.expireAt;
+    const status = String(me?.subscriptionStatus?.panelStatus || "").toUpperCase();
+    if (!exp || status !== "ACTIVE") continue;
+    const expMs = Date.parse(String(exp));
+    if (!Number.isFinite(expMs) || expMs <= 0) continue;
+    const daysLeft = Math.floor((expMs - now) / 86400_000);
+    if (daysLeft < daysLeftMin || daysLeft > daysLeftMax) continue;
+
+    // de-dup: one message per user per expiry timestamp
+    const key = String(tid);
+    const prev = state[key];
+    if (prev?.expireAt === exp && Number(prev?.sentAtMs || 0) > 0) continue;
+    targets.push({ telegramId: tid, daysLeft, expireAt: exp });
+  }
+
+  let sent = 0;
+  let failed = 0;
+  if (!dryRun) {
+    for (const t of targets) {
+      try {
+        await bot.api.sendMessage(
+          t.telegramId,
+          `${msgText}\n\nОсталось дней: ${t.daysLeft}`,
+        );
+        sent += 1;
+        state[String(t.telegramId)] = { expireAt: t.expireAt, sentAtMs: Date.now() };
+      } catch {
+        failed += 1;
+      }
+      await sleep(80);
+    }
+    await writeNotifyState(state).catch(() => null);
+  }
+  return { candidates: ids.length, matched: targets.length, sent, failed };
+}
+
 function checkTcpReachable(host, port, timeoutMs = 3500) {
   return new Promise((resolve) => {
     const p = Number(port);
@@ -2245,54 +2310,43 @@ app.post("/api/admin/notify-expiring", adminGrantAuth, async (req, res) => {
   }
 
   try {
-    const ids = await collectKnownTelegramIds();
-    const now = Date.now();
-    const targets = [];
-    const errors = [];
-    for (const tid of ids) {
-      try {
-        const me = await loadMe(tid).catch(() => null);
-        const exp = me?.subscriptionStatus?.expireAt;
-        const status = String(me?.subscriptionStatus?.panelStatus || "").toUpperCase();
-        if (!exp || status !== "ACTIVE") continue;
-        const expMs = Date.parse(String(exp));
-        if (!Number.isFinite(expMs) || expMs <= 0) continue;
-        const daysLeft = Math.floor((expMs - now) / 86400_000);
-        if (daysLeft < daysLeftMin || daysLeft > daysLeftMax) continue;
-        targets.push({ telegramId: tid, daysLeft, expireAt: exp });
-      } catch (e) {
-        errors.push({ telegramId: tid, error: String(e?.message || e) });
-      }
-    }
-
-    let sent = 0;
-    let failed = 0;
-    if (!dryRun) {
-      for (const t of targets) {
-        try {
-          await bot.api.sendMessage(
-            t.telegramId,
-            `${msgText}\n\nОсталось дней: ${t.daysLeft}`,
-          );
-          sent += 1;
-        } catch (e) {
-          failed += 1;
-          errors.push({ telegramId: t.telegramId, error: String(e?.description || e?.message || e) });
-        }
-        await sleep(80);
-      }
-    }
-
-    return res.json({
-      ok: true,
+    const r = await runNotifyExpiringJob({
+      daysLeftMax,
+      daysLeftMin,
+      text: msgText,
       dryRun,
-      candidates: ids.length,
-      matched: targets.length,
-      sent,
-      failed,
-      sample: targets.slice(0, 20),
-      errors: errors.slice(0, 50),
     });
+    return res.json({ ok: true, dryRun, ...r });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/yookassa/reconcile", adminGrantAuth, async (req, res) => {
+  if (!isYookassaEnabled()) return res.status(503).json({ error: "yookassa_disabled" });
+  const paymentId = String(req.body?.paymentId || "").trim();
+  if (!paymentId) return res.status(400).json({ error: "paymentId_required" });
+  try {
+    const payment = await yookassaApi.getPayment(paymentId);
+    if (String(payment?.status || "").toLowerCase() !== "succeeded" || payment?.paid !== true) {
+      return res.status(409).json({ error: "payment_not_succeeded", status: payment?.status || null });
+    }
+    const dedupKey = `yk:${paymentId}`;
+    if (await paymentWebhookStore.wasProcessed(dedupKey)) {
+      return res.json({ ok: true, duplicate: true });
+    }
+    const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
+    if (!payloadKey) return res.status(400).json({ error: "payloadKey_missing" });
+    const payload = parseTelegramPaymentPayload(payloadKey);
+    if (!payload) return res.status(400).json({ error: "payment_payload_missing" });
+    const amountMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
+    await applySuccessfulBusinessPayload({
+      payload,
+      paidMinor: amountMinor,
+      username: null,
+    });
+    await paymentWebhookStore.markProcessed(dedupKey, { paymentId, kind: "reconcile" });
+    return res.json({ ok: true, applied: true, telegramId: payload.telegramId, amountMinor });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
@@ -2965,4 +3019,27 @@ app.get(/^\/app\/.*/, (_req, res) => {
 app.listen(config.port, () => {
   console.log(`http://127.0.0.1:${config.port}`);
   void setupTelegramTransport();
+  if (config.notifyExpiring?.enabled) {
+    const hourUtc = Number(config.notifyExpiring.hourUtc ?? 9);
+    const daysLeftMax = Number(config.notifyExpiring.daysLeftMax ?? 4);
+    const daysLeftMin = Number(config.notifyExpiring.daysLeftMin ?? 0);
+    const scheduleNext = () => {
+      const now = new Date();
+      const next = new Date(now);
+      next.setUTCMinutes(0, 0, 0);
+      next.setUTCHours(hourUtc);
+      if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
+      const delay = Math.max(5_000, next.getTime() - now.getTime());
+      setTimeout(async () => {
+        try {
+          await runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text: "", dryRun: false });
+        } catch (e) {
+          console.warn("[notify-expiring] failed:", e?.message || e);
+        } finally {
+          scheduleNext();
+        }
+      }, delay);
+    };
+    scheduleNext();
+  }
 });
