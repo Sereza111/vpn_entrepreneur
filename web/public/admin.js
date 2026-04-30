@@ -2,10 +2,16 @@ const tg = window.Telegram?.WebApp;
 const outEl = document.getElementById("out");
 const statusEl = document.getElementById("status");
 const cfgEl = document.getElementById("configJson");
+const actionStatusEl = document.getElementById("actionStatus");
 let token = "";
 
 function show(data) {
   outEl.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+}
+
+function setActionStatus(text, kind = "") {
+  actionStatusEl.textContent = String(text || "").trim() || "—";
+  actionStatusEl.className = `status${kind ? ` ${kind}` : ""}`;
 }
 
 function num(v) {
@@ -33,6 +39,31 @@ async function auth() {
   token = authData.token;
   const me = await api("/api/admin/me");
   statusEl.textContent = `admin ${me.telegramId} авторизован`;
+}
+
+async function runAction(buttonEl, title, action) {
+  const prev = buttonEl?.textContent || "";
+  if (buttonEl) {
+    buttonEl.disabled = true;
+    buttonEl.textContent = "Выполняем...";
+  }
+  setActionStatus(`${title}: выполняется...`);
+  try {
+    const result = await action();
+    setActionStatus(`${title}: успешно`, "ok");
+    show(result);
+    return result;
+  } catch (e) {
+    const msg = String(e?.message || e || "Ошибка");
+    setActionStatus(`${title}: ${msg}`, "err");
+    show(msg);
+    throw e;
+  } finally {
+    if (buttonEl) {
+      buttonEl.disabled = false;
+      buttonEl.textContent = prev;
+    }
+  }
 }
 
 async function loadUser() {
@@ -64,40 +95,99 @@ async function saveConfig() {
   show(data);
 }
 
-function bind() {
-  document.getElementById("loadUser").onclick = () => loadUser().catch((e) => show(String(e.message || e)));
-  document.getElementById("loadConfigBtn").onclick = () => loadConfig().catch((e) => show(String(e.message || e)));
-  document.getElementById("saveConfigBtn").onclick = () => saveConfig().catch((e) => show(String(e.message || e)));
-  document.getElementById("migrateBtn").onclick = () =>
-    api("/api/admin/config/migrate-from-env", { method: "POST", body: "{}" })
-      .then(show).catch((e) => show(String(e.message || e)));
+function addUsaTemplateToConfig() {
+  const parsed = JSON.parse(cfgEl.value || "{}");
+  const list = Array.isArray(parsed.proxyServers) ? parsed.proxyServers : [];
+  const exists = list.some((s) => String(s?.id || "").trim().toLowerCase() === "us1");
+  if (exists) return { changed: false, reason: "us1 уже есть в proxyServers" };
+  list.push({
+    id: "us1",
+    country: "US",
+    label: "США · US1",
+    host: "1.2.3.4",
+    timewebServerId: "",
+    socksPort: 1080,
+    httpPort: 3128,
+    mtprotoPort: 8443,
+    mtprotoSecret: "",
+    ssh: {
+      host: "1.2.3.4",
+      port: 22,
+      user: "root",
+      privateKeyB64: "",
+    },
+    containerName: "3proxy",
+    configPath: "/opt/3proxy/3proxy.cfg",
+  });
+  parsed.proxyServers = list;
+  if (!Array.isArray(parsed.admins)) parsed.admins = [];
+  cfgEl.value = JSON.stringify(parsed, null, 2);
+  return { changed: true, serverId: "us1" };
+}
 
-  document.getElementById("grantDaysBtn").onclick = () => {
+function bind() {
+  const loadUserBtn = document.getElementById("loadUser");
+  const loadConfigBtn = document.getElementById("loadConfigBtn");
+  const saveConfigBtn = document.getElementById("saveConfigBtn");
+  const migrateBtn = document.getElementById("migrateBtn");
+  const addUsaTemplateBtn = document.getElementById("addUsaTemplateBtn");
+  const grantDaysBtn = document.getElementById("grantDaysBtn");
+  const creditBtn = document.getElementById("creditBtn");
+  const freeOnBtn = document.getElementById("freeOnBtn");
+  const freeOffBtn = document.getElementById("freeOffBtn");
+  const reconcileBtn = document.getElementById("reconcileBtn");
+
+  loadUserBtn.onclick = () => runAction(loadUserBtn, "Загрузка пользователя", () => loadUser()).catch(() => null);
+  loadConfigBtn.onclick = () => runAction(loadConfigBtn, "Загрузка конфига", () => loadConfig()).catch(() => null);
+  saveConfigBtn.onclick = () => runAction(saveConfigBtn, "Сохранение конфига", () => saveConfig()).catch(() => null);
+  migrateBtn.onclick = () =>
+    runAction(migrateBtn, "Миграция из env", () =>
+      api("/api/admin/config/migrate-from-env", { method: "POST", body: "{}" }))
+      .catch(() => null);
+  addUsaTemplateBtn.onclick = () => {
+    try {
+      const r = addUsaTemplateToConfig();
+      if (r.changed) {
+        setActionStatus("USA шаблон добавлен в JSON. Нажми «Сохранить admins + proxyServers».", "ok");
+      } else {
+        setActionStatus(String(r.reason || "Без изменений"));
+      }
+    } catch (e) {
+      setActionStatus(`Ошибка шаблона USA: ${String(e?.message || e)}`, "err");
+    }
+  };
+
+  grantDaysBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
     const days = num(document.getElementById("grantDays").value);
-    api("/api/admin/grant-days", { method: "POST", body: JSON.stringify({ telegramId, days }) })
-      .then(show).catch((e) => show(String(e.message || e)));
+    runAction(grantDaysBtn, "Выдача дней", () =>
+      api("/api/admin/grant-days", { method: "POST", body: JSON.stringify({ telegramId, days }) }))
+      .catch(() => null);
   };
-  document.getElementById("creditBtn").onclick = () => {
+  creditBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
     const amountMinor = num(document.getElementById("creditMinor").value);
-    api("/api/admin/balance/credit", { method: "POST", body: JSON.stringify({ telegramId, amountMinor }) })
-      .then(show).catch((e) => show(String(e.message || e)));
+    runAction(creditBtn, "Пополнение баланса", () =>
+      api("/api/admin/balance/credit", { method: "POST", body: JSON.stringify({ telegramId, amountMinor }) }))
+      .catch(() => null);
   };
-  document.getElementById("freeOnBtn").onclick = () => {
+  freeOnBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
-    api("/api/admin/free-mode", { method: "POST", body: JSON.stringify({ telegramId, freeMode: true }) })
-      .then(show).catch((e) => show(String(e.message || e)));
+    runAction(freeOnBtn, "FreeMode ON", () =>
+      api("/api/admin/free-mode", { method: "POST", body: JSON.stringify({ telegramId, freeMode: true }) }))
+      .catch(() => null);
   };
-  document.getElementById("freeOffBtn").onclick = () => {
+  freeOffBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
-    api("/api/admin/free-mode", { method: "POST", body: JSON.stringify({ telegramId, freeMode: false }) })
-      .then(show).catch((e) => show(String(e.message || e)));
+    runAction(freeOffBtn, "FreeMode OFF", () =>
+      api("/api/admin/free-mode", { method: "POST", body: JSON.stringify({ telegramId, freeMode: false }) }))
+      .catch(() => null);
   };
-  document.getElementById("reconcileBtn").onclick = () => {
+  reconcileBtn.onclick = () => {
     const paymentId = String(document.getElementById("paymentId").value || "").trim();
-    api("/api/admin/yookassa/reconcile", { method: "POST", body: JSON.stringify({ paymentId }) })
-      .then(show).catch((e) => show(String(e.message || e)));
+    runAction(reconcileBtn, "YooKassa reconcile", () =>
+      api("/api/admin/yookassa/reconcile", { method: "POST", body: JSON.stringify({ paymentId }) }))
+      .catch(() => null);
   };
 }
 
@@ -108,8 +198,10 @@ async function boot() {
     await auth();
     bind();
     await loadConfig();
+    setActionStatus("Готово");
   } catch (e) {
     statusEl.textContent = `Ошибка: ${String(e.message || e)}`;
+    setActionStatus(`Ошибка инициализации: ${String(e.message || e)}`, "err");
     show(String(e.message || e));
   }
 }

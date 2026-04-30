@@ -16,6 +16,10 @@
       button { cursor: pointer; }
       .out { white-space: pre-wrap; font-size: 13px; line-height: 1.4; background: #0f162b; border-radius: 10px; padding: 10px; }
       .muted { color: #9fb0db; font-size: 13px; }
+      .status { margin-top: 8px; font-size: 13px; color: #9fb0db; min-height: 20px; }
+      .status.ok { color: #70e7a5; }
+      .status.err { color: #ff8f8f; }
+      button[disabled] { opacity: .6; cursor: wait; }
     </style>
   </head>
   <body>
@@ -56,6 +60,7 @@
         <div class="row">
           <button id="loadConfigBtn">Обновить конфиг</button>
           <button id="migrateBtn">Мигрировать из env</button>
+          <button id="addUsaTemplateBtn">Добавить USA шаблон</button>
         </div>
         <div class="muted">admins[] и proxyServers[] можно редактировать как JSON целиком.</div>
         <textarea id="configJson"></textarea>
@@ -66,6 +71,7 @@
 
       <div class="card">
         <h3>Ответ API</h3>
+        <div id="actionStatus" class="status">Готово</div>
         <div id="out" class="out">—</div>
       </div>
     </div>
