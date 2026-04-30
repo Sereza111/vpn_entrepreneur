@@ -147,6 +147,7 @@ export const config = {
     apiBaseUrl: String(process.env.YK_API_BASE_URL || "https://api.yookassa.ru").replace(/\/$/, ""),
   },
   corsOrigin: process.env.CORS_ORIGIN || "",
+  trustProxy: String(process.env.TRUST_PROXY || "").trim(),
   testGrantEnabled:
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "1" ||
     String(process.env.TEST_GRANT_ENABLED || "").toLowerCase() === "true",

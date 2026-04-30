@@ -358,6 +358,14 @@ async function setupTelegramTransport() {
 
 const app = express();
 app.disable("x-powered-by");
+{
+  const trustProxyRaw = String(config.trustProxy || "").trim().toLowerCase();
+  if (trustProxyRaw === "1" || trustProxyRaw === "true") {
+    app.set("trust proxy", true);
+  } else if (/^\d+$/.test(trustProxyRaw)) {
+    app.set("trust proxy", Number(trustProxyRaw));
+  }
+}
 
 // Correlation id for logs/diagnostics
 app.use((req, res, next) => {
