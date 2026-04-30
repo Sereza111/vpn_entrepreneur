@@ -18,6 +18,10 @@ function num(v) {
   return Number(String(v || "").trim());
 }
 
+function txt(id) {
+  return String(document.getElementById(id)?.value || "").trim();
+}
+
 async function api(path, init = {}) {
   const headers = { "Content-Type": "application/json", ...(init.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -95,34 +99,54 @@ async function saveConfig() {
   show(data);
 }
 
-function addUsaTemplateToConfig() {
-  const parsed = JSON.parse(cfgEl.value || "{}");
-  const list = Array.isArray(parsed.proxyServers) ? parsed.proxyServers : [];
-  const exists = list.some((s) => String(s?.id || "").trim().toLowerCase() === "us1");
-  if (exists) return { changed: false, reason: "us1 уже есть в proxyServers" };
-  list.push({
-    id: "us1",
-    country: "US",
-    label: "США · US1",
-    host: "1.2.3.4",
-    timewebServerId: "",
-    socksPort: 1080,
-    httpPort: 3128,
-    mtprotoPort: 8443,
-    mtprotoSecret: "",
+function buildServerFromForm() {
+  const id = txt("srvId");
+  const host = txt("srvHost");
+  const sshHost = txt("srvSshHost") || host;
+  if (!id) throw new Error("Введите server id");
+  if (!host) throw new Error("Введите host");
+  if (!sshHost) throw new Error("Введите ssh.host");
+  return {
+    id,
+    country: txt("srvCountry"),
+    label: txt("srvLabel"),
+    host,
+    timewebServerId: txt("srvTimewebId"),
+    socksPort: num(txt("srvSocksPort")) || 1080,
+    httpPort: num(txt("srvHttpPort")) || 3128,
+    mtprotoPort: num(txt("srvMtprotoPort")) || 0,
+    mtprotoSecret: txt("srvMtprotoSecret"),
     ssh: {
-      host: "1.2.3.4",
-      port: 22,
-      user: "root",
-      privateKeyB64: "",
+      host: sshHost,
+      port: num(txt("srvSshPort")) || 22,
+      user: txt("srvSshUser"),
+      privateKeyB64: txt("srvSshKey"),
     },
-    containerName: "3proxy",
-    configPath: "/opt/3proxy/3proxy.cfg",
-  });
-  parsed.proxyServers = list;
-  if (!Array.isArray(parsed.admins)) parsed.admins = [];
-  cfgEl.value = JSON.stringify(parsed, null, 2);
-  return { changed: true, serverId: "us1" };
+    containerName: txt("srvContainer") || "3proxy",
+    configPath: txt("srvConfigPath") || "/opt/3proxy/3proxy.cfg",
+  };
+}
+
+function fillServerForm(server = {}) {
+  const set = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value == null ? "" : String(value);
+  };
+  set("srvId", server.id || "");
+  set("srvCountry", server.country || "");
+  set("srvLabel", server.label || "");
+  set("srvHost", server.host || "");
+  set("srvTimewebId", server.timewebServerId || "");
+  set("srvSocksPort", server.socksPort ?? 1080);
+  set("srvHttpPort", server.httpPort ?? 3128);
+  set("srvMtprotoPort", server.mtprotoPort ?? 0);
+  set("srvMtprotoSecret", server.mtprotoSecret || "");
+  set("srvSshHost", server?.ssh?.host || "");
+  set("srvSshPort", server?.ssh?.port ?? 22);
+  set("srvSshUser", server?.ssh?.user || "");
+  set("srvSshKey", server?.ssh?.privateKeyB64 || "");
+  set("srvContainer", server.containerName || "3proxy");
+  set("srvConfigPath", server.configPath || "/opt/3proxy/3proxy.cfg");
 }
 
 function bind() {
@@ -130,7 +154,8 @@ function bind() {
   const loadConfigBtn = document.getElementById("loadConfigBtn");
   const saveConfigBtn = document.getElementById("saveConfigBtn");
   const migrateBtn = document.getElementById("migrateBtn");
-  const addUsaTemplateBtn = document.getElementById("addUsaTemplateBtn");
+  const saveServerBtn = document.getElementById("saveServerBtn");
+  const deleteServerBtn = document.getElementById("deleteServerBtn");
   const grantDaysBtn = document.getElementById("grantDaysBtn");
   const creditBtn = document.getElementById("creditBtn");
   const freeOnBtn = document.getElementById("freeOnBtn");
@@ -144,18 +169,37 @@ function bind() {
     runAction(migrateBtn, "Миграция из env", () =>
       api("/api/admin/config/migrate-from-env", { method: "POST", body: "{}" }))
       .catch(() => null);
-  addUsaTemplateBtn.onclick = () => {
-    try {
-      const r = addUsaTemplateToConfig();
-      if (r.changed) {
-        setActionStatus("USA шаблон добавлен в JSON. Нажми «Сохранить admins + proxyServers».", "ok");
-      } else {
-        setActionStatus(String(r.reason || "Без изменений"));
-      }
-    } catch (e) {
-      setActionStatus(`Ошибка шаблона USA: ${String(e?.message || e)}`, "err");
-    }
-  };
+  saveServerBtn.onclick = () =>
+    runAction(saveServerBtn, "Сохранение сервера", async () => {
+      const server = buildServerFromForm();
+      const result = await api("/api/admin/config/servers/upsert", {
+        method: "POST",
+        body: JSON.stringify({ server }),
+      });
+      const parsed = JSON.parse(cfgEl.value || "{}");
+      const list = Array.isArray(parsed.proxyServers) ? parsed.proxyServers : [];
+      const next = list.filter((s) => String(s?.id || "") !== String(server.id));
+      next.push(server);
+      parsed.proxyServers = next;
+      if (!Array.isArray(parsed.admins)) parsed.admins = [];
+      cfgEl.value = JSON.stringify(parsed, null, 2);
+      return result;
+    }).catch(() => null);
+  deleteServerBtn.onclick = () =>
+    runAction(deleteServerBtn, "Удаление сервера", async () => {
+      const serverId = txt("srvId");
+      if (!serverId) throw new Error("Введите id для удаления");
+      const result = await api("/api/admin/config/servers/delete", {
+        method: "POST",
+        body: JSON.stringify({ serverId }),
+      });
+      const parsed = JSON.parse(cfgEl.value || "{}");
+      const list = Array.isArray(parsed.proxyServers) ? parsed.proxyServers : [];
+      parsed.proxyServers = list.filter((s) => String(s?.id || "") !== serverId);
+      if (!Array.isArray(parsed.admins)) parsed.admins = [];
+      cfgEl.value = JSON.stringify(parsed, null, 2);
+      return result;
+    }).catch(() => null);
 
   grantDaysBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
@@ -197,7 +241,9 @@ async function boot() {
     tg?.expand?.();
     await auth();
     bind();
-    await loadConfig();
+    const cfg = await loadConfig();
+    const first = cfg?.effective?.proxyServers?.[0] || null;
+    if (first) fillServerForm(first);
     setActionStatus("Готово");
   } catch (e) {
     statusEl.textContent = `Ошибка: ${String(e.message || e)}`;

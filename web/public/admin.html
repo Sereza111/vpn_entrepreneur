@@ -60,7 +60,37 @@
         <div class="row">
           <button id="loadConfigBtn">Обновить конфиг</button>
           <button id="migrateBtn">Мигрировать из env</button>
-          <button id="addUsaTemplateBtn">Добавить USA шаблон</button>
+        </div>
+        <div class="row">
+          <input id="srvId" placeholder="id (напр. us1)" />
+          <input id="srvCountry" placeholder="country (US)" />
+          <input id="srvLabel" placeholder="label (США · US1)" />
+        </div>
+        <div class="row">
+          <input id="srvHost" placeholder="host (IP/домен)" />
+          <input id="srvTimewebId" placeholder="timewebServerId (опц.)" />
+        </div>
+        <div class="row">
+          <input id="srvSocksPort" placeholder="socksPort (1080)" />
+          <input id="srvHttpPort" placeholder="httpPort (3128)" />
+          <input id="srvMtprotoPort" placeholder="mtprotoPort (8443, опц.)" />
+          <input id="srvMtprotoSecret" placeholder="mtprotoSecret (опц.)" />
+        </div>
+        <div class="row">
+          <input id="srvSshHost" placeholder="ssh.host" />
+          <input id="srvSshPort" placeholder="ssh.port (22)" />
+          <input id="srvSshUser" placeholder="ssh.user (root)" />
+        </div>
+        <div class="row">
+          <input id="srvSshKey" placeholder="ssh.privateKeyB64" />
+        </div>
+        <div class="row">
+          <input id="srvContainer" placeholder="containerName (3proxy)" />
+          <input id="srvConfigPath" placeholder="configPath (/opt/3proxy/3proxy.cfg)" />
+        </div>
+        <div class="row">
+          <button id="saveServerBtn">Сохранить сервер</button>
+          <button id="deleteServerBtn">Удалить сервер по id</button>
         </div>
         <div class="muted">admins[] и proxyServers[] можно редактировать как JSON целиком.</div>
         <textarea id="configJson"></textarea>
