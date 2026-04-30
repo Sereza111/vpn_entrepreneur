@@ -31,6 +31,7 @@ export function parseProxyServers(envValue) {
         port: Number(s?.ssh?.port ?? 22),
         user: String(s?.ssh?.user || "").trim(),
         privateKeyB64: String(s?.ssh?.privateKeyB64 || "").trim(),
+        password: String(s?.ssh?.password || "").trim(),
       },
       containerName: String(s?.containerName || "3proxy").trim(),
       configPath: String(s?.configPath || "/opt/3proxy/3proxy.cfg").trim(),
@@ -45,7 +46,7 @@ export function generateProxyCredentials(telegramId) {
   return { username, password };
 }
 
-function sshExec({ host, port, user, privateKey }, command) {
+function sshExec({ host, port, user, privateKey, password }, command) {
   return new Promise((resolve, reject) => {
     const conn = new SshClient();
     conn
@@ -75,7 +76,8 @@ function sshExec({ host, port, user, privateKey }, command) {
         host,
         port,
         username: user,
-        privateKey,
+        ...(privateKey ? { privateKey } : {}),
+        ...(password ? { password } : {}),
         readyTimeout: 10_000,
       });
   });
@@ -89,7 +91,8 @@ export async function ensureProxyUserOnServer({
   const pk = server.ssh.privateKeyB64
     ? Buffer.from(server.ssh.privateKeyB64, "base64").toString("utf8")
     : "";
-  if (!server.ssh.user || !pk) {
+  const pwd = String(server?.ssh?.password || "").trim();
+  if (!server.ssh.user || (!pk && !pwd)) {
     throw new Error("proxy_ssh_not_configured");
   }
 
@@ -108,7 +111,8 @@ export async function ensureProxyUserOnServer({
       host: server.ssh.host,
       port: server.ssh.port,
       user: server.ssh.user,
-      privateKey: pk,
+      ...(pk ? { privateKey: pk } : {}),
+      ...(pwd ? { password: pwd } : {}),
     },
     cmd,
   );
@@ -127,7 +131,8 @@ export async function removeProxyUserOnServer({
   const pk = server.ssh.privateKeyB64
     ? Buffer.from(server.ssh.privateKeyB64, "base64").toString("utf8")
     : "";
-  if (!server.ssh.user || !pk) {
+  const pwd = String(server?.ssh?.password || "").trim();
+  if (!server.ssh.user || (!pk && !pwd)) {
     throw new Error("proxy_ssh_not_configured");
   }
 
@@ -143,7 +148,8 @@ export async function removeProxyUserOnServer({
       host: server.ssh.host,
       port: server.ssh.port,
       user: server.ssh.user,
-      privateKey: pk,
+      ...(pk ? { privateKey: pk } : {}),
+      ...(pwd ? { password: pwd } : {}),
     },
     cmd,
   );

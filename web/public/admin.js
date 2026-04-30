@@ -121,6 +121,7 @@ function buildServerFromForm() {
       port: num(txt("srvSshPort")) || 22,
       user: txt("srvSshUser"),
       privateKeyB64: txt("srvSshKey"),
+      password: txt("srvSshPassword"),
     },
     containerName: txt("srvContainer") || "3proxy",
     configPath: txt("srvConfigPath") || "/opt/3proxy/3proxy.cfg",
@@ -145,6 +146,7 @@ function fillServerForm(server = {}) {
   set("srvSshPort", server?.ssh?.port ?? 22);
   set("srvSshUser", server?.ssh?.user || "");
   set("srvSshKey", server?.ssh?.privateKeyB64 || "");
+  set("srvSshPassword", server?.ssh?.password || "");
   set("srvContainer", server.containerName || "3proxy");
   set("srvConfigPath", server.configPath || "/opt/3proxy/3proxy.cfg");
 }

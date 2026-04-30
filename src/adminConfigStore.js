@@ -36,6 +36,7 @@ function normalizeServer(input = {}) {
       port: Number(s?.ssh?.port ?? 22),
       user: String(s?.ssh?.user || "").trim(),
       privateKeyB64: String(s?.ssh?.privateKeyB64 || "").trim(),
+      password: String(s?.ssh?.password || "").trim(),
     },
     containerName: String(s.containerName || "3proxy").trim(),
     configPath: String(s.configPath || "/opt/3proxy/3proxy.cfg").trim(),
