@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>VL Admin</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1020; color: #e8ecf7; }
+      .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
+      .card { background: #141b31; border: 1px solid #243053; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+      input, textarea, button { border-radius: 10px; border: 1px solid #33426b; background: #0f162b; color: #e8ecf7; padding: 10px; }
+      input, textarea { flex: 1; min-width: 180px; }
+      textarea { min-height: 150px; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button { cursor: pointer; }
+      .out { white-space: pre-wrap; font-size: 13px; line-height: 1.4; background: #0f162b; border-radius: 10px; padding: 10px; }
+      .muted { color: #9fb0db; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h2>VL Admin Panel (MVP)</h2>
+        <div id="status" class="muted">Инициализация...</div>
+      </div>
+
+      <div class="card">
+        <h3>Пользователь</h3>
+        <div class="row">
+          <input id="telegramId" placeholder="telegramId" />
+          <button id="loadUser">Загрузить</button>
+        </div>
+        <div class="row">
+          <input id="grantDays" placeholder="Дни (например 30)" />
+          <button id="grantDaysBtn">Выдать дни</button>
+          <input id="creditMinor" placeholder="Сумма в копейках (например 5000)" />
+          <button id="creditBtn">Пополнить баланс</button>
+        </div>
+        <div class="row">
+          <button id="freeOnBtn">FreeMode ON</button>
+          <button id="freeOffBtn">FreeMode OFF</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>YooKassa Reconcile</h3>
+        <div class="row">
+          <input id="paymentId" placeholder="paymentId" />
+          <button id="reconcileBtn">Reconcile</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Конфиг админки</h3>
+        <div class="row">
+          <button id="loadConfigBtn">Обновить конфиг</button>
+          <button id="migrateBtn">Мигрировать из env</button>
+        </div>
+        <div class="muted">admins[] и proxyServers[] можно редактировать как JSON целиком.</div>
+        <textarea id="configJson"></textarea>
+        <div class="row">
+          <button id="saveConfigBtn">Сохранить admins + proxyServers</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Ответ API</h3>
+        <div id="out" class="out">—</div>
+      </div>
+    </div>
+    <script type="module" src="/app/admin.js"></script>
+  </body>
+  </html>

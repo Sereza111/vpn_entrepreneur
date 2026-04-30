@@ -25,6 +25,7 @@ import * as referralStore from "./referralStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
 import * as timewebApi from "./timewebApi.js";
 import * as yookassaApi from "./yookassaApi.js";
+import * as adminConfigStore from "./adminConfigStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -410,15 +411,48 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function parseAdminTelegramIdsFromEnv(raw) {
+  return [...new Set(
+    String(raw || "")
+      .split(/[,\s;]+/g)
+      .map((x) => Number(x.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0),
+  )];
+}
+
+async function getAdminTelegramIds() {
+  const cfg = await adminConfigStore.getConfig().catch(() => null);
+  if (Array.isArray(cfg?.admins) && cfg.admins.length) return cfg.admins;
+  return parseAdminTelegramIdsFromEnv(config.admin?.telegramIdsCsv || "");
+}
+
+async function getProxyServersConfig() {
+  const cfg = await adminConfigStore.getConfig().catch(() => null);
+  if (Array.isArray(cfg?.proxyServers) && cfg.proxyServers.length) return cfg.proxyServers;
+  return parseProxyServers(config.proxy.serversJson);
+}
+
+async function adminTelegramAuth(req, res, next) {
+  const h = req.headers.authorization;
+  const m = h && /^Bearer (.+)$/.exec(h);
+  if (!m) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const s = verifySession(m[1]);
+    const tid = Number(s?.sub || s?.tg || 0);
+    const admins = await getAdminTelegramIds();
+    if (!tid || !admins.includes(tid)) return res.status(403).json({ error: "forbidden" });
+    req.tgSession = s;
+    req.adminTelegramId = tid;
+    return next();
+  } catch {
+    return res.status(401).json({ error: "bad_token" });
+  }
+}
+
 function adminGrantAuth(req, res, next) {
-  if (!config.adminGrantSecret) {
-    return res.status(503).json({ error: "admin_grant_disabled" });
-  }
   const sec = String(req.headers["x-admin-secret"] || "").trim();
-  if (!sec || sec !== config.adminGrantSecret) {
-    return res.status(403).json({ error: "forbidden" });
-  }
-  next();
+  if (config.adminGrantSecret && sec && sec === config.adminGrantSecret) return next();
+  return adminTelegramAuth(req, res, next);
 }
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -662,6 +696,102 @@ app.post("/api/auth/telegram", (req, res) => {
   });
 });
 
+app.get("/api/admin/me", adminTelegramAuth, async (req, res) => {
+  const admins = await getAdminTelegramIds();
+  res.json({
+    ok: true,
+    telegramId: Number(req.adminTelegramId || 0),
+    isAdmin: true,
+    adminCount: admins.length,
+  });
+});
+
+app.get("/api/admin/config", adminGrantAuth, async (_req, res) => {
+  try {
+    const stored = await adminConfigStore.getConfig();
+    const envAdmins = parseAdminTelegramIdsFromEnv(config.admin?.telegramIdsCsv || "");
+    const envServers = parseProxyServers(config.proxy.serversJson);
+    const effectiveServers = (stored?.proxyServers || []).length ? stored.proxyServers : envServers;
+    const effectiveAdmins = (stored?.admins || []).length ? stored.admins : envAdmins;
+    return res.json({
+      ok: true,
+      stored,
+      effective: {
+        admins: effectiveAdmins,
+        proxyServers: effectiveServers,
+      },
+      fallback: {
+        envAdmins,
+        envServersCount: envServers.length,
+      },
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/config/admins", adminGrantAuth, async (req, res) => {
+  const ids = Array.isArray(req.body?.admins) ? req.body.admins : [];
+  try {
+    const saved = await adminConfigStore.setAdmins(ids);
+    return res.json({ ok: true, admins: saved.admins });
+  } catch (e) {
+    return res.status(400).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/config/servers", adminGrantAuth, async (req, res) => {
+  const servers = Array.isArray(req.body?.servers) ? req.body.servers : null;
+  if (!servers) return res.status(400).json({ error: "bad_servers" });
+  try {
+    const saved = await adminConfigStore.setProxyServers(servers);
+    return res.json({ ok: true, count: saved.proxyServers.length, proxyServers: saved.proxyServers });
+  } catch (e) {
+    return res.status(400).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/config/servers/upsert", adminGrantAuth, async (req, res) => {
+  try {
+    const saved = await adminConfigStore.upsertProxyServer(req.body?.server || {});
+    return res.json({ ok: true, count: saved.proxyServers.length, proxyServers: saved.proxyServers });
+  } catch (e) {
+    return res.status(400).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/config/servers/delete", adminGrantAuth, async (req, res) => {
+  const serverId = String(req.body?.serverId || "").trim();
+  if (!serverId) return res.status(400).json({ error: "server_id_required" });
+  try {
+    const saved = await adminConfigStore.deleteProxyServer(serverId);
+    return res.json({ ok: true, count: saved.proxyServers.length, proxyServers: saved.proxyServers });
+  } catch (e) {
+    return res.status(400).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/config/migrate-from-env", adminGrantAuth, async (_req, res) => {
+  try {
+    const envAdmins = parseAdminTelegramIdsFromEnv(config.admin?.telegramIdsCsv || "");
+    const envServers = parseProxyServers(config.proxy.serversJson);
+    const saved = await adminConfigStore.getConfig();
+    const mergedAdmins = [...new Set([...(saved.admins || []), ...envAdmins])];
+    const byId = new Map();
+    for (const s of [...envServers, ...(saved.proxyServers || [])]) byId.set(String(s.id), s);
+    const mergedServers = [...byId.values()];
+    const next = await adminConfigStore.setAdmins(mergedAdmins);
+    const done = await adminConfigStore.setProxyServers(mergedServers);
+    return res.json({
+      ok: true,
+      admins: next.admins,
+      proxyServers: done.proxyServers,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 async function loadMe(telegramId, username = null) {
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
   let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
@@ -743,7 +873,7 @@ async function loadMe(telegramId, username = null) {
     ? { linked: true, subscriptionUrl: xuiPublicUrl }
     : { linked: false };
 
-  const proxyServers = parseProxyServers(config.proxy.serversJson);
+  const proxyServers = await getProxyServersConfig();
   const proxyRec = await proxyStore.getProxyByTelegramId(telegramId);
   const remaining = proxyStore.computeProxyRemaining(proxyRec);
   const proxyItems = Array.isArray(proxyRec?.items) ? proxyRec.items : [];
@@ -1595,7 +1725,7 @@ app.post("/api/xui/add-device-slot", authMiddleware, async (req, res) => {
 app.post("/api/proxy/provision", authMiddleware, async (req, res) => {
   try {
     const tid = Number(req.tgSession.sub || req.tgSession.tg);
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     const serverId = String(req.body?.serverId || "").trim();
     const server = servers.find((s) => s.id === serverId) || null;
     if (!server) return res.status(400).json({ error: "bad_serverId" });
@@ -1645,7 +1775,7 @@ app.post("/api/proxy/delete", authMiddleware, async (req, res) => {
 
     let removedFromServer = false;
     try {
-      const servers = parseProxyServers(config.proxy.serversJson);
+      const servers = await getProxyServersConfig();
       const srv = servers.find((s) => s.id === String(target.serverId || "").trim()) || null;
       if (srv && target.username) {
         await removeProxyUserOnServer({ server: srv, username: target.username });
@@ -1679,7 +1809,7 @@ app.post("/api/proxy/delete-all", authMiddleware, async (req, res) => {
       return res.json({ ok: true, removed: 0, removedFromServer: 0, ...data });
     }
 
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     let removedFromServer = 0;
     for (const item of currentItems) {
       try {
@@ -1717,7 +1847,7 @@ app.post("/api/proxy/repair", authMiddleware, async (req, res) => {
       const data = await loadMe(tid, req.tgSession?.u ?? null);
       return res.json({ ok: true, repaired: 0, failed: 0, ...data });
     }
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     let repaired = 0;
     let failed = 0;
     for (const item of items) {
@@ -1805,7 +1935,7 @@ app.post("/api/proxy/acquire-dedicated", authMiddleware, async (req, res) => {
     }
     const requestedServerId = String(req.body?.serverId || "").trim();
     if (!requestedServerId) return res.status(400).json({ error: "server_not_selected" });
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     const srv = servers.find((s) => s.id === requestedServerId) || null;
     if (!srv) return res.status(400).json({ error: "bad_serverId" });
     const twServerId = String(srv.timewebServerId || "").trim();
@@ -1865,7 +1995,7 @@ app.post("/api/proxy/rotate-ip", authMiddleware, async (req, res) => {
       String(rec?.dedicatedIp?.serverId || "").trim() ||
       String(rec?.items?.[0]?.serverId || "").trim();
     if (!preferredServerId) return res.status(400).json({ error: "server_not_selected" });
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     const srv = servers.find((s) => s.id === preferredServerId) || null;
     if (!srv) return res.status(400).json({ error: "bad_serverId" });
     const twServerId = String(srv.timewebServerId || "").trim();
@@ -2060,6 +2190,46 @@ app.post("/api/test/add-device-slot", authMiddleware, async (req, res) => {
   }
 });
 
+app.get("/api/admin/users", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.query?.telegramId || 0);
+  if (Number.isFinite(telegramId) && telegramId > 0) {
+    const me = await loadMe(telegramId).catch(() => null);
+    if (!me) return res.status(404).json({ error: "user_not_found" });
+    return res.json({ ok: true, users: [{ telegramId, ...me }] });
+  }
+  try {
+    const ids = await collectKnownTelegramIds();
+    const users = [];
+    for (const tid of ids.slice(0, 200)) {
+      const me = await loadMe(tid).catch(() => null);
+      if (!me) continue;
+      users.push({
+        telegramId: tid,
+        subscriptionStatus: me.subscriptionStatus || null,
+        balance: me.balance || null,
+        proxy: me.proxy || null,
+      });
+    }
+    return res.json({ ok: true, total: users.length, users });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/admin/balance/credit", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId || 0);
+  const amountMinor = Math.floor(Number(req.body?.amountMinor || 0));
+  if (!Number.isFinite(telegramId) || telegramId < 1) return res.status(400).json({ error: "bad_telegram_id" });
+  if (!Number.isFinite(amountMinor) || amountMinor < 1) return res.status(400).json({ error: "bad_amount_minor" });
+  try {
+    const rec = await balanceStore.credit(telegramId, amountMinor);
+    const me = await loadMe(telegramId).catch(() => null);
+    return res.json({ ok: true, telegramId, amountMinor, balanceRecord: rec, data: me });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 /**
  * Временная ручная выдача доступа админом (без платежки).
  * Header: x-admin-secret = ADMIN_GRANT_SECRET
@@ -2248,7 +2418,7 @@ app.post("/api/admin/timeweb/rotate-ip", adminGrantAuth, async (req, res) => {
   }
   if (!serverId) return res.status(400).json({ error: "bad_serverId" });
   try {
-    const servers = parseProxyServers(config.proxy.serversJson);
+    const servers = await getProxyServersConfig();
     const srv = servers.find((s) => s.id === serverId) || null;
     if (!srv) return res.status(400).json({ error: "server_not_found" });
     const twServerId = String(srv.timewebServerId || srv.id || "").trim();
@@ -3021,6 +3191,9 @@ if (config.publicBaseUrl) {
 }
 
 app.use("/app", express.static(publicDir));
+app.get("/app/admin", (_req, res) => {
+  res.sendFile(path.join(publicDir, "admin.html"));
+});
 app.get(["/app", "/app/"], (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });

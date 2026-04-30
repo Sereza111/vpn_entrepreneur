@@ -75,6 +75,9 @@ export const config = {
     apiToken: String(process.env.TIMEWEB_API_TOKEN || "").trim(),
   },
   adminGrantSecret: String(process.env.ADMIN_GRANT_SECRET || "").trim(),
+  admin: {
+    telegramIdsCsv: String(process.env.ADMIN_TELEGRAM_IDS || "").trim(),
+  },
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
   /**
    * Внутренний баланс + почасовое списание за VPS (после первого пополнения).

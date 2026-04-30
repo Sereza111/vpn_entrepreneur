@@ -943,6 +943,15 @@ async function boot() {
     showError("Профиль: " + e.message);
     return;
   }
+  let isAdmin = false;
+  try {
+    const a = await api("/api/admin/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    isAdmin = Boolean(a?.isAdmin);
+  } catch {
+    isAdmin = false;
+  }
 
   const u = null;
   const xui = me.xui || null;
@@ -1018,6 +1027,22 @@ async function boot() {
     </div>`,
   );
   root.appendChild(head);
+  if (isAdmin) {
+    const adminQuick = el(
+      `<div class="card section is-visible" style="padding:10px 12px;margin-top:10px">
+        <div class="muted" style="margin-bottom:8px">Режим администратора</div>
+        <button class="btn secondary" type="button" id="openAdminPanelBtn">Открыть админ-панель</button>
+      </div>`,
+    );
+    root.appendChild(adminQuick);
+    const openAdminBtn = document.getElementById("openAdminPanelBtn");
+    if (openAdminBtn) {
+      openAdminBtn.onclick = () => {
+        // Open inside current Telegram Mini App context so initData is available.
+        window.location.assign("/app/admin");
+      };
+    }
+  }
 
   if (!hasAccount) {
     root.appendChild(
