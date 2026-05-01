@@ -1427,6 +1427,24 @@ async function tertiaryFetch(path, { method = "GET", json } = {}) {
   }
 }
 
+async function tertiaryReadApi(res, errorCodePrefix) {
+  const bodyText = await res.text().catch(() => "");
+  if (!res.ok) {
+    throw new Error(`${errorCodePrefix}: ${res.status} ${bodyText}`.trim());
+  }
+  let body = {};
+  try {
+    body = bodyText ? JSON.parse(bodyText) : {};
+  } catch {
+    body = {};
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, "success") && body.success === false) {
+    const msg = String(body?.msg || body?.message || bodyText || "api_error").trim();
+    throw new Error(`${errorCodePrefix}: ${msg}`);
+  }
+  return body;
+}
+
 function normalizeClientsFromInbound(inbound) {
   try {
     const st = JSON.parse(String(inbound?.settings || "{}"));
@@ -1551,8 +1569,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
   const remark = buildTertiaryXuiRemark(baseRemark);
   const stablePassword = buildTertiaryClientPassword(telegramId);
   const listRes = await tertiaryFetch("/panel/api/inbounds/list");
-  if (!listRes.ok) return;
-  const list = await listRes.json().catch(() => ({}));
+  const list = await tertiaryReadApi(listRes, "xui_tertiary_list_inbounds").catch(() => ({}));
   for (const inb of list?.obj || []) {
     const inboundId = Number(inb?.id || 0);
     if (!inboundId) continue;
@@ -1588,10 +1605,9 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
         settings: JSON.stringify({ clients: [patch] }),
       },
     });
-    if (!upd.ok) {
-      const t = await upd.text().catch(() => "");
-      console.warn(`[xui-tertiary] sync inbound ${inboundId}: ${upd.status} ${t}`.trim());
-    }
+    await tertiaryReadApi(upd, "xui_tertiary_update_client").catch((e) =>
+      console.warn(`[xui-tertiary] sync inbound ${inboundId}:`, e?.message || e),
+    );
   }
 }
 
@@ -1608,11 +1624,7 @@ async function ensureTertiaryXuiClient({
   const stablePassword = buildTertiaryClientPassword(telegramId);
 
   const listRes = await tertiaryFetch("/panel/api/inbounds/list");
-  if (!listRes.ok) {
-    const t = await listRes.text().catch(() => "");
-    throw new Error(`xui_tertiary_list_inbounds: ${listRes.status} ${t}`.trim());
-  }
-  const list = await listRes.json().catch(() => ({}));
+  const list = await tertiaryReadApi(listRes, "xui_tertiary_list_inbounds");
   const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(config.xuiTertiary.inboundId)) || null;
   if (!inb) throw new Error("xui_tertiary_inbound_not_found");
   const clients = normalizeClientsFromInbound(inb);
@@ -1649,10 +1661,7 @@ async function ensureTertiaryXuiClient({
         settings: JSON.stringify({ clients: [patch] }),
       },
     });
-    if (!upd.ok) {
-      const t = await upd.text().catch(() => "");
-      throw new Error(`xui_tertiary_update_client: ${upd.status} ${t}`.trim());
-    }
+    await tertiaryReadApi(upd, "xui_tertiary_update_client");
     await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
     return;
   }
@@ -1679,10 +1688,7 @@ async function ensureTertiaryXuiClient({
       settings: JSON.stringify({ clients: [client] }),
     },
   });
-  if (!add.ok) {
-    const t = await add.text().catch(() => "");
-    throw new Error(`xui_tertiary_add_client: ${add.status} ${t}`.trim());
-  }
+  await tertiaryReadApi(add, "xui_tertiary_add_client");
   await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
 }
 
