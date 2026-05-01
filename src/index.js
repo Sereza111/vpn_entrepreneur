@@ -1560,6 +1560,15 @@ function buildTertiaryClientPassword(telegramId) {
   return `us${tail}`;
 }
 
+function buildTertiaryClientId(telegramId) {
+  const tid = String(telegramId || "").trim();
+  // Hysteria inbound in some 3X-UI builds rejects UUID-like client IDs with dashes.
+  // Use short lowercase alnum id similar to panel-generated values.
+  const raw = crypto.createHash("sha256").update(`xui-tertiary-id:${tid}`).digest("base64url");
+  const alnum = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return (alnum.slice(0, 10) || `u${Math.floor(Math.random() * 1e9)}`);
+}
+
 /** Одинаковый remark/subId на всех inbound US (VLESS, HYSTERIA2, …), чтобы в клиенте было как у RU/NL. */
 async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs }) {
   if (!config.xuiTertiary.enabled) return;
@@ -1667,7 +1676,7 @@ async function ensureTertiaryXuiClient({
   }
 
   const client = {
-    id: crypto.randomUUID(),
+    id: buildTertiaryClientId(telegramId),
     password: stablePassword,
     email: stableEmail,
     enable: true,
