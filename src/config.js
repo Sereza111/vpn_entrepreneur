@@ -67,6 +67,21 @@ export const config = {
       String(process.env.XUI_SECONDARY_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_SECONDARY_INSECURE_TLS || "").toLowerCase() === "true",
   },
+  /** Третья панель (например US): тот же subId, отдельный inbound — узел попадает в merge подписки при URL в XUI_EXTRA_BASE_URLS. */
+  xuiTertiary: {
+    enabled:
+      String(process.env.XUI_TERTIARY_ENABLED || "").toLowerCase() === "1" ||
+      String(process.env.XUI_TERTIARY_ENABLED || "").toLowerCase() === "true",
+    panelBaseUrl: (process.env.XUI_TERTIARY_PANEL_BASE_URL || "").replace(/\/$/, ""),
+    webBasePath: String(process.env.XUI_TERTIARY_WEB_BASE_PATH || "").trim(),
+    username: process.env.XUI_TERTIARY_USERNAME || "",
+    password: process.env.XUI_TERTIARY_PASSWORD || "",
+    inboundId: Number(process.env.XUI_TERTIARY_INBOUND_ID || 0),
+    remarkPrefix: String(process.env.XUI_TERTIARY_REMARK_PREFIX || "🇺🇸 ").trim(),
+    insecureTls:
+      String(process.env.XUI_TERTIARY_INSECURE_TLS || "").toLowerCase() === "1" ||
+      String(process.env.XUI_TERTIARY_INSECURE_TLS || "").toLowerCase() === "true",
+  },
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
   },

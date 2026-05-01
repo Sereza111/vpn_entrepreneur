@@ -472,6 +472,15 @@ if (config.xui.extraBaseUrls?.length && !config.xuiSecondary.enabled) {
       "Merge will call extra /sub/<id>, but NL usually returns 400 unless the same subId exists there.",
   );
 }
+if (config.xuiTertiary?.enabled) {
+  const n = config.xui.extraBaseUrls?.length || 0;
+  if (n < 2) {
+    console.warn(
+      "[env] XUI_TERTIARY_ENABLED: добавьте хост подписки US в XUI_EXTRA_BASE_URLS " +
+        "(через запятую после NL), иначе VLESS US не попадёт в merge.",
+    );
+  }
+}
 
 function isProbablyBase64(s) {
   const t = String(s || "").trim();
@@ -1236,6 +1245,115 @@ async function secondaryFetch(path, { method = "GET", json } = {}) {
   }
 }
 
+let tertiaryCookie = null;
+let tertiaryCookieExpiresAt = 0;
+
+function getTertiaryPanelRoot() {
+  const base = String(config.xuiTertiary.panelBaseUrl || "").trim();
+  const wp = String(config.xuiTertiary.webBasePath || "").trim();
+  if (!base) return "";
+  if (!wp) return base.replace(/\/+$/, "");
+  let path = wp.startsWith("/") ? wp : `/${wp}`;
+  path = path.replace(/\/+$/, "");
+  try {
+    const u = new URL(base.includes("://") ? base : `http://${base}`);
+    return `${u.origin}${path}`;
+  } catch {
+    return `${base.replace(/\/+$/, "")}${path}`;
+  }
+}
+
+function tertiaryDispatcher() {
+  return config.xuiTertiary.insecureTls
+    ? new Agent({ connect: { rejectUnauthorized: false } })
+    : undefined;
+}
+
+async function tertiaryLogin() {
+  const root = getTertiaryPanelRoot();
+  if (!root || !config.xuiTertiary.username || !config.xuiTertiary.password) {
+    throw new Error("xui_tertiary_not_configured");
+  }
+  const dispatcher = tertiaryDispatcher();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  let res;
+  try {
+    res = await fetch(`${root}/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: encodeForm({
+        username: config.xuiTertiary.username,
+        password: config.xuiTertiary.password,
+      }),
+      redirect: "manual",
+      signal: controller.signal,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok && res.status !== 302) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`xui_tertiary_login_failed: ${res.status} ${t}`.trim());
+  }
+  const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
+  const raw = Array.isArray(sc) ? sc : sc ? [sc] : [];
+  const cookie = raw
+    .map((h) => String(h || "").split(";")[0].trim())
+    .filter((x) => x.includes("="))
+    .join("; ");
+  if (!cookie) throw new Error("xui_tertiary_login_no_cookie");
+  tertiaryCookie = cookie;
+  tertiaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
+  return cookie;
+}
+
+async function tertiaryCookieValue() {
+  if (tertiaryCookie && Date.now() < tertiaryCookieExpiresAt) return tertiaryCookie;
+  return await tertiaryLogin();
+}
+
+async function tertiaryFetch(path, { method = "GET", json } = {}) {
+  const root = getTertiaryPanelRoot();
+  const dispatcher = tertiaryDispatcher();
+  const cookie = await tertiaryCookieValue();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  const headers = {
+    Accept: "application/json",
+    Cookie: cookie,
+  };
+  if (json !== undefined) headers["Content-Type"] = "application/json";
+  try {
+    let res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+      method,
+      headers,
+      body: json !== undefined ? JSON.stringify(json) : undefined,
+      signal: controller.signal,
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+    if (res.status === 401) {
+      tertiaryCookie = null;
+      const cookie2 = await tertiaryCookieValue();
+      headers.Cookie = cookie2;
+      res = await fetch(`${root}${path.startsWith("/") ? path : `/${path}`}`, {
+        method,
+        headers,
+        body: json !== undefined ? JSON.stringify(json) : undefined,
+        signal: controller.signal,
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function normalizeClientsFromInbound(inbound) {
   try {
     const st = JSON.parse(String(inbound?.settings || "{}"));
@@ -1335,6 +1453,106 @@ async function ensureSecondaryXuiClient({
   }
 }
 
+async function ensureTertiaryXuiClient({
+  telegramId,
+  subId,
+  baseRemark,
+  expiryTimeMs = null,
+}) {
+  if (!config.xuiTertiary.enabled) return;
+  if (!Number(config.xuiTertiary.inboundId)) return;
+  const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
+  const prefix = String(config.xuiTertiary.remarkPrefix || "").trim();
+  const cleanBase = String(baseRemark || "")
+    .replace(/-\s*(tg_|u_)\S*$/i, "")
+    .replace(/\bRU\b/gi, "US")
+    .replace(/\bNL\b/gi, "US")
+    .trim();
+  const remark = `${prefix}${cleanBase}`.trim().slice(0, 120);
+
+  const listRes = await tertiaryFetch("/panel/api/inbounds/list");
+  if (!listRes.ok) {
+    const t = await listRes.text().catch(() => "");
+    throw new Error(`xui_tertiary_list_inbounds: ${listRes.status} ${t}`.trim());
+  }
+  const list = await listRes.json().catch(() => ({}));
+  const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(config.xuiTertiary.inboundId)) || null;
+  if (!inb) throw new Error("xui_tertiary_inbound_not_found");
+  const clients = normalizeClientsFromInbound(inb);
+  const tid = String(telegramId);
+  const found =
+    clients.find((c) => String(c?.tgId || "") === tid) ||
+    clients.find((c) => String(c?.email || "") === stableEmail) ||
+    clients.find((c) => String(c?.email || "").startsWith(`tg_${tid}`)) ||
+    clients.find((c) => String(c?.remark || "").includes(tid)) ||
+    null;
+
+  if (found) {
+    const clientId = String(found.id || found.ID || "").trim();
+    if (!clientId) throw new Error("xui_tertiary_client_id_missing");
+    const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
+    const patch = {
+      ...found,
+      enable: true,
+      limitIp: nextLimitIp,
+      email: stableEmail,
+      tgId: tid,
+      subId,
+      remark,
+      ...(Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
+        ? { expiryTime: Number(expiryTimeMs) }
+        : {}),
+    };
+    const upd = await tertiaryFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientId)}`, {
+      method: "POST",
+      json: {
+        id: Number(config.xuiTertiary.inboundId),
+        settings: JSON.stringify({ clients: [patch] }),
+      },
+    });
+    if (!upd.ok) {
+      const t = await upd.text().catch(() => "");
+      throw new Error(`xui_tertiary_update_client: ${upd.status} ${t}`.trim());
+    }
+    return;
+  }
+
+  const client = {
+    id: crypto.randomUUID(),
+    email: stableEmail,
+    enable: true,
+    limitIp: 2,
+    totalGB: 0,
+    expiryTime:
+      Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
+        ? Number(expiryTimeMs)
+        : 0,
+    tgId: tid,
+    subId,
+    remark,
+  };
+  const add = await tertiaryFetch("/panel/api/inbounds/addClient", {
+    method: "POST",
+    json: {
+      id: Number(config.xuiTertiary.inboundId),
+      settings: JSON.stringify({ clients: [client] }),
+    },
+  });
+  if (!add.ok) {
+    const t = await add.text().catch(() => "");
+    throw new Error(`xui_tertiary_add_client: ${add.status} ${t}`.trim());
+  }
+}
+
+async function ensureAllRemoteXuiClients(args) {
+  await ensureSecondaryXuiClient(args).catch((e) =>
+    console.warn("[xui-secondary] ensure:", e?.message || e),
+  );
+  await ensureTertiaryXuiClient(args).catch((e) =>
+    console.warn("[xui-tertiary] ensure:", e?.message || e),
+  );
+}
+
 /**
  * Создаёт клиента в 3X-UI (если нет) и привязывает subId в боте.
  * @returns {"already_linked"|"reused"|"created"}
@@ -1361,11 +1579,11 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     // Even if already linked, keep NL in sync when secondary is enabled.
     const subId = extractSubIdFromStoredLink(existing);
     if (subId) {
-      await ensureSecondaryXuiClient({
+      await ensureAllRemoteXuiClients({
         telegramId: tid,
         subId,
         baseRemark,
-      }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
+      });
     }
     await runRemarkSync();
     return "already_linked";
@@ -1404,11 +1622,11 @@ async function xuiProvisionCore(telegramId, { force, username }) {
         xuiUrlOrToken: effective,
         extraXuiUrlOrTokens: existingExtraValues,
       });
-      await ensureSecondaryXuiClient({
+      await ensureAllRemoteXuiClients({
         telegramId: tid,
         subId: String(effective),
         baseRemark,
-      }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
+      });
       await runRemarkSync();
       return "reused";
     }
@@ -1428,11 +1646,11 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
     extraXuiUrlOrTokens: existingExtraValues,
   });
-  await ensureSecondaryXuiClient({
+  await ensureAllRemoteXuiClients({
     telegramId: tid,
     subId: String(created.creds.subIdEffective || created.creds.subId),
     baseRemark,
-  }).catch((e) => console.warn("[xui-secondary] ensure:", e?.message || e));
+  });
   await runRemarkSync();
   return "created";
 }
@@ -1486,12 +1704,12 @@ async function extendXuiClientDays({ telegramId, days, username = null }) {
   const subId = extractSubIdFromStoredLink(linked) || String(found.client.subId || "").trim();
   const baseRemark = buildXuiClientRemark(tid, username, null);
   if (subId) {
-    await ensureSecondaryXuiClient({
+    await ensureAllRemoteXuiClients({
       telegramId: tid,
       subId,
       baseRemark,
       expiryTimeMs: nextExpiryMs,
-    }).catch((e) => console.warn("[xui-secondary] extend sync:", e?.message || e));
+    });
   }
   return {
     previousExpiryMs: Number.isFinite(curExpiryMs) ? curExpiryMs : 0,
@@ -1515,7 +1733,7 @@ async function syncSecondaryExpiryFromPrimary({ telegramId, username = null }) {
   const subId = extractSubIdFromStoredLink(linked) || String(found.client.subId || "").trim();
   if (!subId) throw new Error("xui_subid_missing");
   const baseRemark = buildXuiClientRemark(tid, username, null);
-  await ensureSecondaryXuiClient({
+  await ensureAllRemoteXuiClients({
     telegramId: tid,
     subId,
     baseRemark,
@@ -2310,7 +2528,7 @@ app.post("/api/admin/grant-days", adminGrantAuth, async (req, res) => {
 });
 
 /**
- * Admin: sync secondary(NL bypass) expiry to current primary expiry without adding days.
+ * Admin: sync secondary (NL) and tertiary (US) expiry to current primary expiry without adding days.
  * Header: x-admin-secret = ADMIN_GRANT_SECRET
  * Body: { telegramId, username? }
  */
