@@ -164,6 +164,7 @@ function bind() {
   const freeOnBtn = document.getElementById("freeOnBtn");
   const freeOffBtn = document.getElementById("freeOffBtn");
   const reconcileBtn = document.getElementById("reconcileBtn");
+  const reconcileRemoteXuiBtn = document.getElementById("reconcileRemoteXuiBtn");
 
   loadUserBtn.onclick = () => runAction(loadUserBtn, "Загрузка пользователя", () => loadUser()).catch(() => null);
   if (debugXuiMergeBtn) {
@@ -248,6 +249,17 @@ function bind() {
       api("/api/admin/yookassa/reconcile", { method: "POST", body: JSON.stringify({ paymentId }) }))
       .catch(() => null);
   };
+  if (reconcileRemoteXuiBtn) {
+    reconcileRemoteXuiBtn.onclick = () => {
+      const limit = num(document.getElementById("reconcileRemoteLimit").value) || 200;
+      runAction(reconcileRemoteXuiBtn, "Reconcile remote XUI", () =>
+        api("/api/admin/reconcile-remote-xui", {
+          method: "POST",
+          body: JSON.stringify({ onlyActive: true, limit }),
+        }))
+        .catch(() => null);
+    };
+  }
 }
 
 async function boot() {

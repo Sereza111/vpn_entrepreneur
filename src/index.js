@@ -2683,6 +2683,47 @@ app.post("/api/admin/sync-secondary-expiry", adminGrantAuth, async (req, res) =>
 });
 
 /**
+ * Admin: bulk reconcile remote XUI clients (NL/US) for known users.
+ * Useful after enabling new region so it appears for existing active users.
+ * Body: { onlyActive?: boolean, limit?: number }
+ */
+app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => {
+  const onlyActive = req.body?.onlyActive !== false;
+  const limitRaw = Number(req.body?.limit || 200);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(1000, Math.floor(limitRaw)) : 200;
+  try {
+    const ids = await collectKnownTelegramIds();
+    const targets = ids.slice(0, limit);
+    const stats = { scanned: targets.length, attempted: 0, updated: 0, skipped: 0, failed: 0 };
+    const errors = [];
+    for (const telegramId of targets) {
+      try {
+        const me = await loadMe(telegramId).catch(() => null);
+        if (!me) {
+          stats.skipped += 1;
+          continue;
+        }
+        if (onlyActive && String(me.subscriptionStatus || "").toLowerCase() !== "active") {
+          stats.skipped += 1;
+          continue;
+        }
+        stats.attempted += 1;
+        await xuiProvisionCore(telegramId, { force: true, username: null });
+        stats.updated += 1;
+      } catch (e) {
+        stats.failed += 1;
+        if (errors.length < 20) {
+          errors.push({ telegramId, error: String(e?.message || e) });
+        }
+      }
+    }
+    return res.json({ ok: true, onlyActive, limit, stats, errors });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
  * Dev/admin: enable/disable free mode (no billing) for a user.
  * Header: x-admin-secret = ADMIN_GRANT_SECRET
  * Body: { telegramId, freeMode: true|false }
