@@ -48,6 +48,10 @@ export const config = {
     insecureTls:
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_INSECURE_TLS || "").toLowerCase() === "true",
+    /** Для merge: не проверять TLS только на URL из XUI_EXTRA_BASE_URLS (если US/NL с self-signed). */
+    mergeExtraInsecureTls:
+      String(process.env.XUI_MERGE_EXTRA_INSECURE_TLS || "").toLowerCase() === "1" ||
+      String(process.env.XUI_MERGE_EXTRA_INSECURE_TLS || "").toLowerCase() === "true",
     /** Шаблон имени узла в клиенте подписки (фрагмент после # в VLESS). Плейсхолдеры: {subscriptionTitle} {telegramId} {username} */
     clientRemarkTemplate: (process.env.XUI_CLIENT_REMARK_TEMPLATE || "").trim(),
     /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */

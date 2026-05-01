@@ -635,9 +635,13 @@ app.get("/sub/xui/:token", async (req, res) => {
       ...resolveExtraXuiUrls(link),
     ];
     if (!targets.length) return res.status(503).send("xui_base_url_required");
-    const dispatcher = config.xui.insecureTls
-      ? new Agent({ connect: { rejectUnauthorized: false } })
-      : undefined;
+    const insecureAgent = () => new Agent({ connect: { rejectUnauthorized: false } });
+    const mergeDispatcherForUrl = (url) => {
+      if (config.xui.insecureTls) return insecureAgent();
+      if (!config.xui.mergeExtraInsecureTls) return undefined;
+      if (!targetUrl) return insecureAgent();
+      return url !== targetUrl ? insecureAgent() : undefined;
+    };
     const mergedLines = [];
     const seen = new Set();
     let firstHeaders = null;
@@ -650,6 +654,7 @@ app.get("/sub/xui/:token", async (req, res) => {
       let upstream;
       let tt = "";
       try {
+        const dispatcher = mergeDispatcherForUrl(url);
         const r = await fetchSubscriptionBody(url, { dispatcher, timeoutMs: 7000 });
         upstream = r.upstream;
         tt = r.body;
@@ -721,6 +726,74 @@ app.get("/api/admin/me", adminTelegramAuth, async (req, res) => {
     isAdmin: true,
     adminCount: admins.length,
   });
+});
+
+/** Проверка merge подписки: какие URL дергаются и что отвечает каждый (TLS/404/таймаут). */
+app.get("/api/admin/debug/xui-merge", adminGrantAuth, async (req, res) => {
+  const tid = Number(req.query?.telegramId || 0);
+  if (!Number.isFinite(tid) || tid < 1) return res.status(400).json({ error: "bad_telegram_id" });
+  try {
+    const link = await xuiStore.getXuiLinkByTelegramId(tid);
+    if (!link) {
+      return res.json({
+        ok: false,
+        error: "no_xui_link",
+        telegramId: tid,
+        hint: "Сначала привяжите подписку в миниаппе (XUI) или выдайте доступ админом.",
+      });
+    }
+    const targetUrl = resolveXuiUrlFromLink(link);
+    const targets = [
+      ...(targetUrl ? [targetUrl] : []),
+      ...resolveExtraXuiUrls(link),
+    ];
+    const insecureAgent = () => new Agent({ connect: { rejectUnauthorized: false } });
+    const mergeDispatcherForUrl = (url) => {
+      if (config.xui.insecureTls) return insecureAgent();
+      if (!config.xui.mergeExtraInsecureTls) return undefined;
+      if (!targetUrl) return insecureAgent();
+      return url !== targetUrl ? insecureAgent() : undefined;
+    };
+    const results = [];
+    for (const url of targets) {
+      const dispatcher = mergeDispatcherForUrl(url);
+      try {
+        const r = await fetchSubscriptionBody(url, { dispatcher, timeoutMs: 10_000 });
+        const lines = decodeSubscriptionToLines(r.body);
+        results.push({
+          url,
+          ok: r.upstream.ok,
+          status: r.upstream.status,
+          lineCount: lines.length,
+          bodySnippet: String(r.body || "").slice(0, 200),
+        });
+      } catch (e) {
+        results.push({ url, ok: false, status: 0, error: String(e?.message || e) });
+      }
+    }
+    const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
+    const pubTok = String(link.publicToken || "").trim();
+    return res.json({
+      ok: true,
+      telegramId: tid,
+      publicSubProxy: base && pubTok ? `${base}/sub/xui/${pubTok}` : null,
+      xui: {
+        baseUrl: config.xui.baseUrl,
+        extraBaseUrls: config.xui.extraBaseUrls || [],
+        subPath: config.xui.subPath,
+        insecureTls: Boolean(config.xui.insecureTls),
+        mergeExtraInsecureTls: Boolean(config.xui.mergeExtraInsecureTls),
+      },
+      remotePanels: {
+        secondary: Boolean(config.xuiSecondary.enabled),
+        tertiary: Boolean(config.xuiTertiary.enabled),
+      },
+      targets,
+      results,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 app.get("/api/admin/config", adminGrantAuth, async (_req, res) => {

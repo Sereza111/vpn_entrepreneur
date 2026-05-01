@@ -153,6 +153,7 @@ function fillServerForm(server = {}) {
 
 function bind() {
   const loadUserBtn = document.getElementById("loadUser");
+  const debugXuiMergeBtn = document.getElementById("debugXuiMergeBtn");
   const loadConfigBtn = document.getElementById("loadConfigBtn");
   const saveConfigBtn = document.getElementById("saveConfigBtn");
   const migrateBtn = document.getElementById("migrateBtn");
@@ -165,6 +166,18 @@ function bind() {
   const reconcileBtn = document.getElementById("reconcileBtn");
 
   loadUserBtn.onclick = () => runAction(loadUserBtn, "Загрузка пользователя", () => loadUser()).catch(() => null);
+  if (debugXuiMergeBtn) {
+    debugXuiMergeBtn.onclick = () => {
+      const telegramId = num(document.getElementById("telegramId").value);
+      if (!telegramId) {
+        setActionStatus("Введите telegramId для проверки merge", "err");
+        return;
+      }
+      runAction(debugXuiMergeBtn, "XUI merge", () =>
+        api(`/api/admin/debug/xui-merge?telegramId=${telegramId}`))
+        .catch(() => null);
+    };
+  }
   loadConfigBtn.onclick = () => runAction(loadConfigBtn, "Загрузка конфига", () => loadConfig()).catch(() => null);
   saveConfigBtn.onclick = () => runAction(saveConfigBtn, "Сохранение конфига", () => saveConfig()).catch(() => null);
   migrateBtn.onclick = () =>
