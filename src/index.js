@@ -2706,6 +2706,7 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
     const targets = ids.slice(0, limit);
     const stats = { scanned: targets.length, attempted: 0, updated: 0, skipped: 0, failed: 0 };
     const skippedReasons = { noProfile: 0, inactive: 0 };
+    const remoteSync = { tertiaryEnsured: 0, tertiarySkippedConfig: 0, tertiaryFailed: 0 };
     const errors = [];
     for (const telegramId of targets) {
       try {
@@ -2722,15 +2723,45 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
         }
         stats.attempted += 1;
         await xuiProvisionCore(telegramId, { force: true, username: null });
+        // xuiProvisionCore suppresses remote panel errors (warn only). Here we do strict US ensure,
+        // so admin gets real failed counts when tertiary panel/inbound is misconfigured.
+        if (config.xuiTertiary.enabled && Number(config.xuiTertiary.inboundId) > 0) {
+          const linked = await xuiStore.getXuiLinkByTelegramId(telegramId).catch(() => null);
+          const subId = extractSubIdFromStoredLink(linked);
+          if (!subId) throw new Error("xui_subid_missing_after_provision");
+          await ensureTertiaryXuiClient({
+            telegramId,
+            subId: String(subId),
+            baseRemark: buildXuiClientRemark(telegramId, null, null),
+          });
+          remoteSync.tertiaryEnsured += 1;
+        } else {
+          remoteSync.tertiarySkippedConfig += 1;
+        }
         stats.updated += 1;
       } catch (e) {
         stats.failed += 1;
+        if (String(e?.message || "").includes("xui_tertiary_")) {
+          remoteSync.tertiaryFailed += 1;
+        }
         if (errors.length < 20) {
           errors.push({ telegramId, error: String(e?.message || e) });
         }
       }
     }
-    return res.json({ ok: true, onlyActive, limit, stats, skippedReasons, errors });
+    return res.json({
+      ok: true,
+      onlyActive,
+      limit,
+      stats,
+      skippedReasons,
+      remoteSync,
+      remoteConfig: {
+        tertiaryEnabled: Boolean(config.xuiTertiary.enabled),
+        tertiaryInboundId: Number(config.xuiTertiary.inboundId || 0),
+      },
+      errors,
+    });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
