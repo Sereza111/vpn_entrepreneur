@@ -1618,6 +1618,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
   for (const inb of list?.obj || []) {
     const inboundId = Number(inb?.id || 0);
     if (!inboundId) continue;
+    const protocol = String(inb?.protocol || "").toLowerCase();
     const clients = normalizeClientsFromInbound(inb);
     const found =
       clients.find((c) => String(c?.tgId || "") === tid) ||
@@ -1631,6 +1632,9 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
     if (!found) continue;
     const clientId = String(found.id || found.ID || "").trim();
     if (!clientId) continue;
+    // Safety: on some 3X-UI hysteria builds updateClient replaces whole clients array.
+    // Never run per-client update there from bulk sync.
+    if (protocol.includes("hysteria")) continue;
     const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
     const patch = {
       ...found,
@@ -1698,6 +1702,11 @@ async function ensureTertiaryXuiClient({
         return;
       }
       throw new Error("xui_tertiary_client_id_missing");
+    }
+    // Safety: avoid updateClient on hysteria (can overwrite inbound clients list).
+    if (protocol.includes("hysteria")) {
+      await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
+      return;
     }
     const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
     const patch = {
