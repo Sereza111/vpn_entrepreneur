@@ -1621,6 +1621,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
     const clients = normalizeClientsFromInbound(inb);
     const found =
       clients.find((c) => String(c?.tgId || "") === tid) ||
+      clients.find((c) => String(c?.subId || "") === String(subId || "")) ||
       clients.find((c) => String(c?.email || "") === stableEmail) ||
       clients.find((c) => String(c?.email || "") === legacyEmail) ||
       clients.find((c) => String(c?.password || "") === stablePassword) ||
@@ -1676,8 +1677,10 @@ async function ensureTertiaryXuiClient({
   if (!inb) throw new Error("xui_tertiary_inbound_not_found");
   const clients = normalizeClientsFromInbound(inb);
   const tid = String(telegramId);
+  const protocol = String(inb?.protocol || "").toLowerCase();
   const found =
     clients.find((c) => String(c?.tgId || "") === tid) ||
+    clients.find((c) => String(c?.subId || "") === String(subId || "")) ||
     clients.find((c) => String(c?.email || "") === stableEmail) ||
     clients.find((c) => String(c?.email || "") === legacyEmail) ||
     clients.find((c) => String(c?.password || "") === stablePassword) ||
@@ -1687,7 +1690,15 @@ async function ensureTertiaryXuiClient({
 
   if (found) {
     const clientId = String(found.id || found.ID || "").trim();
-    if (!clientId) throw new Error("xui_tertiary_client_id_missing");
+    if (!clientId) {
+      // Some hysteria builds keep row identifiable by password/email but don't expose updatable client id.
+      // Do not fail whole reconcile in this case: client already exists, keep best-effort sync for others.
+      if (protocol.includes("hysteria")) {
+        await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
+        return;
+      }
+      throw new Error("xui_tertiary_client_id_missing");
+    }
     const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
     const patch = {
       ...found,
@@ -1714,7 +1725,6 @@ async function ensureTertiaryXuiClient({
     return;
   }
 
-  const protocol = String(inb?.protocol || "").toLowerCase();
   const templateClient =
     Array.isArray(clients) && clients.length > 0 && clients[0] && typeof clients[0] === "object"
       ? clients[0]
@@ -2799,10 +2809,12 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
           const linked = await xuiStore.getXuiLinkByTelegramId(telegramId).catch(() => null);
           const subId = extractSubIdFromStoredLink(linked);
           if (!subId) throw new Error("xui_subid_missing_after_provision");
+          const expMs = me?.subscriptionStatus?.expireAt ? Date.parse(me.subscriptionStatus.expireAt) : NaN;
           await ensureTertiaryXuiClient({
             telegramId,
             subId: String(subId),
             baseRemark: buildXuiClientRemark(telegramId, null, null),
+            expiryTimeMs: Number.isFinite(expMs) && expMs > 0 ? expMs : null,
           });
           remoteSync.tertiaryEnsured += 1;
         } else {
