@@ -1,6 +1,7 @@
 import { Agent } from "undici";
 import crypto from "crypto";
 import { config } from "./config.js";
+import { parsePossiblyConcatenatedJsonText, readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 
 let cachedCookie = null;
 let cookieExpiresAt = 0;
@@ -57,46 +58,8 @@ function pickCookie(setCookieHeaders) {
   return pairs.join("; ");
 }
 
-function parsePossiblyConcatenatedJsonText(text) {
-  const src = String(text || "");
-  const s = src.trim();
-  if (!s) return {};
-  try {
-    return JSON.parse(s);
-  } catch {
-    const open = s[0];
-    const close = open === "{" ? "}" : open === "[" ? "]" : "";
-    if (!close) throw new Error("xui_bad_json");
-    let depth = 0;
-    let inStr = false;
-    let esc = false;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (inStr) {
-        if (esc) esc = false;
-        else if (ch === "\\") esc = true;
-        else if (ch === "\"") inStr = false;
-        continue;
-      }
-      if (ch === "\"") {
-        inStr = true;
-        continue;
-      }
-      if (ch === open) depth++;
-      else if (ch === close) {
-        depth--;
-        if (depth === 0) {
-          return JSON.parse(s.slice(0, i + 1));
-        }
-      }
-    }
-    throw new Error("xui_bad_json");
-  }
-}
-
-async function parseResponseJson(res) {
-  const text = await res.text().catch(() => "");
-  return parsePossiblyConcatenatedJsonText(text);
+async function parseResponseJson(res, errorPrefix) {
+  return await readXuiApiOrThrow(res, errorPrefix);
 }
 
 async function xuiLogin() {
@@ -169,11 +132,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
 
 export async function listInbounds() {
   const res = await xuiFetch("/panel/api/inbounds/list");
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_list_inbounds: ${res.status} ${t}`.trim());
-  }
-  return await parseResponseJson(res);
+  return await parseResponseJson(res, "xui_list_inbounds");
 }
 
 /** Статистика трафика клиента по email (как в панели). */
@@ -181,11 +140,7 @@ export async function getClientTrafficsByEmail(email) {
   const enc = encodeURIComponent(String(email || "").trim());
   if (!enc) throw new Error("xui_email_required");
   const res = await xuiFetch(`/panel/api/inbounds/getClientTraffics/${enc}`);
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_get_traffic: ${res.status} ${t}`.trim());
-  }
-  return await parseResponseJson(res);
+  return await parseResponseJson(res, "xui_get_traffic");
 }
 
 function safeJsonParse(s) {
@@ -329,11 +284,7 @@ export async function addClientToInbound({
       settings: JSON.stringify(settings),
     },
   });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_add_client: ${res.status} ${t}`.trim());
-  }
-  const data = await parseResponseJson(res).catch(() => ({}));
+  const data = await parseResponseJson(res, "xui_add_client").catch(() => ({}));
   const effective = await getClientSubIdFromInbound({
     inboundId,
     telegramId,
@@ -356,11 +307,7 @@ export async function updateClientInInbound({ inboundId, clientId, client }) {
       settings: JSON.stringify(settings),
     },
   });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_update_client: ${res.status} ${t}`.trim());
-  }
-  return await parseResponseJson(res).catch(() => ({}));
+  return await parseResponseJson(res, "xui_update_client").catch(() => ({}));
 }
 
 export async function incrementClientLimitIp({ inboundId, telegramId, addSlots = 1, minFloor = 1 }) {

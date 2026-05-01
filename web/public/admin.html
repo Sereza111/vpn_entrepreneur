@@ -58,7 +58,7 @@
       <div class="card">
         <h3>Массовая синхронизация XUI</h3>
         <div class="row">
-          <input id="reconcileRemoteLimit" placeholder="Лимит пользователей (по умолчанию 200)" />
+          <input id="reconcileRemoteLimit" type="number" min="1" max="1000" step="1" placeholder="Лимит пользователей (по умолчанию 200)" />
           <button id="reconcileRemoteXuiBtn">Синхронизировать US/NL у активных</button>
         </div>
       </div>
@@ -112,6 +112,8 @@
         <h3>Ответ API</h3>
         <div id="actionStatus" class="status">Готово</div>
         <div id="out" class="out">—</div>
+        <div class="muted" style="margin-top:8px;">История операций</div>
+        <div id="actionLog" class="out" style="max-height:180px; overflow:auto;">—</div>
       </div>
     </div>
     <script type="module" src="/app/admin.js"></script>

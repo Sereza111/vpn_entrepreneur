@@ -23,9 +23,13 @@ import {
 import * as balanceStore from "./balanceStore.js";
 import * as referralStore from "./referralStore.js";
 import * as paymentWebhookStore from "./paymentWebhookStore.js";
+import * as runtimeStateStore from "./runtimeStateStore.js";
 import * as timewebApi from "./timewebApi.js";
 import * as yookassaApi from "./yookassaApi.js";
 import * as adminConfigStore from "./adminConfigStore.js";
+import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
+import { isActiveSubscriptionProfile, resolveSubscriptionExpiryMs } from "./services/subscriptionState.js";
+import { startDailyUtcJob } from "./jobs/dailyScheduler.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -885,6 +889,8 @@ app.post("/api/admin/config/migrate-from-env", adminGrantAuth, async (_req, res)
 async function loadMe(telegramId, username = null) {
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
   let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
+  const xuiPublicUrl =
+    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
@@ -953,9 +959,6 @@ async function loadMe(telegramId, username = null) {
       // не ломаем /api/me, если панель временно недоступна
     }
   }
-
-  const xuiPublicUrl =
-    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
   const primary = xuiPublicUrl || null;
   const subscriptionPrimarySource = "xui";
 
@@ -1033,9 +1036,8 @@ async function loadMe(telegramId, username = null) {
       Math.max(0, Math.floor(addonProxy || 0)) +
       Math.max(0, Math.floor(addonIp || 0)) +
       Math.max(0, Math.floor(addonDeviceSlots || 0));
-    const snap = shouldBillHourly
-      ? await balanceStore.applyHourlyDeduction(telegramId, totalRateMinor)
-      : await balanceStore.getDisplaySnapshot(telegramId, totalRateMinor);
+    // /api/me must stay read-only: no hidden balance deductions or XUI toggles on read.
+    const snap = await balanceStore.getDisplaySnapshot(telegramId, totalRateMinor);
     const rec = await balanceStore.getRecord(telegramId);
     balancePayload = {
       enabled: true,
@@ -1057,30 +1059,16 @@ async function loadMe(telegramId, username = null) {
       freeMode: Boolean(snap?.freeMode || rec?.freeMode),
       minTopupRub: config.payment.telegramMinInvoiceAmountMajor,
     };
-    if (
+    const shouldShowDisabledByBilling =
       shouldBillHourly &&
       snap.billingActive &&
-      snap.depleted &&
+      (snap.depleted || Boolean(rec?.suspendedForBilling)) &&
       canQueryXui &&
-      subscriptionStatus?.source === "xui"
-    ) {
-      await setXuiClientEnabled(telegramId, false).catch(() => {});
+      subscriptionStatus?.source === "xui";
+    if (shouldShowDisabledByBilling) {
       subscriptionStatus = {
         ...subscriptionStatus,
         panelStatus: "DISABLED",
-      };
-    } else if (
-      snap.billingActive &&
-      snap.balanceMinor > 0 &&
-      rec?.suspendedForBilling &&
-      canQueryXui &&
-      subscriptionStatus?.source === "xui"
-    ) {
-      await setXuiClientEnabled(telegramId, true).catch(() => {});
-      await balanceStore.clearSuspendedForBilling(telegramId).catch(() => {});
-      subscriptionStatus = {
-        ...subscriptionStatus,
-        panelStatus: "ACTIVE",
       };
     }
   }
@@ -1428,21 +1416,7 @@ async function tertiaryFetch(path, { method = "GET", json } = {}) {
 }
 
 async function tertiaryReadApi(res, errorCodePrefix) {
-  const bodyText = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(`${errorCodePrefix}: ${res.status} ${bodyText}`.trim());
-  }
-  let body = {};
-  try {
-    body = bodyText ? JSON.parse(bodyText) : {};
-  } catch {
-    body = {};
-  }
-  if (body && Object.prototype.hasOwnProperty.call(body, "success") && body.success === false) {
-    const msg = String(body?.msg || body?.message || bodyText || "api_error").trim();
-    throw new Error(`${errorCodePrefix}: ${msg}`);
-  }
-  return body;
+  return await readXuiApiOrThrow(res, errorCodePrefix);
 }
 
 function normalizeClientsFromInbound(inbound) {
@@ -1762,13 +1736,30 @@ async function ensureTertiaryXuiClient({
   await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
 }
 
-async function ensureAllRemoteXuiClients(args) {
-  await ensureSecondaryXuiClient(args).catch((e) =>
-    console.warn("[xui-secondary] ensure:", e?.message || e),
-  );
-  await ensureTertiaryXuiClient(args).catch((e) =>
-    console.warn("[xui-tertiary] ensure:", e?.message || e),
-  );
+async function ensureAllRemoteXuiClients(args, { strict = false } = {}) {
+  const report = {
+    secondary: { enabled: Boolean(config.xuiSecondary.enabled), ok: true, error: null },
+    tertiary: { enabled: Boolean(config.xuiTertiary.enabled), ok: true, error: null },
+  };
+  try {
+    await ensureSecondaryXuiClient(args);
+  } catch (e) {
+    report.secondary.ok = false;
+    report.secondary.error = String(e?.message || e);
+    if (!strict) console.warn("[xui-secondary] ensure:", report.secondary.error);
+  }
+  try {
+    await ensureTertiaryXuiClient(args);
+  } catch (e) {
+    report.tertiary.ok = false;
+    report.tertiary.error = String(e?.message || e);
+    if (!strict) console.warn("[xui-tertiary] ensure:", report.tertiary.error);
+  }
+  if (strict && ((!report.secondary.ok && report.secondary.enabled) || (!report.tertiary.ok && report.tertiary.enabled))) {
+    const errs = [report.secondary.error, report.tertiary.error].filter(Boolean).join(" | ");
+    throw new Error(errs || "xui_remote_sync_failed");
+  }
+  return report;
 }
 
 /**
@@ -1962,10 +1953,10 @@ async function syncSecondaryExpiryFromPrimary({ telegramId, username = null }) {
   };
 }
 
-function parseTelegramPaymentPayload(raw) {
+async function parseTelegramPaymentPayload(raw) {
   const shortKey = String(raw || "").trim();
   if (shortKey.startsWith("p:")) {
-    const saved = paymentPayloadStore.get(shortKey);
+    const saved = await runtimeStateStore.getPaymentPayload(shortKey);
     if (!saved || typeof saved !== "object") return null;
     if (saved.kind === "balance_topup") {
       const telegramId = Number(saved.telegramId);
@@ -2040,9 +2031,6 @@ function parseTelegramPaymentPayload(raw) {
   }
 }
 
-const processedPayments = new Set();
-const paymentPayloadStore = new Map();
-
 function makePaymentDedupKey(sp) {
   return String(
     sp?.provider_payment_charge_id ||
@@ -2051,13 +2039,8 @@ function makePaymentDedupKey(sp) {
   ).trim();
 }
 
-function savePaymentPayload(data) {
-  const id = `p:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  paymentPayloadStore.set(id, data);
-  setTimeout(() => {
-    paymentPayloadStore.delete(id);
-  }, 24 * 60 * 60 * 1000).unref?.();
-  return id;
+async function savePaymentPayload(data) {
+  return await runtimeStateStore.savePaymentPayload(data);
 }
 
 app.get("/api/me", authMiddleware, async (req, res) => {
@@ -2780,22 +2763,19 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
   const onlyActive = req.body?.onlyActive !== false;
   const limitRaw = Number(req.body?.limit || 200);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(1000, Math.floor(limitRaw)) : 200;
-  const isActiveSubscription = (me) => {
-    const st = me?.subscriptionStatus || null;
-    if (!st || typeof st !== "object") return false;
-    const panelStatus = String(st.panelStatus || "").toUpperCase();
-    if (panelStatus !== "ACTIVE") return false;
-    const expMs = st.expireAt ? Date.parse(st.expireAt) : NaN;
-    // null expiry in XUI usually means unlimited; treat as active when panel says ACTIVE.
-    if (!Number.isFinite(expMs)) return true;
-    return expMs > Date.now();
-  };
   try {
     const ids = await collectKnownTelegramIds();
     const targets = ids.slice(0, limit);
     const stats = { scanned: targets.length, attempted: 0, updated: 0, skipped: 0, failed: 0 };
     const skippedReasons = { noProfile: 0, inactive: 0 };
-    const remoteSync = { tertiaryEnsured: 0, tertiarySkippedConfig: 0, tertiaryFailed: 0 };
+    const remoteSync = {
+      secondaryEnsured: 0,
+      secondarySkippedConfig: 0,
+      secondaryFailed: 0,
+      tertiaryEnsured: 0,
+      tertiarySkippedConfig: 0,
+      tertiaryFailed: 0,
+    };
     const errors = [];
     for (const telegramId of targets) {
       try {
@@ -2805,27 +2785,35 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
           skippedReasons.noProfile += 1;
           continue;
         }
-        if (onlyActive && !isActiveSubscription(me)) {
+        if (onlyActive && !isActiveSubscriptionProfile(me)) {
           stats.skipped += 1;
           skippedReasons.inactive += 1;
           continue;
         }
         stats.attempted += 1;
         await xuiProvisionCore(telegramId, { force: true, username: null });
-        // xuiProvisionCore suppresses remote panel errors (warn only). Here we do strict US ensure,
-        // so admin gets real failed counts when tertiary panel/inbound is misconfigured.
-        if (config.xuiTertiary.enabled && Number(config.xuiTertiary.inboundId) > 0) {
-          const linked = await xuiStore.getXuiLinkByTelegramId(telegramId).catch(() => null);
-          const subId = extractSubIdFromStoredLink(linked);
-          if (!subId) throw new Error("xui_subid_missing_after_provision");
-          const expMs = me?.subscriptionStatus?.expireAt ? Date.parse(me.subscriptionStatus.expireAt) : NaN;
-          await ensureTertiaryXuiClient({
+        const linked = await xuiStore.getXuiLinkByTelegramId(telegramId).catch(() => null);
+        const subId = extractSubIdFromStoredLink(linked);
+        if (!subId) throw new Error("xui_subid_missing_after_provision");
+        const expMs = resolveSubscriptionExpiryMs(me);
+        const report = await ensureAllRemoteXuiClients(
+          {
             telegramId,
             subId: String(subId),
             baseRemark: buildXuiClientRemark(telegramId, null, null),
-            expiryTimeMs: Number.isFinite(expMs) && expMs > 0 ? expMs : null,
-          });
-          remoteSync.tertiaryEnsured += 1;
+            expiryTimeMs: expMs,
+          },
+          { strict: true },
+        );
+        if (report.secondary.enabled) {
+          if (report.secondary.ok) remoteSync.secondaryEnsured += 1;
+          else remoteSync.secondaryFailed += 1;
+        } else {
+          remoteSync.secondarySkippedConfig += 1;
+        }
+        if (report.tertiary.enabled) {
+          if (report.tertiary.ok) remoteSync.tertiaryEnsured += 1;
+          else remoteSync.tertiaryFailed += 1;
         } else {
           remoteSync.tertiarySkippedConfig += 1;
         }
@@ -2848,6 +2836,8 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
       skippedReasons,
       remoteSync,
       remoteConfig: {
+        secondaryEnabled: Boolean(config.xuiSecondary.enabled),
+        secondaryInboundId: Number(config.xuiSecondary.inboundId || 0),
         tertiaryEnabled: Boolean(config.xuiTertiary.enabled),
         tertiaryInboundId: Number(config.xuiTertiary.inboundId || 0),
       },
@@ -3036,7 +3026,7 @@ app.post("/api/admin/yookassa/reconcile", adminGrantAuth, async (req, res) => {
     if (await paymentWebhookStore.wasProcessed(dedupKey)) {
       return res.json({ ok: true, duplicate: true });
     }
-    const payload = resolveYookassaPaymentPayload(payment);
+    const payload = await resolveYookassaPaymentPayload(payment);
     if (!payload) return res.status(400).json({ error: "payment_payload_missing" });
     const amountMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
     await applySuccessfulBusinessPayload({
@@ -3072,10 +3062,10 @@ function isYookassaEnabled() {
   return Boolean(config.yookassa.shopId && config.yookassa.secretKey);
 }
 
-function resolveYookassaPaymentPayload(payment) {
+async function resolveYookassaPaymentPayload(payment) {
   const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
   if (payloadKey) {
-    const parsed = parseTelegramPaymentPayload(payloadKey);
+    const parsed = await parseTelegramPaymentPayload(payloadKey);
     if (parsed) return parsed;
   }
   const kind = String(payment?.metadata?.kind || "").trim().toLowerCase();
@@ -3139,7 +3129,7 @@ function buildInvoiceSelection(input = {}) {
   return { days, productCode, serviceType, serverId };
 }
 
-function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
+async function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
   const normalized = buildInvoiceSelection(selected);
   const amountMinor = normalized.serviceType === "device_slot"
     ? Math.max(1, Math.floor(Number(config.payment.deviceSlotMinor || 15000)))
@@ -3170,7 +3160,7 @@ function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
     addDeviceSlots: normalized.serviceType === "device_slot" ? 1 : 0,
     at: Date.now(),
   };
-  const payload = savePaymentPayload(payloadData);
+  const payload = await savePaymentPayload(payloadData);
   return { normalized, title, desc, payload, amountMinor, priceLabel };
 }
 
@@ -3178,7 +3168,7 @@ function envDaysLabel(days) {
   return `${days} дней`;
 }
 
-function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
+async function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
   const tid = Number(telegramId);
   const minMinor = Math.max(100, config.payment.telegramMinInvoiceAmountMajor * 100);
   const minor = Math.max(minMinor, Math.floor(Number(amountMinor) || 0));
@@ -3188,7 +3178,7 @@ function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
       ? "Баланс VL — тестовое пополнение"
       : "Пополнение баланса VL";
   const desc = `Зачисление на внутренний баланс: ${rub} RUB. После первого пополнения доступ к VPS списывается почасово.`;
-  const payload = savePaymentPayload({
+  const payload = await savePaymentPayload({
     kind: "balance_topup",
     telegramId: tid,
     username: username || null,
@@ -3198,7 +3188,7 @@ function buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor) {
 }
 
 async function createBalanceTopupInvoiceLink({ telegramId, username, amountMinor }) {
-  const env = buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
+  const env = await buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
   const invoiceLink = await createTelegramInvoiceLinkWithRetries(env);
   return { invoiceLink, amountMinor: env.amountMinor };
 }
@@ -3251,7 +3241,7 @@ async function sendTelegramInvoiceForSelection({
   username = null,
   selected,
 }) {
-  const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
+  const env = await buildTelegramInvoiceEnvelope(telegramId, username, selected);
   await bot.api.sendInvoice(
     chatId,
     env.title,
@@ -3317,7 +3307,7 @@ async function createTelegramInvoiceLinkForSelection({
   username = null,
   selected,
 }) {
-  const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
+  const env = await buildTelegramInvoiceEnvelope(telegramId, username, selected);
   const invoiceLink = await createTelegramInvoiceLinkWithRetries(env);
   return {
     invoiceLink,
@@ -3360,7 +3350,7 @@ app.post("/api/payments/checkout-link", authMiddleware, async (req, res) => {
       if (!Number.isFinite(amountMinor) || amountMinor < 1) {
         return res.status(400).json({ error: "bad_amount" });
       }
-      const payloadKey = savePaymentPayload({
+      const payloadKey = await savePaymentPayload({
         kind: "telegram_payment",
         telegramId: tid,
         username: username || null,
@@ -3414,7 +3404,7 @@ app.post("/api/payments/yookassa/webhook", async (req, res) => {
       return res.json({ ok: true, skipped: true, status: payment?.status || null });
     }
     const payloadKey = String(payment?.metadata?.payloadKey || "").trim();
-    const payload = resolveYookassaPaymentPayload(payment);
+    const payload = await resolveYookassaPaymentPayload(payment);
     if (!payload) return res.status(400).json({ error: "payload_not_found" });
     const paidMinor = Math.floor(Number(payment?.amount?.value || 0) * 100);
     await applySuccessfulBusinessPayload({
@@ -3481,7 +3471,7 @@ app.post("/api/payments/telegram/invoice-link", authMiddleware, async (req, res)
     const msg = String(e?.message || e);
     console.warn("[payments] createInvoiceLink failed, fallback sendInvoice:", msg);
     try {
-      const env = buildTelegramInvoiceEnvelope(telegramId, username, selected);
+      const env = await buildTelegramInvoiceEnvelope(telegramId, username, selected);
       await bot.api.sendInvoice(
         telegramId,
         env.title,
@@ -3545,7 +3535,7 @@ app.post("/api/payments/balance/invoice-link", authMiddleware, async (req, res) 
     const msg = String(e?.message || e);
     console.warn("[payments] balance createInvoiceLink failed, fallback sendInvoice:", msg);
     try {
-      const env = buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
+      const env = await buildBalanceTopupInvoiceEnvelope(telegramId, username, amountMinor);
       await bot.api.sendInvoice(
         telegramId,
         env.title,
@@ -3583,7 +3573,7 @@ app.post("/api/payments/balance/checkout-link", authMiddleware, async (req, res)
   const amountMinor = Math.floor(amountRub * 100);
   try {
     if (isYookassaEnabled()) {
-      const env = buildBalanceTopupInvoiceEnvelope(tid, username, amountMinor);
+      const env = await buildBalanceTopupInvoiceEnvelope(tid, username, amountMinor);
       const yk = await yookassaApi.createRedirectPayment({
         amountMinor: env.amountMinor,
         description: "Пополнение баланса VL",
@@ -3659,7 +3649,7 @@ bot.callbackQuery(/^paymenu:(\d+):(.+)$/i, async (ctx) => {
 
 bot.on("pre_checkout_query", async (ctx) => {
   try {
-    const payload = parseTelegramPaymentPayload(ctx.preCheckoutQuery?.invoice_payload);
+    const payload = await parseTelegramPaymentPayload(ctx.preCheckoutQuery?.invoice_payload);
     if (!payload) {
       await ctx.answerPreCheckoutQuery(false, {
         error_message: "Некорректные параметры платежа. Попробуйте снова.",
@@ -3678,13 +3668,13 @@ bot.on("message:successful_payment", async (ctx) => {
   const sp = ctx.message?.successful_payment;
   if (!sp) return;
   const dedupKey = makePaymentDedupKey(sp);
-  if (dedupKey && processedPayments.has(dedupKey)) return;
-  const payload = parseTelegramPaymentPayload(sp.invoice_payload);
+  if (dedupKey && await runtimeStateStore.wasPaymentDedupProcessed(dedupKey)) return;
+  const payload = await parseTelegramPaymentPayload(sp.invoice_payload);
   if (!payload) {
     await ctx.reply("Платёж получен, но payload не распознан. Напишите в поддержку.");
     return;
   }
-  if (dedupKey) processedPayments.add(dedupKey);
+  if (dedupKey) await runtimeStateStore.markPaymentDedupProcessed(dedupKey, { kind: "telegram_success" });
   const username = ctx.from?.username || null;
   try {
     const applied = await applySuccessfulBusinessPayload({
@@ -3713,7 +3703,7 @@ bot.on("message:successful_payment", async (ctx) => {
     await ctx.reply(
       `Платёж получен, но выдача не завершилась автоматически: ${String(e?.message || e)}.\nНапишите в поддержку, мы уже видим оплату.`,
     );
-    if (dedupKey) processedPayments.delete(dedupKey);
+    if (dedupKey) await runtimeStateStore.clearPaymentDedup(dedupKey);
   }
 });
 
@@ -3739,23 +3729,12 @@ app.listen(config.port, () => {
     const hourUtc = Number(config.notifyExpiring.hourUtc ?? 9);
     const daysLeftMax = Number(config.notifyExpiring.daysLeftMax ?? 4);
     const daysLeftMin = Number(config.notifyExpiring.daysLeftMin ?? 0);
-    const scheduleNext = () => {
-      const now = new Date();
-      const next = new Date(now);
-      next.setUTCMinutes(0, 0, 0);
-      next.setUTCHours(hourUtc);
-      if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
-      const delay = Math.max(5_000, next.getTime() - now.getTime());
-      setTimeout(async () => {
-        try {
-          await runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text: "", dryRun: false });
-        } catch (e) {
-          console.warn("[notify-expiring] failed:", e?.message || e);
-        } finally {
-          scheduleNext();
-        }
-      }, delay);
-    };
-    scheduleNext();
+    startDailyUtcJob({
+      hourUtc,
+      label: "notify-expiring",
+      job: async () => {
+        await runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text: "", dryRun: false });
+      },
+    });
   }
 });

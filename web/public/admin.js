@@ -3,7 +3,9 @@ const outEl = document.getElementById("out");
 const statusEl = document.getElementById("status");
 const cfgEl = document.getElementById("configJson");
 const actionStatusEl = document.getElementById("actionStatus");
+const actionLogEl = document.getElementById("actionLog");
 let token = "";
+const actionLog = [];
 
 function show(data) {
   outEl.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
@@ -12,6 +14,22 @@ function show(data) {
 function setActionStatus(text, kind = "") {
   actionStatusEl.textContent = String(text || "").trim() || "—";
   actionStatusEl.className = `status${kind ? ` ${kind}` : ""}`;
+}
+
+function pushActionLog(text) {
+  const line = `${new Date().toLocaleTimeString()} ${text}`;
+  actionLog.unshift(line);
+  if (actionLog.length > 20) actionLog.length = 20;
+  if (actionLogEl) actionLogEl.textContent = actionLog.join("\n");
+}
+
+async function confirmAction(message) {
+  const msg = String(message || "").trim();
+  if (!msg) return true;
+  if (typeof tg?.showConfirm === "function") {
+    return await new Promise((resolve) => tg.showConfirm(msg, (ok) => resolve(Boolean(ok))));
+  }
+  return window.confirm(msg);
 }
 
 function num(v) {
@@ -27,7 +45,16 @@ async function api(path, init = {}) {
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(path, { ...init, headers });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(payload?.error || `HTTP ${res.status}`);
+    error.meta = {
+      endpoint: path,
+      httpStatus: res.status,
+      requestId: res.headers.get("x-request-id") || "",
+      payload,
+    };
+    throw error;
+  }
   return payload;
 }
 
@@ -55,12 +82,23 @@ async function runAction(buttonEl, title, action) {
   try {
     const result = await action();
     setActionStatus(`${title}: успешно`, "ok");
+    pushActionLog(`OK ${title}`);
     show(result);
     return result;
   } catch (e) {
     const msg = String(e?.message || e || "Ошибка");
+    const meta = e?.meta || {};
+    const diag = {
+      title,
+      error: msg,
+      endpoint: meta.endpoint || null,
+      httpStatus: meta.httpStatus || null,
+      requestId: meta.requestId || null,
+      details: meta.payload || null,
+    };
     setActionStatus(`${title}: ${msg}`, "err");
-    show(msg);
+    pushActionLog(`ERR ${title}: ${msg}`);
+    show(diag);
     throw e;
   } finally {
     if (buttonEl) {
@@ -182,8 +220,10 @@ function bind() {
   loadConfigBtn.onclick = () => runAction(loadConfigBtn, "Загрузка конфига", () => loadConfig()).catch(() => null);
   saveConfigBtn.onclick = () => runAction(saveConfigBtn, "Сохранение конфига", () => saveConfig()).catch(() => null);
   migrateBtn.onclick = () =>
-    runAction(migrateBtn, "Миграция из env", () =>
-      api("/api/admin/config/migrate-from-env", { method: "POST", body: "{}" }))
+    runAction(migrateBtn, "Миграция из env", async () => {
+      if (!await confirmAction("Мигрировать конфиг из env в админ-хранилище?")) return { cancelled: true };
+      return await api("/api/admin/config/migrate-from-env", { method: "POST", body: "{}" });
+    })
       .catch(() => null);
   saveServerBtn.onclick = () =>
     runAction(saveServerBtn, "Сохранение сервера", async () => {
@@ -205,6 +245,7 @@ function bind() {
     runAction(deleteServerBtn, "Удаление сервера", async () => {
       const serverId = txt("srvId");
       if (!serverId) throw new Error("Введите id для удаления");
+      if (!await confirmAction(`Удалить сервер ${serverId}?`)) return { cancelled: true, serverId };
       const result = await api("/api/admin/config/servers/delete", {
         method: "POST",
         body: JSON.stringify({ serverId }),
@@ -220,6 +261,14 @@ function bind() {
   grantDaysBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
     const days = num(document.getElementById("grantDays").value);
+    if (!Number.isFinite(telegramId) || telegramId < 1) {
+      setActionStatus("Введите корректный telegramId", "err");
+      return;
+    }
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      setActionStatus("Дни: целое число 1..3650", "err");
+      return;
+    }
     runAction(grantDaysBtn, "Выдача дней", () =>
       api("/api/admin/grant-days", { method: "POST", body: JSON.stringify({ telegramId, days }) }))
       .catch(() => null);
@@ -227,6 +276,14 @@ function bind() {
   creditBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);
     const amountMinor = num(document.getElementById("creditMinor").value);
+    if (!Number.isFinite(telegramId) || telegramId < 1) {
+      setActionStatus("Введите корректный telegramId", "err");
+      return;
+    }
+    if (!Number.isFinite(amountMinor) || amountMinor < 1) {
+      setActionStatus("Сумма в копейках должна быть > 0", "err");
+      return;
+    }
     runAction(creditBtn, "Пополнение баланса", () =>
       api("/api/admin/balance/credit", { method: "POST", body: JSON.stringify({ telegramId, amountMinor }) }))
       .catch(() => null);
@@ -245,6 +302,10 @@ function bind() {
   };
   reconcileBtn.onclick = () => {
     const paymentId = String(document.getElementById("paymentId").value || "").trim();
+    if (!paymentId) {
+      setActionStatus("Введите paymentId", "err");
+      return;
+    }
     runAction(reconcileBtn, "YooKassa reconcile", () =>
       api("/api/admin/yookassa/reconcile", { method: "POST", body: JSON.stringify({ paymentId }) }))
       .catch(() => null);
@@ -252,11 +313,19 @@ function bind() {
   if (reconcileRemoteXuiBtn) {
     reconcileRemoteXuiBtn.onclick = () => {
       const limit = num(document.getElementById("reconcileRemoteLimit").value) || 200;
-      runAction(reconcileRemoteXuiBtn, "Reconcile remote XUI", () =>
-        api("/api/admin/reconcile-remote-xui", {
+      if (!Number.isFinite(limit) || limit < 1 || limit > 1000) {
+        setActionStatus("Лимит: 1..1000", "err");
+        return;
+      }
+      runAction(reconcileRemoteXuiBtn, "Reconcile remote XUI", async () => {
+        if (!await confirmAction(`Запустить массовую синхронизацию XUI для ${limit} пользователей?`)) {
+          return { cancelled: true, limit };
+        }
+        return await api("/api/admin/reconcile-remote-xui", {
           method: "POST",
           body: JSON.stringify({ onlyActive: true, limit }),
-        }))
+        });
+      })
         .catch(() => null);
     };
   }
