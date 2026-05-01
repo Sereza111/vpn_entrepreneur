@@ -2691,20 +2691,33 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
   const onlyActive = req.body?.onlyActive !== false;
   const limitRaw = Number(req.body?.limit || 200);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(1000, Math.floor(limitRaw)) : 200;
+  const isActiveSubscription = (me) => {
+    const st = me?.subscriptionStatus || null;
+    if (!st || typeof st !== "object") return false;
+    const panelStatus = String(st.panelStatus || "").toUpperCase();
+    if (panelStatus !== "ACTIVE") return false;
+    const expMs = st.expireAt ? Date.parse(st.expireAt) : NaN;
+    // null expiry in XUI usually means unlimited; treat as active when panel says ACTIVE.
+    if (!Number.isFinite(expMs)) return true;
+    return expMs > Date.now();
+  };
   try {
     const ids = await collectKnownTelegramIds();
     const targets = ids.slice(0, limit);
     const stats = { scanned: targets.length, attempted: 0, updated: 0, skipped: 0, failed: 0 };
+    const skippedReasons = { noProfile: 0, inactive: 0 };
     const errors = [];
     for (const telegramId of targets) {
       try {
         const me = await loadMe(telegramId).catch(() => null);
         if (!me) {
           stats.skipped += 1;
+          skippedReasons.noProfile += 1;
           continue;
         }
-        if (onlyActive && String(me.subscriptionStatus || "").toLowerCase() !== "active") {
+        if (onlyActive && !isActiveSubscription(me)) {
           stats.skipped += 1;
+          skippedReasons.inactive += 1;
           continue;
         }
         stats.attempted += 1;
@@ -2717,7 +2730,7 @@ app.post("/api/admin/reconcile-remote-xui", adminGrantAuth, async (req, res) => 
         }
       }
     }
-    return res.json({ ok: true, onlyActive, limit, stats, errors });
+    return res.json({ ok: true, onlyActive, limit, stats, skippedReasons, errors });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
