@@ -85,6 +85,11 @@ export const config = {
     insecureTls:
       String(process.env.XUI_TERTIARY_INSECURE_TLS || "").toLowerCase() === "1" ||
       String(process.env.XUI_TERTIARY_INSECURE_TLS || "").toLowerCase() === "true",
+    /** Обновить remark/subId у пользователя во всех inbound US-панели (VLESS + HYSTERIA и т.д.). Выключить: 0 */
+    syncAllInboundRemarks: (() => {
+      const v = String(process.env.XUI_TERTIARY_SYNC_ALL_INBOUND_REMARKS ?? "1").trim().toLowerCase();
+      return !(v === "0" || v === "false" || v === "no");
+    })(),
   },
   proxy: {
     serversJson: process.env.PROXY_SERVERS_JSON || "[]",
