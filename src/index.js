@@ -1576,6 +1576,34 @@ function buildTertiaryClientEmail(telegramId) {
   return `us_${tail}`;
 }
 
+async function tertiaryAddClientWithFallback({ inboundId, inboundProtocol, client }) {
+  const protocol = String(inboundProtocol || "").toLowerCase();
+  const attempts = [client];
+  if (protocol.includes("hysteria")) {
+    const idFromPassword = { ...client, id: String(client?.password || "").trim() };
+    const noId = { ...client };
+    delete noId.id;
+    attempts.push(idFromPassword, noId);
+  }
+  let lastErr = null;
+  for (const payloadClient of attempts) {
+    const add = await tertiaryFetch("/panel/api/inbounds/addClient", {
+      method: "POST",
+      json: {
+        id: Number(inboundId),
+        settings: JSON.stringify({ clients: [payloadClient] }),
+      },
+    });
+    try {
+      await tertiaryReadApi(add, "xui_tertiary_add_client");
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("xui_tertiary_add_client: unknown_error");
+}
+
 /** Одинаковый remark/subId на всех inbound US (VLESS, HYSTERIA2, …), чтобы в клиенте было как у RU/NL. */
 async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs }) {
   if (!config.xuiTertiary.enabled) return;
@@ -1686,13 +1714,19 @@ async function ensureTertiaryXuiClient({
     return;
   }
 
+  const protocol = String(inb?.protocol || "").toLowerCase();
+  const templateClient =
+    Array.isArray(clients) && clients.length > 0 && clients[0] && typeof clients[0] === "object"
+      ? clients[0]
+      : {};
   const client = {
+    ...templateClient,
     id: buildTertiaryClientId(telegramId),
     password: stablePassword,
     email: stableEmail,
     enable: true,
-    limitIp: 2,
-    totalGB: 0,
+    limitIp: Math.max(2, Number(templateClient?.limitIp || 0) || 0),
+    totalGB: Number(templateClient?.totalGB || 0) || 0,
     expiryTime:
       Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
         ? Number(expiryTimeMs)
@@ -1701,14 +1735,11 @@ async function ensureTertiaryXuiClient({
     subId,
     remark,
   };
-  const add = await tertiaryFetch("/panel/api/inbounds/addClient", {
-    method: "POST",
-    json: {
-      id: Number(config.xuiTertiary.inboundId),
-      settings: JSON.stringify({ clients: [client] }),
-    },
+  await tertiaryAddClientWithFallback({
+    inboundId: Number(config.xuiTertiary.inboundId),
+    inboundProtocol: protocol,
+    client,
   });
-  await tertiaryReadApi(add, "xui_tertiary_add_client");
   await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
 }
 
