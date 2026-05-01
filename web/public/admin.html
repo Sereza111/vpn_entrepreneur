@@ -59,6 +59,10 @@
         <h3>Массовая синхронизация XUI</h3>
         <div class="row">
           <input id="reconcileRemoteLimit" type="number" min="1" max="1000" step="1" placeholder="Лимит пользователей (по умолчанию 200)" />
+          <label style="display:flex;align-items:center;gap:6px;padding:10px;border:1px solid #33426b;border-radius:10px;">
+            <input id="reconcileOnlyActive" type="checkbox" checked />
+            Только активные
+          </label>
           <button id="reconcileRemoteXuiBtn">Синхронизировать US/NL у активных</button>
         </div>
       </div>

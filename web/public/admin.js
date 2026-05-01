@@ -313,17 +313,18 @@ function bind() {
   if (reconcileRemoteXuiBtn) {
     reconcileRemoteXuiBtn.onclick = () => {
       const limit = num(document.getElementById("reconcileRemoteLimit").value) || 200;
+      const onlyActive = Boolean(document.getElementById("reconcileOnlyActive")?.checked ?? true);
       if (!Number.isFinite(limit) || limit < 1 || limit > 1000) {
         setActionStatus("Лимит: 1..1000", "err");
         return;
       }
       runAction(reconcileRemoteXuiBtn, "Reconcile remote XUI", async () => {
-        if (!await confirmAction(`Запустить массовую синхронизацию XUI для ${limit} пользователей?`)) {
-          return { cancelled: true, limit };
+        if (!await confirmAction(`Запустить массовую синхронизацию XUI для ${limit} пользователей (${onlyActive ? "только активные" : "все известные"})?`)) {
+          return { cancelled: true, limit, onlyActive };
         }
         return await api("/api/admin/reconcile-remote-xui", {
           method: "POST",
-          body: JSON.stringify({ onlyActive: true, limit }),
+          body: JSON.stringify({ onlyActive, limit }),
         });
       })
         .catch(() => null);

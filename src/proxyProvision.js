@@ -101,10 +101,19 @@ export async function ensureProxyUserOnServer({
   const line = `users ${username}:CL:${password}`;
   const cmd =
     `set -e; ` +
-    `sudo test -f "${server.configPath}" || exit 2; ` +
-    `sudo grep -q "^users ${username}:" "${server.configPath}" || ` +
-    `echo "${line}" | sudo tee -a "${server.configPath}" >/dev/null; ` +
-    `sudo docker restart "${server.containerName}" >/dev/null`;
+    `CFG="${server.configPath}"; ` +
+    `if [ ! -f "$CFG" ]; then ` +
+    `for c in "/opt/3proxy/3proxy.cfg" "/etc/3proxy/3proxy.cfg" "/usr/local/etc/3proxy/3proxy.cfg"; do ` +
+    `[ -f "$c" ] && CFG="$c" && break; ` +
+    `done; fi; ` +
+    `[ -f "$CFG" ] || { echo "proxy_config_not_found:$CFG"; exit 2; }; ` +
+    `sudo grep -q "^users ${username}:" "$CFG" || ` +
+    `echo "${line}" | sudo tee -a "$CFG" >/dev/null; ` +
+    `if command -v docker >/dev/null 2>&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx "${server.containerName}"; then ` +
+    `sudo docker restart "${server.containerName}" >/dev/null; ` +
+    `elif command -v systemctl >/dev/null 2>&1; then ` +
+    `sudo systemctl restart 3proxy >/dev/null 2>&1 || true; ` +
+    `fi`;
 
   const r = await sshExec(
     {
@@ -140,9 +149,18 @@ export async function removeProxyUserOnServer({
   if (!escapedUser) throw new Error("proxy_username_bad");
   const cmd =
     `set -e; ` +
-    `sudo test -f "${server.configPath}" || exit 2; ` +
-    `sudo sed -i '/^users ${escapedUser}:/d' "${server.configPath}"; ` +
-    `sudo docker restart "${server.containerName}" >/dev/null`;
+    `CFG="${server.configPath}"; ` +
+    `if [ ! -f "$CFG" ]; then ` +
+    `for c in "/opt/3proxy/3proxy.cfg" "/etc/3proxy/3proxy.cfg" "/usr/local/etc/3proxy/3proxy.cfg"; do ` +
+    `[ -f "$c" ] && CFG="$c" && break; ` +
+    `done; fi; ` +
+    `[ -f "$CFG" ] || { echo "proxy_config_not_found:$CFG"; exit 2; }; ` +
+    `sudo sed -i '/^users ${escapedUser}:/d' "$CFG"; ` +
+    `if command -v docker >/dev/null 2>&1 && sudo docker ps -a --format '{{.Names}}' | grep -qx "${server.containerName}"; then ` +
+    `sudo docker restart "${server.containerName}" >/dev/null; ` +
+    `elif command -v systemctl >/dev/null 2>&1; then ` +
+    `sudo systemctl restart 3proxy >/dev/null 2>&1 || true; ` +
+    `fi`;
   const r = await sshExec(
     {
       host: server.ssh.host,
