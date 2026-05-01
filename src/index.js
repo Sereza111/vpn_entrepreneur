@@ -1526,6 +1526,66 @@ async function ensureSecondaryXuiClient({
   }
 }
 
+function buildTertiaryXuiRemark(baseRemark) {
+  const prefix = String(config.xuiTertiary.remarkPrefix || "🇺🇸 ").trim();
+  const cleanBase = String(baseRemark || "")
+    .replace(/-\s*(tg_|u_)\S*$/i, "")
+    .replace(/\bRU\b/gi, "US")
+    .replace(/\bNL\b/gi, "US")
+    .trim();
+  return `${prefix}${cleanBase}`.trim().slice(0, 120);
+}
+
+/** Одинаковый remark/subId на всех inbound US (VLESS, HYSTERIA2, …), чтобы в клиенте было как у RU/NL. */
+async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs }) {
+  if (!config.xuiTertiary.enabled) return;
+  if (!config.xuiTertiary.syncAllInboundRemarks) return;
+  const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
+  const tid = String(telegramId);
+  const remark = buildTertiaryXuiRemark(baseRemark);
+  const listRes = await tertiaryFetch("/panel/api/inbounds/list");
+  if (!listRes.ok) return;
+  const list = await listRes.json().catch(() => ({}));
+  for (const inb of list?.obj || []) {
+    const inboundId = Number(inb?.id || 0);
+    if (!inboundId) continue;
+    const clients = normalizeClientsFromInbound(inb);
+    const found =
+      clients.find((c) => String(c?.tgId || "") === tid) ||
+      clients.find((c) => String(c?.email || "") === stableEmail) ||
+      clients.find((c) => String(c?.email || "").startsWith(`tg_${tid}`)) ||
+      clients.find((c) => String(c?.remark || "").includes(tid)) ||
+      null;
+    if (!found) continue;
+    const clientId = String(found.id || found.ID || "").trim();
+    if (!clientId) continue;
+    const nextLimitIp = Math.max(2, Number(found.limitIp || 0) || 0);
+    const patch = {
+      ...found,
+      enable: true,
+      limitIp: nextLimitIp,
+      email: stableEmail,
+      tgId: tid,
+      subId,
+      remark,
+      ...(Number.isFinite(Number(expiryTimeMs)) && Number(expiryTimeMs) > 0
+        ? { expiryTime: Number(expiryTimeMs) }
+        : {}),
+    };
+    const upd = await tertiaryFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(clientId)}`, {
+      method: "POST",
+      json: {
+        id: inboundId,
+        settings: JSON.stringify({ clients: [patch] }),
+      },
+    });
+    if (!upd.ok) {
+      const t = await upd.text().catch(() => "");
+      console.warn(`[xui-tertiary] sync inbound ${inboundId}: ${upd.status} ${t}`.trim());
+    }
+  }
+}
+
 async function ensureTertiaryXuiClient({
   telegramId,
   subId,
@@ -1535,13 +1595,7 @@ async function ensureTertiaryXuiClient({
   if (!config.xuiTertiary.enabled) return;
   if (!Number(config.xuiTertiary.inboundId)) return;
   const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
-  const prefix = String(config.xuiTertiary.remarkPrefix || "").trim();
-  const cleanBase = String(baseRemark || "")
-    .replace(/-\s*(tg_|u_)\S*$/i, "")
-    .replace(/\bRU\b/gi, "US")
-    .replace(/\bNL\b/gi, "US")
-    .trim();
-  const remark = `${prefix}${cleanBase}`.trim().slice(0, 120);
+  const remark = buildTertiaryXuiRemark(baseRemark);
 
   const listRes = await tertiaryFetch("/panel/api/inbounds/list");
   if (!listRes.ok) {
@@ -1587,6 +1641,7 @@ async function ensureTertiaryXuiClient({
       const t = await upd.text().catch(() => "");
       throw new Error(`xui_tertiary_update_client: ${upd.status} ${t}`.trim());
     }
+    await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
     return;
   }
 
@@ -1615,6 +1670,7 @@ async function ensureTertiaryXuiClient({
     const t = await add.text().catch(() => "");
     throw new Error(`xui_tertiary_add_client: ${add.status} ${t}`.trim());
   }
+  await syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs });
 }
 
 async function ensureAllRemoteXuiClients(args) {
