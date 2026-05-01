@@ -1536,6 +1536,12 @@ function buildTertiaryXuiRemark(baseRemark) {
   return `${prefix}${cleanBase}`.trim().slice(0, 120);
 }
 
+function buildTertiaryClientPassword(telegramId) {
+  const tid = String(telegramId || "").trim();
+  const tail = crypto.createHash("sha256").update(`xui-tertiary:${tid}`).digest("hex").slice(0, 10);
+  return `us${tail}`;
+}
+
 /** Одинаковый remark/subId на всех inbound US (VLESS, HYSTERIA2, …), чтобы в клиенте было как у RU/NL. */
 async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark, expiryTimeMs }) {
   if (!config.xuiTertiary.enabled) return;
@@ -1543,6 +1549,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
   const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
   const tid = String(telegramId);
   const remark = buildTertiaryXuiRemark(baseRemark);
+  const stablePassword = buildTertiaryClientPassword(telegramId);
   const listRes = await tertiaryFetch("/panel/api/inbounds/list");
   if (!listRes.ok) return;
   const list = await listRes.json().catch(() => ({}));
@@ -1553,6 +1560,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
     const found =
       clients.find((c) => String(c?.tgId || "") === tid) ||
       clients.find((c) => String(c?.email || "") === stableEmail) ||
+      clients.find((c) => String(c?.password || "") === stablePassword) ||
       clients.find((c) => String(c?.email || "").startsWith(`tg_${tid}`)) ||
       clients.find((c) => String(c?.remark || "").includes(tid)) ||
       null;
@@ -1565,6 +1573,7 @@ async function syncTertiaryUserAcrossAllInbounds({ telegramId, subId, baseRemark
       enable: true,
       limitIp: nextLimitIp,
       email: stableEmail,
+      password: String(found?.password || stablePassword),
       tgId: tid,
       subId,
       remark,
@@ -1596,6 +1605,7 @@ async function ensureTertiaryXuiClient({
   if (!Number(config.xuiTertiary.inboundId)) return;
   const stableEmail = xui.stableXuiEmailFromTelegramId(telegramId);
   const remark = buildTertiaryXuiRemark(baseRemark);
+  const stablePassword = buildTertiaryClientPassword(telegramId);
 
   const listRes = await tertiaryFetch("/panel/api/inbounds/list");
   if (!listRes.ok) {
@@ -1610,6 +1620,7 @@ async function ensureTertiaryXuiClient({
   const found =
     clients.find((c) => String(c?.tgId || "") === tid) ||
     clients.find((c) => String(c?.email || "") === stableEmail) ||
+    clients.find((c) => String(c?.password || "") === stablePassword) ||
     clients.find((c) => String(c?.email || "").startsWith(`tg_${tid}`)) ||
     clients.find((c) => String(c?.remark || "").includes(tid)) ||
     null;
@@ -1623,6 +1634,7 @@ async function ensureTertiaryXuiClient({
       enable: true,
       limitIp: nextLimitIp,
       email: stableEmail,
+      password: String(found?.password || stablePassword),
       tgId: tid,
       subId,
       remark,
@@ -1647,6 +1659,7 @@ async function ensureTertiaryXuiClient({
 
   const client = {
     id: crypto.randomUUID(),
+    password: stablePassword,
     email: stableEmail,
     enable: true,
     limitIp: 2,
