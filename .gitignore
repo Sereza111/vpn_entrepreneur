@@ -11,6 +11,9 @@ Thumbs.db
 *.lnk
 data/
 
+# Локальные SQL-дампы из exportJsonToSql (могут содержать секреты SSH и токены).
+exports/
+
 # Local operational artifacts (should never be committed)
 $env
 *.xlsx

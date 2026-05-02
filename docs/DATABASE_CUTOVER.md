@@ -9,7 +9,7 @@ JSON на диске (`./data`) исчезает при потере тома VP
 1. Задайте переменные (см. корневой `docker-compose.yml`): `MYSQL_ROOT_PASSWORD`, пользователь приложения (`MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`).
 2. Пробросьте на контейнер бота: `DB_HOST=mysql`, `DB_PORT=3306`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`. Не ставьте `DB_BACKEND=file`.
 3. Первый старт приложения выполнит SQL из `src/db/migrations/` (лог `[db] migrations applied`).
-4. Один раз импортируйте имеющиеся JSON:
+4. Один раз импортируйте имеющиеся JSON (**или** см. ниже импорт готовым `.sql`).
 
 ```bash
 npm ci
@@ -21,6 +21,34 @@ npm run db:import-json
 ```bash
 node src/db/importFromDataFiles.js --merge
 ```
+
+## Перенос одним файлом SQL (переезд на другой хост / phpMyAdmin)
+
+Из каталога `data/` на машине с бекапом:
+
+```bash
+npm run db:export-sql-from-json
+# по умолчанию: exports/app_kv_from_json.sql
+
+# свой путь:
+node src/db/exportJsonToSql.js --out ~/vpn_bot_app_kv.sql
+```
+
+В получившемся файле есть **`CREATE TABLE app_kv`** и **`INSERT ... ON DUPLICATE KEY UPDATE`** по всем неймспейсам. Импорт:
+
+```bash
+mysql -h ХОСТ -u ЮЗЕР -p vpn_bot < exports/app_kv_from_json.sql
+```
+
+Или загрузкой файла через веб-панель (phpMyAdmin / «Импорт» Cloud DB).
+
+На уже живой базе можно только стянуть таблицу без JSON:
+
+```bash
+mysqldump -h ХОСТ -u ЮЗЕР -p --single-transaction vpn_bot app_kv > app_kv_backup.sql
+```
+
+Восстановление: `mysql ... < app_kv_backup.sql`
 
 ## Ручной дамп перед cutover
 
