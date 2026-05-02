@@ -41,3 +41,21 @@ export function shouldApplyHourlyBalanceFromMe(me) {
   if (String(ss.panelStatus || "").toUpperCase() !== "ACTIVE") return false;
   return true;
 }
+
+/**
+ * Синхронизация runway баланса → expiry в XUI ( reconcileBalanceRunwayToXui ).
+ * С почасовым биллингом — те же условия, что и списание.
+ * Без биллинга (только BALANCE_XUI_RECONCILE_ENABLED) — активный клиент XUI и запись balance в БД.
+ */
+export function shouldApplyBalanceRunwaySyncToXui(me, balanceRecord, billingEnabled) {
+  if (!me?.subscriptionStatus) return false;
+  if (balanceRecord?.freeMode === true) return false;
+  const ss = me.subscriptionStatus;
+  if (String(ss.source || "") !== "xui") return false;
+  if (String(ss.panelStatus || "").toUpperCase() !== "ACTIVE") return false;
+
+  if (billingEnabled)
+    return Boolean(me.balance?.enabled && me.balance.billingActive && !me.balance?.freeMode);
+
+  return Boolean(balanceRecord);
+}

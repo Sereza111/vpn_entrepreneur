@@ -33,7 +33,11 @@ import { runMysqlMigrations } from "./db/migrate.js";
 import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
 import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 import { collectKnownTelegramIds as collectKnownTelegramIdsFromRegistry } from "./registry/telegramIdsAggregate.js";
-import { computeTotalHourlyRateMinor, shouldApplyHourlyBalanceFromMe } from "./services/billingRate.js";
+import {
+  computeTotalHourlyRateMinor,
+  shouldApplyBalanceRunwaySyncToXui,
+  shouldApplyHourlyBalanceFromMe,
+} from "./services/billingRate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -1902,7 +1906,7 @@ async function setXuiClientEnabled(telegramId, enabled) {
 async function reconcileBalanceRunwayToXui({ telegramId, username = null, dryRun = false }) {
   const tid = Number(telegramId);
   if (!Number.isFinite(tid) || tid < 1) throw new Error("bad_telegram_id");
-  if (!config.balance?.xuiReconcile?.enabled || !config.balance.billingEnabled) {
+  if (!config.balance?.xuiReconcile?.enabled) {
     return { skipped: true, reason: "reconcile_disabled" };
   }
   if (!config.xui.inboundId) return { skipped: true, reason: "xui_inbound_id_required" };
@@ -1912,9 +1916,14 @@ async function reconcileBalanceRunwayToXui({ telegramId, username = null, dryRun
 
   const rec = await balanceStore.getRecord(tid);
   if (rec?.freeMode) return { skipped: true, reason: "free_mode" };
-  if (!shouldApplyHourlyBalanceFromMe(me)) return { skipped: true, reason: "not_active_billing" };
+  if (!shouldApplyBalanceRunwaySyncToXui(me, rec, config.balance.billingEnabled)) {
+    return {
+      skipped: true,
+      reason: config.balance.billingEnabled ? "not_active_billing" : "reconcile_needs_balance_row",
+    };
+  }
 
-  const balMinor = Number(me.balance?.balanceMinor || 0);
+  const balMinor = Number(rec?.balanceMinor ?? me.balance?.balanceMinor ?? 0);
   const rate = computeTotalHourlyRateMinor({
     subscriptionStatus: me.subscriptionStatus,
     proxyPayload: me.proxy,
