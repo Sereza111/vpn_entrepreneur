@@ -9,9 +9,8 @@
 2. Repository URL: этот же репозиторий.
 3. Compose path: `docker-compose.site.yml`.
 4. При необходимости задай переменные:
-   - `SITE_PORT` (по умолчанию `8080`)
    - `SITE_IMAGE` (опционально, по умолчанию `ghcr.io/sereza111/vpn_entrepreneur-site:latest`)
 5. Deploy.
 
-После деплоя сайт будет доступен на `http://<host>:SITE_PORT`.
+После деплоя сайт будет доступен на `http://<host>:8088`.
 
