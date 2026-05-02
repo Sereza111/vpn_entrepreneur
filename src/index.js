@@ -3930,6 +3930,7 @@ if (config.publicBaseUrl) {
   app.use(whPath, webhookCallback(bot, "express", { secretToken: config.webhookSecret || undefined }));
 }
 
+app.use(express.static(path.join(publicDir, "site"), { index: false, fallthrough: true }));
 app.use("/site", express.static(path.join(publicDir, "site")));
 app.use("/app", express.static(publicDir));
 app.get(["/", "/site", "/site/"], (_req, res) => {
