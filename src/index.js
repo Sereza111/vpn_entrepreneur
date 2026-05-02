@@ -899,8 +899,6 @@ app.post("/api/admin/config/migrate-from-env", adminGrantAuth, async (_req, res)
 async function loadMe(telegramId, username = null) {
   const base = String(config.publicBaseUrl || "").replace(/\/$/, "");
   let xuiLink = await xuiStore.getXuiLinkByTelegramId(telegramId);
-  const xuiPublicUrl =
-    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
@@ -954,7 +952,7 @@ async function loadMe(telegramId, username = null) {
           trafficLimitBytes: totalGb > 0 ? Math.round(totalGb * 1024 * 1024 * 1024) : 0,
           ipLimit: Number.isFinite(limitIp) ? limitIp : null,
         };
-      } else if (xuiPublicUrl) {
+      } else if (xuiLink) {
         subscriptionStatus = {
           source: "xui",
           username: xui.stableXuiEmailFromTelegramId(telegramId),
@@ -969,11 +967,16 @@ async function loadMe(telegramId, username = null) {
       // не ломаем /api/me, если панель временно недоступна
     }
   }
-  const primary = xuiPublicUrl || null;
+
+  /** Публичный merge-прокси (нужен PUBLIC_BASE_URL). Прямая ссылка на первый узел — fallback. */
+  const xuiPublicUrl =
+    base && xuiLink?.publicToken ? `${base}/sub/xui/${xuiLink.publicToken}` : null;
+  const directPanelSubUrl = xuiLink ? resolveXuiUrlFromLink(xuiLink) : null;
+  const primary = xuiPublicUrl || directPanelSubUrl || null;
   const subscriptionPrimarySource = "xui";
 
   const xuiPayload = xuiLink
-    ? { linked: true, subscriptionUrl: xuiPublicUrl }
+    ? { linked: true, subscriptionUrl: primary }
     : { linked: false };
 
   const proxyServers = await getProxyServersConfig();
