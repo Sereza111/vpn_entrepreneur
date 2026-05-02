@@ -1925,7 +1925,6 @@ async function reconcileBalanceRunwayToXui({ telegramId, username = null, dryRun
   const mode = String(config.balance.xuiReconcile.mode || "min_end").toLowerCase();
   const linked = await xuiStore.getXuiLinkByTelegramId(tid).catch(() => null);
 
-  await xuiProvisionCore(tid, { force: true, username }).catch(() => null);
   const found = await xui.findClientInInbound({
     inboundId: config.xui.inboundId,
     telegramId: tid,
