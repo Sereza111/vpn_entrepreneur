@@ -1995,6 +1995,18 @@ async function reconcileBalanceRunwayToXui({ telegramId, username = null, dryRun
     });
   }
 
+  console.log(
+    "[balance-xui] applied",
+    JSON.stringify({
+      telegramId: tid,
+      balanceMinor: balMinor,
+      hourlyRateMinor: rate,
+      nextExpiryMs,
+      runwayEndMs,
+      mode,
+    }),
+  );
+
   return {
     ok: true,
     telegramId: tid,
