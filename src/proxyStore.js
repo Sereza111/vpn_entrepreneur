@@ -1,70 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
-
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "proxy-links.json");
-
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
-
-function safeParseDbJson(raw) {
-  const src = String(raw || "").trim();
-  if (!src) return {};
-  try {
-    const obj = JSON.parse(src);
-    return obj && typeof obj === "object" ? obj : {};
-  } catch {
-    // salvage first valid top-level JSON object if file has trailing garbage
-    if (src[0] !== "{") return {};
-    let depth = 0;
-    let inStr = false;
-    let esc = false;
-    for (let i = 0; i < src.length; i++) {
-      const ch = src[i];
-      if (inStr) {
-        if (esc) esc = false;
-        else if (ch === "\\") esc = true;
-        else if (ch === "\"") inStr = false;
-        continue;
-      }
-      if (ch === "\"") {
-        inStr = true;
-        continue;
-      }
-      if (ch === "{") depth++;
-      else if (ch === "}") {
-        depth--;
-        if (depth === 0) {
-          try {
-            const obj = JSON.parse(src.slice(0, i + 1));
-            return obj && typeof obj === "object" ? obj : {};
-          } catch {
-            return {};
-          }
-        }
-      }
-    }
-    return {};
-  }
-}
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return safeParseDbJson(raw);
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
-  }
+  return readDocument(NS.PROXY_LINKS, LEGACY_FILENAME[NS.PROXY_LINKS]);
 }
 
 async function writeJson(obj) {
-  await ensureDir();
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
+  await writeDocument(NS.PROXY_LINKS, LEGACY_FILENAME[NS.PROXY_LINKS], obj);
 }
 
 export async function getProxyByTelegramId(telegramId) {
@@ -190,4 +132,3 @@ export async function setProxyAddons({ telegramId, proxyEnabled, dedicatedIpEnab
   });
   return await setProxyForTelegramId(telegramId, rec);
 }
-

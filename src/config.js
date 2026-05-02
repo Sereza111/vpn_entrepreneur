@@ -127,6 +127,27 @@ export const config = {
       0,
       Math.floor(Number(process.env.BALANCE_DEDICATED_IP_HOURLY_MINOR || 25)),
     ),
+    /** Периодический свип почасового списания (мс). 0 = не запускать таймер (по умолчанию 1 ч). */
+    hourlySweepIntervalMs: Math.max(
+      0,
+      Math.floor(Number(process.env.BALANCE_HOURLY_SWEEP_MS || 3600000)),
+    ),
+    /**
+     * Выравнивание expiryTime клиента в 3X-UI с «полётом по балансу» (ставка × остаток).
+     * BALANCE_XUI_RECONCILE_MODE:
+     *   min_end — nextExpiry = max(now, min(panelExpiry∞, runwayEnd)); panel без срока = очень далёкий
+     *   runway_snap — nextExpiry = max(now, runwayEnd) (полностью заменить срок полётом баланса)
+     */
+    xuiReconcile: {
+      enabled:
+        String(process.env.BALANCE_XUI_RECONCILE_ENABLED || "").toLowerCase() === "1" ||
+        String(process.env.BALANCE_XUI_RECONCILE_ENABLED || "").toLowerCase() === "true",
+      mode: String(process.env.BALANCE_XUI_RECONCILE_MODE || "min_end").trim().toLowerCase(),
+      minChangeMs: Math.max(
+        0,
+        Math.floor(Number(process.env.BALANCE_XUI_RECONCILE_MIN_CHANGE_MS ?? 120000)),
+      ),
+    },
   },
   /** Шаблон URL оплаты для мини-аппа: плейсхолдеры {telegramId} {productCode} {grantDays} {username} */
   payment: {
@@ -192,5 +213,12 @@ export const config = {
     hourUtc: Math.max(0, Math.min(23, Math.floor(Number(process.env.NOTIFY_EXPIRING_HOUR_UTC || 9)))),
     daysLeftMax: Math.max(0, Math.min(365, Math.floor(Number(process.env.NOTIFY_EXPIRING_DAYS_MAX || 4)))),
     daysLeftMin: Math.max(0, Math.min(365, Math.floor(Number(process.env.NOTIFY_EXPIRING_DAYS_MIN || 0)))),
+    /** Отдельные тексты для вех 3/2/1 день до окончания (переопределение через env). */
+    textDay3: String(process.env.NOTIFY_EXPIRING_TEXT_3 ||
+      "Напоминание VL: до окончания подписки осталось 3 дня. Откройте мини‑приложение и пополните баланс / продлите доступ.").trim(),
+    textDay2: String(process.env.NOTIFY_EXPIRING_TEXT_2 ||
+      "VL: до окончания подписки осталось 2 дня. Не забудьте пополнить баланс, чтобы не потерять доступ.").trim(),
+    textDay1: String(process.env.NOTIFY_EXPIRING_TEXT_1 ||
+      "VL: последний день активной подписки завтра заканчивается. Откройте мини‑приложение и продлите сейчас.").trim(),
   },
 };

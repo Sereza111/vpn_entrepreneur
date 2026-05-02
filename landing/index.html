@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="VL VPN — доступ через Telegram: подписка, баланс, прокси. Быстро подключиться к защищённому интернету." />
+  <title>VL VPN</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <span class="logo">VL VPN</span>
+      <nav class="nav">
+        <a href="#how">Как работает</a>
+        <a href="#pricing">Тарифы</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-primary" id="cta-open-bot" href="https://t.me/VL_VPNbot">Открыть в Telegram</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <h1>ВПН-доступ в пару нажатий</h1>
+        <p class="lead">
+          Оформляй подписку и пополняй баланс в мини-приложении Telegram. Современные протоколы и несколько узлов без лишней возни с настройкой.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary lg" href="https://t.me/VL_VPNbot">Перейти к боту</a>
+          <a class="btn btn-outline lg" href="#how">Подробнее</a>
+        </div>
+      </div>
+      <aside class="hero-card" aria-label="Что включено">
+        <ul class="checks">
+          <li>Единый вход через Telegram и мини‑приложение</li>
+          <li>Внутренний баланс с почасовым списанием</li>
+          <li>Опционально общий и выделенный прокси</li>
+          <li>Флаги поддержки нескольких площадок (RU / NL / …)</li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="strip wrap" id="how">
+      <h2 class="sect-title">Как подключиться</h2>
+      <ol class="steps">
+        <li><strong>Открой бота.</strong> Нажми «Старт» и авторизуйся как обычный пользователь Telegram.</li>
+        <li><strong>Запусти мини-приложение.</strong> В меню выбери WebApp или кнопку из приветственного сообщения.</li>
+        <li><strong>Оформи доступ.</strong> Пополни баланс или возьми пакет с фиксированным сроком — дальше подписка придёт автоматически.</li>
+        <li><strong>Скопируй профиль.</strong> Импортируй ссылку или QR в свой клиент (v2rayN, Hiddify, Streisand и др.).</li>
+      </ol>
+      <p class="note">
+        Актуальное имя бота задаётся в проде переменными окружения; ссылку выше можно заменить своим через разметку лендинга.
+      </p>
+    </section>
+
+    <section class="pricing wrap" id="pricing">
+      <h2 class="sect-title">Тарифы</h2>
+      <div class="grid">
+        <article class="card">
+          <h3>Через баланс</h3>
+          <p>Списание за VPS после начала биллинга, ставка задаётся в настройках бота.</p>
+        </article>
+        <article class="card featured">
+          <h3>Пакеты по дням</h3>
+          <p>Классические периоды 7 / 30 / 90 дней — удобно для предоплаты и промо-кампаний.</p>
+        </article>
+        <article class="card">
+          <h3>Прокси дополнением</h3>
+          <p>Доступ SOCKS/HTTP через выбранные площадки с отдельной выдачей логина и порта.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="faq wrap" id="faq">
+      <h2 class="sect-title">FAQ</h2>
+      <details open>
+        <summary>Где происходит оплата?</summary>
+        <p>По умолчанию — через Telegram Payments / ЮKassa в мини-приложении. Этот лендинг только рассказывает о сервисе.</p>
+      </details>
+      <details>
+        <summary>Сохраняются ли данные при перезапуске?</summary>
+        <p>В прод-сборках рекомендуется MySQL (см. <code>docs/DATABASE_CUTOVER.md</code>). Резервное копирование томов и дампов — ваш админ-процесс.</p>
+      </details>
+      <details>
+        <summary>Куда писать в поддержку?</summary>
+        <p>Например: <a id="cta-support-link" href="https://t.me/VL_VPNbot"> Telegram бот поддержки </a>.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-inner">
+      <span>&copy; VL VPN</span>
+      <span class="muted">Страница статическая; реальную ссылку на бота задай под свой домен при деплое.</span>
+    </div>
+  </footer>
+
+  <script src="./landing.js"></script>
+</body>
+</html>

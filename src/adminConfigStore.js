@@ -1,12 +1,5 @@
-import fs from "fs/promises";
-import path from "path";
-
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "admin-config.json");
-
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
 function safeParseDbJson(raw) {
   const src = String(raw || "").trim();
@@ -17,6 +10,16 @@ function safeParseDbJson(raw) {
   } catch {
     return {};
   }
+}
+
+async function rawReadParsed() {
+  const doc = await readDocument(NS.ADMIN_CONFIG, LEGACY_FILENAME[NS.ADMIN_CONFIG]);
+  const src = JSON.stringify(doc);
+  return safeParseDbJson(src);
+}
+
+async function writeJson(normalizedDoc) {
+  await writeDocument(NS.ADMIN_CONFIG, LEGACY_FILENAME[NS.ADMIN_CONFIG], normalizedDoc);
 }
 
 function normalizeServer(input = {}) {
@@ -62,26 +65,7 @@ function normalizeConfig(raw = {}) {
 }
 
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return normalizeConfig(safeParseDbJson(raw));
-  } catch (e) {
-    if (e && e.code === "ENOENT") return normalizeConfig({});
-    throw e;
-  }
-}
-
-async function writeJson(obj) {
-  await ensureDir();
-  const next = normalizeConfig({
-    ...(obj || {}),
-    updatedAt: new Date().toISOString(),
-  });
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
-  return next;
+  return normalizeConfig(await rawReadParsed());
 }
 
 export async function getConfig() {
@@ -90,12 +74,21 @@ export async function getConfig() {
 
 export async function setAdmins(adminTelegramIds) {
   const cur = await readJson();
-  return await writeJson({ ...cur, admins: Array.isArray(adminTelegramIds) ? adminTelegramIds : [] });
+  return await writeNormalized({ ...cur, admins: Array.isArray(adminTelegramIds) ? adminTelegramIds : [] });
 }
 
 export async function setProxyServers(servers) {
   const cur = await readJson();
-  return await writeJson({ ...cur, proxyServers: Array.isArray(servers) ? servers : [] });
+  return await writeNormalized({ ...cur, proxyServers: Array.isArray(servers) ? servers : [] });
+}
+
+async function writeNormalized(candidate) {
+  const next = normalizeConfig({
+    ...(candidate || {}),
+    updatedAt: new Date().toISOString(),
+  });
+  await writeJson(next);
+  return next;
 }
 
 export async function upsertProxyServer(server) {
@@ -106,7 +99,7 @@ export async function upsertProxyServer(server) {
   }
   const nextServers = (cur.proxyServers || []).filter((s) => s.id !== normalized.id);
   nextServers.push(normalized);
-  return await writeJson({ ...cur, proxyServers: nextServers });
+  return await writeNormalized({ ...cur, proxyServers: nextServers });
 }
 
 export async function deleteProxyServer(serverId) {
@@ -114,5 +107,5 @@ export async function deleteProxyServer(serverId) {
   if (!id) throw new Error("server_id_required");
   const cur = await readJson();
   const nextServers = (cur.proxyServers || []).filter((s) => s.id !== id);
-  return await writeJson({ ...cur, proxyServers: nextServers });
+  return await writeNormalized({ ...cur, proxyServers: nextServers });
 }

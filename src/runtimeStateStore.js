@@ -1,35 +1,17 @@
-import fs from "fs/promises";
-import path from "path";
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "runtime-state.json");
 const MAX_PAYLOADS = 3000;
 const MAX_DEDUP = 8000;
 const PAYLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 const DEDUP_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
-
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    const obj = JSON.parse(raw || "{}");
-    if (!obj || typeof obj !== "object") return {};
-    return obj;
-  } catch (e) {
-    if (e?.code === "ENOENT") return {};
-    throw e;
-  }
+  return readDocument(NS.RUNTIME_STATE, LEGACY_FILENAME[NS.RUNTIME_STATE]);
 }
 
 async function writeJson(obj) {
-  await ensureDir();
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
+  await writeDocument(NS.RUNTIME_STATE, LEGACY_FILENAME[NS.RUNTIME_STATE], obj);
 }
 
 function nowIso() {

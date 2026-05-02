@@ -1,32 +1,13 @@
-import fs from "fs/promises";
-import path from "path";
 import crypto from "crypto";
-
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "xui-links.json");
-
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    const obj = JSON.parse(raw || "{}");
-    if (!obj || typeof obj !== "object") return {};
-    return obj;
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
-  }
+  return readDocument(NS.XUI_LINKS, LEGACY_FILENAME[NS.XUI_LINKS]);
 }
 
 async function writeJson(obj) {
-  await ensureDir();
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
+  await writeDocument(NS.XUI_LINKS, LEGACY_FILENAME[NS.XUI_LINKS], obj);
 }
 
 function normalizeUrlOrToken(input) {
@@ -120,4 +101,3 @@ export async function getXuiLinkByPublicToken(publicToken) {
   }
   return null;
 }
-

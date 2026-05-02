@@ -1,31 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
-
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "payment-webhook.json");
-
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    const obj = JSON.parse(raw || "{}");
-    if (!obj || typeof obj !== "object") return {};
-    return obj;
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
-  }
+  return readDocument(NS.PAYMENT_WEBHOOK, LEGACY_FILENAME[NS.PAYMENT_WEBHOOK]);
 }
 
 async function writeJson(obj) {
-  await ensureDir();
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
+  await writeDocument(NS.PAYMENT_WEBHOOK, LEGACY_FILENAME[NS.PAYMENT_WEBHOOK], obj);
 }
 
 function normalizeKey(raw) {
@@ -59,4 +40,3 @@ export async function markProcessed(externalKey, meta = {}) {
   }
   await writeJson(db);
 }
-

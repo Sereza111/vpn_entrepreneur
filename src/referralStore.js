@@ -1,40 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
-
-const dataDir = path.join(process.cwd(), "data");
-const filePath = path.join(dataDir, "referrals.json");
-
-async function ensureDir() {
-  await fs.mkdir(dataDir, { recursive: true });
-}
-
-function safeParseDbJson(raw) {
-  const src = String(raw || "").trim();
-  if (!src) return {};
-  try {
-    const obj = JSON.parse(src);
-    return obj && typeof obj === "object" ? obj : {};
-  } catch {
-    return {};
-  }
-}
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
 
 async function readJson() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return safeParseDbJson(raw);
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
-  }
+  return readDocument(NS.REFERRALS, LEGACY_FILENAME[NS.REFERRALS]);
 }
 
 async function writeJson(obj) {
-  await ensureDir();
-  const tmp = `${filePath}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj, null, 2), "utf8");
-  await fs.rename(tmp, filePath);
+  await writeDocument(NS.REFERRALS, LEGACY_FILENAME[NS.REFERRALS], obj);
 }
 
 export async function bindInviterIfEmpty({ inviteeTelegramId, inviterTelegramId }) {
@@ -106,4 +78,3 @@ export async function getInviterStats(inviterTelegramId) {
   }
   return { invitedTotal, rewardedTotal, rewardMinorTotal };
 }
-

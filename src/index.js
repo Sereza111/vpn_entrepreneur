@@ -3,7 +3,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
 import net from "node:net";
-import fs from "fs/promises";
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import { Agent } from "undici";
 import helmet from "helmet";
@@ -30,6 +29,11 @@ import * as adminConfigStore from "./adminConfigStore.js";
 import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 import { isActiveSubscriptionProfile, resolveSubscriptionExpiryMs } from "./services/subscriptionState.js";
 import { startDailyUtcJob } from "./jobs/dailyScheduler.js";
+import { runMysqlMigrations } from "./db/migrate.js";
+import { NS, LEGACY_FILENAME } from "./storage/namespaces.js";
+import { readDocument, writeDocument } from "./storage/jsonDocumentBackend.js";
+import { collectKnownTelegramIds as collectKnownTelegramIdsFromRegistry } from "./registry/telegramIdsAggregate.js";
+import { computeTotalHourlyRateMinor, shouldApplyHourlyBalanceFromMe } from "./services/billingRate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "..", "public");
@@ -100,6 +104,7 @@ async function maybeAwardReferralBonus({ inviteeTelegramId, paidMinor }) {
   const bonusMinor = Math.max(0, Math.floor(Number(config.referral.bonusMinor || 0)));
   if (bonusMinor < 1) return null;
   await balanceStore.credit(inviterId, bonusMinor);
+  void maybeReconcileBalanceToXui(inviterId, null);
   await referralStore.markRewarded({
     inviteeTelegramId,
     qualifyingPaymentMinor: amount,
@@ -178,62 +183,42 @@ function safeParseDbJson(raw) {
   }
 }
 
-async function readDataDbFile(filename) {
-  const fp = path.join(process.cwd(), "data", filename);
-  try {
-    const raw = await fs.readFile(fp, "utf8");
-    return safeParseDbJson(raw);
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
-  }
-}
-
 async function collectKnownTelegramIds() {
-  const files = [
-    "xui-links.json",
-    "balance.json",
-    "proxy-links.json",
-    "referrals.json",
-    "payment-webhook.json",
-  ];
-  const ids = new Set();
-  for (const f of files) {
-    const db = await readDataDbFile(f).catch(() => ({}));
-    for (const k of Object.keys(db || {})) {
-      const n = Number(k);
-      if (Number.isFinite(n) && n > 0) ids.add(n);
-    }
-  }
-  return [...ids].sort((a, b) => a - b);
+  return collectKnownTelegramIdsFromRegistry();
 }
 
 async function readNotifyState() {
-  const fp = path.join(process.cwd(), "data", "notify-expiring.json");
   try {
-    const raw = await fs.readFile(fp, "utf8");
-    return safeParseDbJson(raw);
-  } catch (e) {
-    if (e && e.code === "ENOENT") return {};
-    throw e;
+    const doc = await readDocument(NS.NOTIFY_EXPIRING, LEGACY_FILENAME[NS.NOTIFY_EXPIRING]);
+    return doc && typeof doc === "object" ? doc : {};
+  } catch {
+    return {};
   }
 }
 
 async function writeNotifyState(obj) {
-  const dir = path.join(process.cwd(), "data");
-  await fs.mkdir(dir, { recursive: true });
-  const fp = path.join(dir, "notify-expiring.json");
-  const tmp = `${fp}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(obj || {}, null, 2), "utf8");
-  await fs.rename(tmp, fp);
+  await writeDocument(NS.NOTIFY_EXPIRING, LEGACY_FILENAME[NS.NOTIFY_EXPIRING], obj || {});
 }
 
+function milestoneTextFor(daysLeft, fallback) {
+  if (daysLeft === 3) return String(config.notifyExpiring?.textDay3 || "").trim() || fallback;
+  if (daysLeft === 2) return String(config.notifyExpiring?.textDay2 || "").trim() || fallback;
+  if (daysLeft === 1) return String(config.notifyExpiring?.textDay1 || "").trim() || fallback;
+  return fallback;
+}
+
+/**
+ * Напоминания: для 3 / 2 / 1 дня — разные тексты и отдельный dedup на каждую веху.
+ * Для остальных dayLeft ∈ [daysLeftMin,daysLeftMax] (обычно 4…0, без учёта 1–3) — прежнее «одно сообщение» на строку expiry.
+ */
 async function runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text, dryRun }) {
   const now = Date.now();
   const ids = await collectKnownTelegramIds();
-  const msgText = String(text || "").trim() ||
+  const fallback =
+    String(text || "").trim() ||
     "Напоминание: у вас скоро заканчивается подписка VL. Откройте мини‑приложение и продлите доступ заранее, чтобы не потерять связь.";
   const state = await readNotifyState().catch(() => ({}));
+  /** @type {Array<{ telegramId: number; daysLeft: number; expireAt: string; kind: "milestone"|"legacy" }>} */
   const targets = [];
   for (const tid of ids) {
     const me = await loadMe(tid).catch(() => null);
@@ -243,26 +228,51 @@ async function runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text, dryRun }) 
     const expMs = Date.parse(String(exp));
     if (!Number.isFinite(expMs) || expMs <= 0) continue;
     const daysLeft = Math.floor((expMs - now) / 86400_000);
-    if (daysLeft < daysLeftMin || daysLeft > daysLeftMax) continue;
-
-    // de-dup: one message per user per expiry timestamp
-    const key = String(tid);
-    const prev = state[key];
-    if (prev?.expireAt === exp && Number(prev?.sentAtMs || 0) > 0) continue;
-    targets.push({ telegramId: tid, daysLeft, expireAt: exp });
+    if ([1, 2, 3].includes(daysLeft)) {
+      targets.push({ telegramId: tid, daysLeft, expireAt: String(exp), kind: "milestone" });
+      continue;
+    }
+    if (
+      daysLeft >= daysLeftMin &&
+      daysLeft <= daysLeftMax &&
+      ![1, 2, 3].includes(daysLeft)
+    ) {
+      targets.push({ telegramId: tid, daysLeft, expireAt: String(exp), kind: "legacy" });
+    }
   }
 
   let sent = 0;
   let failed = 0;
   if (!dryRun) {
     for (const t of targets) {
+      const key = String(t.telegramId);
+      let row = state[key];
+      const expIso = String(t.expireAt);
+      if (!row || String(row.expireAt || "") !== expIso) {
+        row = { expireAt: expIso, sent: {}, legacySentAtMs: undefined };
+      }
+      if (!row.sent || typeof row.sent !== "object") row.sent = {};
+
+      let msg = "";
+      if (t.kind === "milestone") {
+        const mkey = String(t.daysLeft);
+        if (!row.sent[mkey]) {
+          msg = milestoneTextFor(t.daysLeft, fallback);
+        }
+      } else if (t.kind === "legacy" && !Number(row.legacySentAtMs || 0)) {
+        msg = `${fallback}\n\nОсталось дней: ${t.daysLeft}`;
+      }
+
+      if (!msg) continue;
       try {
-        await bot.api.sendMessage(
-          t.telegramId,
-          `${msgText}\n\nОсталось дней: ${t.daysLeft}`,
-        );
+        await bot.api.sendMessage(t.telegramId, msg);
         sent += 1;
-        state[String(t.telegramId)] = { expireAt: t.expireAt, sentAtMs: Date.now() };
+        if (t.kind === "milestone") {
+          row.sent[String(t.daysLeft)] = Date.now();
+        } else {
+          row.legacySentAtMs = Date.now();
+        }
+        state[key] = row;
       } catch {
         failed += 1;
       }
@@ -1883,6 +1893,151 @@ async function setXuiClientEnabled(telegramId, enabled) {
   });
 }
 
+async function reconcileBalanceRunwayToXui({ telegramId, username = null, dryRun = false }) {
+  const tid = Number(telegramId);
+  if (!Number.isFinite(tid) || tid < 1) throw new Error("bad_telegram_id");
+  if (!config.balance?.xuiReconcile?.enabled || !config.balance.billingEnabled) {
+    return { skipped: true, reason: "reconcile_disabled" };
+  }
+  if (!config.xui.inboundId) return { skipped: true, reason: "xui_inbound_id_required" };
+
+  const me = await loadMe(tid, username ?? null).catch(() => null);
+  if (!me) return { skipped: true, reason: "me_missing" };
+
+  const rec = await balanceStore.getRecord(tid);
+  if (rec?.freeMode) return { skipped: true, reason: "free_mode" };
+  if (!shouldApplyHourlyBalanceFromMe(me)) return { skipped: true, reason: "not_active_billing" };
+
+  const balMinor = Number(me.balance?.balanceMinor || 0);
+  const rate = computeTotalHourlyRateMinor({
+    subscriptionStatus: me.subscriptionStatus,
+    proxyPayload: me.proxy,
+    vpsHourlyMinor: config.balance.hourlyRateMinor,
+    proxyAddonUnitMinor: config.balance.proxyHourlyMinor,
+    deviceSlotUnitMinor: config.balance.deviceSlotHourlyMinor,
+    dedicatedHourlyMinor: config.balance.dedicatedIpHourlyMinor,
+  });
+
+  const now = Date.now();
+  const runwayEndMs =
+    balMinor <= 0 || rate <= 0 ? now : Math.floor(now + Math.floor((balMinor / Math.max(1, rate)) * 3_600_000));
+
+  const mode = String(config.balance.xuiReconcile.mode || "min_end").toLowerCase();
+  const linked = await xuiStore.getXuiLinkByTelegramId(tid).catch(() => null);
+
+  await xuiProvisionCore(tid, { force: true, username }).catch(() => null);
+  const found = await xui.findClientInInbound({
+    inboundId: config.xui.inboundId,
+    telegramId: tid,
+  });
+  if (!found?.client) return { skipped: true, reason: "xui_client_not_found" };
+  const clientId = String(found.client.id || found.client.ID || "").trim();
+  if (!clientId) return { skipped: true, reason: "xui_client_id_missing" };
+
+  const panelMsRaw = Number(found.client.expiryTime || 0);
+  const panelEnd =
+    Number.isFinite(panelMsRaw) && panelMsRaw > 0 ? panelMsRaw : Number.MAX_SAFE_INTEGER;
+
+  let nextExpiryMs;
+  if (mode === "runway_snap") {
+    nextExpiryMs = Math.max(now, runwayEndMs);
+  } else {
+    const floorEnd = Math.min(panelEnd, runwayEndMs);
+    nextExpiryMs = Math.max(now, Math.floor(floorEnd));
+  }
+
+  const minChange = Number(config.balance.xuiReconcile.minChangeMs ?? 120_000);
+  const hasPanelExpiry = Number.isFinite(panelMsRaw) && panelMsRaw > 0;
+  const deltaMs = hasPanelExpiry ? Math.abs(nextExpiryMs - panelMsRaw) : Infinity;
+  const belowThreshold = hasPanelExpiry && deltaMs < minChange;
+
+  const snapshotBase = {
+    dryRun: Boolean(dryRun),
+    telegramId: tid,
+    balanceMinor: balMinor,
+    hourlyRateMinor: rate,
+    runwayEndMs,
+    panelExpiryMs: hasPanelExpiry ? panelMsRaw : 0,
+    nextExpiryMs,
+    deltaMs: hasPanelExpiry ? deltaMs : null,
+    mode,
+    wouldApplyPatch: !(belowThreshold),
+  };
+
+  if (dryRun) {
+    return { skipped: false, ...snapshotBase };
+  }
+
+  if (belowThreshold) {
+    return { skipped: true, reason: "below_threshold", ...snapshotBase };
+  }
+
+  const patch = { ...found.client, enable: balMinor > 0, expiryTime: nextExpiryMs };
+  await xui.updateClientInInbound({
+    inboundId: config.xui.inboundId,
+    clientId,
+    client: patch,
+  });
+
+  const subId = extractSubIdFromStoredLink(linked) || String(found.client.subId || "").trim();
+  const baseRemark = buildXuiClientRemark(tid, username, null);
+  if (subId) {
+    await ensureAllRemoteXuiClients({
+      telegramId: tid,
+      subId,
+      baseRemark,
+      expiryTimeMs: nextExpiryMs,
+    });
+  }
+
+  return {
+    ok: true,
+    telegramId: tid,
+    balanceMinor: balMinor,
+    hourlyRateMinor: rate,
+    runwayEndMs,
+    panelExpiryMs: Number.isFinite(panelMsRaw) && panelMsRaw > 0 ? panelMsRaw : 0,
+    nextExpiryMs,
+  };
+}
+
+async function maybeReconcileBalanceToXui(telegramId, username = null) {
+  try {
+    return await reconcileBalanceRunwayToXui({ telegramId, username, dryRun: false });
+  } catch (e) {
+    console.warn("[balance-xui] reconcile:", String(e?.message || e));
+    return { skipped: true, reason: "error", error: String(e?.message || e) };
+  }
+}
+
+async function hourlyBalanceSweepJob() {
+  if (!config.balance.billingEnabled) return;
+  const idSet = new Set([
+    ...(await balanceStore.listTelegramIds().catch(() => [])),
+    ...(await collectKnownTelegramIds()),
+  ]);
+  for (const tid of idSet) {
+    try {
+      const me = await loadMe(tid, null).catch(() => null);
+      if (!me || !shouldApplyHourlyBalanceFromMe(me)) continue;
+      const rate = computeTotalHourlyRateMinor({
+        subscriptionStatus: me.subscriptionStatus,
+        proxyPayload: me.proxy,
+        vpsHourlyMinor: config.balance.hourlyRateMinor,
+        proxyAddonUnitMinor: config.balance.proxyHourlyMinor,
+        deviceSlotUnitMinor: config.balance.deviceSlotHourlyMinor,
+        dedicatedHourlyMinor: config.balance.dedicatedIpHourlyMinor,
+      });
+      await balanceStore.applyHourlyDeduction(tid, rate);
+      if (config.balance?.xuiReconcile?.enabled) {
+        await maybeReconcileBalanceToXui(tid, null).catch(() => null);
+      }
+    } catch (e) {
+      console.warn("[balance] hourly sweep:", tid, String(e?.message || e));
+    }
+  }
+}
+
 async function extendXuiClientDays({ telegramId, days, username = null }) {
   const tid = Number(telegramId);
   const addDays = Math.floor(Number(days || 0));
@@ -2650,6 +2805,7 @@ app.post("/api/admin/balance/credit", adminGrantAuth, async (req, res) => {
   if (!Number.isFinite(amountMinor) || amountMinor < 1) return res.status(400).json({ error: "bad_amount_minor" });
   try {
     const rec = await balanceStore.credit(telegramId, amountMinor);
+    void maybeReconcileBalanceToXui(telegramId, null);
     const me = await loadMe(telegramId).catch(() => null);
     return res.json({ ok: true, telegramId, amountMinor, balanceRecord: rec, data: me });
   } catch (e) {
@@ -2981,6 +3137,42 @@ app.post("/api/admin/timeweb/rotate-ip", adminGrantAuth, async (req, res) => {
 });
 
 /**
+ * Admin: предпросмотр выравнивания expiry в 3X-UI по балансу и ставке.
+ */
+app.post("/api/admin/balance-xui-reconcile-dry-run", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId ?? req.body?.telegram_id);
+  const username =
+    req.body?.username != null ? String(req.body.username || "").trim() || null : null;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  try {
+    const r = await reconcileBalanceRunwayToXui({ telegramId, username, dryRun: true });
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
+ * Admin: применить выравнивание expiry в панели.
+ */
+app.post("/api/admin/balance-xui-reconcile", adminGrantAuth, async (req, res) => {
+  const telegramId = Number(req.body?.telegramId ?? req.body?.telegram_id);
+  const username =
+    req.body?.username != null ? String(req.body.username || "").trim() || null : null;
+  if (!Number.isFinite(telegramId) || telegramId < 1) {
+    return res.status(400).json({ error: "bad_telegram_id" });
+  }
+  try {
+    const r = await reconcileBalanceRunwayToXui({ telegramId, username, dryRun: false });
+    return res.json({ ok: true, ...r });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/**
  * Admin: notify users whose subscription expires soon.
  * Header: x-admin-secret = ADMIN_GRANT_SECRET
  * Body: { daysLeftMax?, daysLeftMin?, dryRun?, text? }
@@ -3199,6 +3391,7 @@ async function applySuccessfulBusinessPayload({ payload, paidMinor = 0, username
     const minor = Math.max(0, Math.floor(Number(paidMinor || 0)));
     if (minor > 0) {
       await balanceStore.credit(payload.telegramId, minor);
+      void maybeReconcileBalanceToXui(payload.telegramId, username);
       await maybeAwardReferralBonus({
         inviteeTelegramId: payload.telegramId,
         paidMinor: minor,
@@ -3711,6 +3904,7 @@ if (config.publicBaseUrl) {
   app.use(whPath, webhookCallback(bot, "express", { secretToken: config.webhookSecret || undefined }));
 }
 
+app.use("/site", express.static(path.join(publicDir, "site")));
 app.use("/app", express.static(publicDir));
 app.get("/app/admin", (_req, res) => {
   res.sendFile(path.join(publicDir, "admin.html"));
@@ -3722,19 +3916,33 @@ app.get(/^\/app\/.*/, (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(config.port, () => {
-  console.log(`http://127.0.0.1:${config.port}`);
-  void setupTelegramTransport();
-  if (config.notifyExpiring?.enabled) {
-    const hourUtc = Number(config.notifyExpiring.hourUtc ?? 9);
-    const daysLeftMax = Number(config.notifyExpiring.daysLeftMax ?? 4);
-    const daysLeftMin = Number(config.notifyExpiring.daysLeftMin ?? 0);
-    startDailyUtcJob({
-      hourUtc,
-      label: "notify-expiring",
-      job: async () => {
-        await runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text: "", dryRun: false });
-      },
-    });
-  }
-});
+(async () => {
+  await runMysqlMigrations().catch((e) =>
+    console.error("[db] migration failed:", e?.message || e),
+  );
+
+  app.listen(config.port, () => {
+    console.log(`http://127.0.0.1:${config.port}`);
+    void setupTelegramTransport();
+    if (config.balance.billingEnabled && config.balance.hourlySweepIntervalMs >= 60000) {
+      const iv = Number(config.balance.hourlySweepIntervalMs);
+      console.log("[balance] hourly sweep every", iv, "ms");
+      void hourlyBalanceSweepJob().catch((e) => console.warn("[balance] initial sweep:", e?.message || e));
+      setInterval(() => {
+        hourlyBalanceSweepJob().catch((e) => console.warn("[balance] sweep:", e?.message || e));
+      }, iv);
+    }
+    if (config.notifyExpiring?.enabled) {
+      const hourUtc = Number(config.notifyExpiring.hourUtc ?? 9);
+      const daysLeftMax = Number(config.notifyExpiring.daysLeftMax ?? 4);
+      const daysLeftMin = Number(config.notifyExpiring.daysLeftMin ?? 0);
+      startDailyUtcJob({
+        hourUtc,
+        label: "notify-expiring",
+        job: async () => {
+          await runNotifyExpiringJob({ daysLeftMax, daysLeftMin, text: "", dryRun: false });
+        },
+      });
+    }
+  });
+})();
