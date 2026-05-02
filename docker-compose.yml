@@ -1,26 +1,10 @@
 # Сборка в GitHub Actions → ghcr.io. Если в стеке не задашь IMAGE — подставится образ этого репо.
 # Переопределение: IMAGE=ghcr.io/другой/образ:тег
 #
-# При заданном DB_* бот использует MySQL (см. docs/DATABASE_CUTOVER.md). Иначе — legacy ./data.
+# При заданном DB_* бот использует внешний MySQL (Бегет, RDS и т.д., см. docs/DATABASE_CUTOVER.md).
+# Локальный контейнер MySQL здесь специально НЕ включён — стек только бот.
 
 services:
-  # Опционально: поднимайте только если хотите persistence в БД вместо ./data/*.json.
-  mysql:
-    image: mysql:8.0
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localroot}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-vpn_bot}
-      MYSQL_USER: ${MYSQL_USER:-vpn_bot}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-vpn_bot_pw}
-    command: >
-      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-      --default-authentication-plugin=mysql_native_password
-    volumes:
-      - mysql_data:/var/lib/mysql
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-
   bot:
     image: ${IMAGE:-ghcr.io/sereza111/vpn_entrepreneur:latest}
     pull_policy: always
@@ -84,13 +68,11 @@ services:
       TELEGRAM_WEBHOOK_RETRIES: ${TELEGRAM_WEBHOOK_RETRIES:-12}
       TELEGRAM_WEBHOOK_RETRY_MS: ${TELEGRAM_WEBHOOK_RETRY_MS:-5000}
       TELEGRAM_WEBHOOK_RETRY_INTERVAL_MS: ${TELEGRAM_WEBHOOK_RETRY_INTERVAL_MS:-300000}
-      # Раскомментируй или задай через .env, если поднят сервис mysql выше:
-      # DB_HOST: mysql
-      # DB_PORT: 3306
-      # DB_USER: vpn_bot
-      # DB_PASSWORD: vpn_bot_pw
-      # DB_NAME: vpn_bot
-      # Принудительно вернуться к JSON на диске: DB_BACKEND=file
+      # Внешняя БД (Бегет private 10.16.0.1 и т.п. — смотри панель хостера):
+      # DB_HOST=...
+      # DB_PORT=3306
+      # DB_USER=...
+      # DB_PASSWORD=...
+      # DB_NAME=vpn_bot
+      # Принудительно JSON на диске без БД: DB_BACKEND=file
 
-volumes:
-  mysql_data: {}
