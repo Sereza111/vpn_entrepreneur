@@ -1,6 +1,7 @@
 # Отдельный стек для сайта
 
 Для лендинга есть отдельный compose-файл: `docker-compose.site.yml`.
+Сборка делается в GitHub Actions, в Portainer идёт только `docker pull` готового образа из GHCR.
 
 ## Portainer (Git stack)
 
@@ -9,7 +10,7 @@
 3. Compose path: `docker-compose.site.yml`.
 4. При необходимости задай переменные:
    - `SITE_PORT` (по умолчанию `8080`)
-   - `SITE_IMAGE` (опционально)
+   - `SITE_IMAGE` (опционально, по умолчанию `ghcr.io/sereza111/vpn_entrepreneur-site:latest`)
 5. Deploy.
 
 После деплоя сайт будет доступен на `http://<host>:SITE_PORT`.
