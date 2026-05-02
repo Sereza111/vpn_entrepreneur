@@ -11,7 +11,8 @@
     "build": "npm run build:web && npm run build:landing",
     "db:migrate": "node src/db/cli-migrate.js",
     "db:import-json": "node src/db/importFromDataFiles.js",
-    "db:export-sql-from-json": "node src/db/exportJsonToSql.js"
+    "db:export-sql-from-json": "node src/db/exportJsonToSql.js",
+    "db:seed-kv": "node src/db/seedEmptyAppKv.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
