@@ -56,6 +56,13 @@ export const config = {
     clientRemarkTemplate: (process.env.XUI_CLIENT_REMARK_TEMPLATE || "").trim(),
     /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */
     clientDisplaySuffix: String(process.env.XUI_CLIENT_DISPLAY_SUFFIX || "🌐").trim(),
+    /**
+     * GET /sub/xui/:token — тело ответа после merge:
+     * - plain (по умолчанию): строки подписки, как в доках HAPP («open format»); хорошо для Happ и многих клиентов.
+     * - base64: как классический raw body 3X-UI; включите XUI_SUB_PROXY_BODY_BASE64=1 если нужен старый режим.
+     */
+    subProxyMergeBodyBase64:
+      String(process.env.XUI_SUB_PROXY_BODY_BASE64 || "").toLowerCase().trim() === "1",
   },
   xuiSecondary: {
     enabled:

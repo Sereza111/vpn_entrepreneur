@@ -704,10 +704,13 @@ app.get("/sub/xui/:token", async (req, res) => {
       passThroughSubscriptionHeaders(firstHeaders, res);
     }
     res.setHeader("x-sub-upstreams", `ok=${okCount};fail=${failCount};total=${targets.length}`);
-    if (!res.getHeader("Content-Type")) {
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    }
-    return res.status(200).send(Buffer.from(mergedLines.join("\n"), "utf8").toString("base64"));
+    // Не пробрасываем content-type с панели: часто не совпадает с нашим телом (HAPP/V2 пробуют парсить JSON и ломаются).
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    const mergedText = mergedLines.join("\n");
+    const bodyOut = config.xui.subProxyMergeBodyBase64
+      ? Buffer.from(mergedText, "utf8").toString("base64")
+      : mergedText;
+    return res.status(200).send(bodyOut);
   } catch (e) {
     return res.status(500).send(String(e?.message || e));
   }
