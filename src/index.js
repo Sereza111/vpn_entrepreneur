@@ -3932,6 +3932,9 @@ if (config.publicBaseUrl) {
 
 app.use("/site", express.static(path.join(publicDir, "site")));
 app.use("/app", express.static(publicDir));
+app.get(["/", "/site", "/site/"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "site", "index.html"));
+});
 app.get("/app/admin", (_req, res) => {
   res.sendFile(path.join(publicDir, "admin.html"));
 });
