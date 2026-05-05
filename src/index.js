@@ -2895,14 +2895,20 @@ app.post("/api/admin/grant-days", adminGrantAuth, async (req, res) => {
     return res.status(400).json({ error: "bad_days" });
   }
   try {
-    const r = await extendXuiClientDays({ telegramId, days, username });
+    const amountMinor = Math.max(
+      1,
+      Math.floor(Math.floor(Number(config.balance.hourlyRateMinor || 1)) * 24 * Math.floor(days)),
+    );
+    const rec = await balanceStore.credit(telegramId, amountMinor);
+    void maybeReconcileBalanceToXui(telegramId, username);
     const data = await loadMe(telegramId, username);
     return res.json({
       ok: true,
       telegramId,
       grantedDays: Math.floor(days),
-      previousExpireAt: r.previousExpiryMs > 0 ? new Date(r.previousExpiryMs).toISOString() : null,
-      nextExpireAt: new Date(r.nextExpiryMs).toISOString(),
+      creditedMinor: amountMinor,
+      creditedRub: amountMinor / 100,
+      balanceRecord: rec,
       data,
     });
   } catch (e) {
@@ -3357,27 +3363,41 @@ async function buildTelegramInvoiceEnvelope(telegramId, username, selected) {
     : "VPS Premium — оплата";
   const title = normalized.serviceType === "device_slot"
     ? "VPS Premium — +1 устройство"
-    : `${titlePrefix} · ${normalized.days} дней`;
+    : normalized.serviceType === "vps"
+      ? `${titlePrefix} · пополнение баланса`
+      : `${titlePrefix} · ${normalized.days} дней`;
   const desc = normalized.serviceType === "device_slot"
     ? "Разовое увеличение лимита устройств: +1 слот."
     : normalized.serviceType === "proxy"
     ? `Оплата доступа к прокси\nТариф: ${normalized.days} дней (${normalized.productCode})`
-    : `Оплата доступа к VPS Premium\nТариф: ${normalized.days} дней (${normalized.productCode})`;
+    : `Пополнение внутреннего баланса VL\nЭквивалент тарифа: ${normalized.days} дней (${normalized.productCode}). Срок в XUI синхронизируется по балансу.`;
   const priceLabel = normalized.serviceType === "device_slot"
     ? "+1 устройство"
-    : `${envDaysLabel(normalized.days)}`;
-  const payloadData = {
-    kind: "telegram_payment",
-    telegramId,
-    username: username || null,
-    days: normalized.days,
-    productCode: normalized.productCode,
-    serviceType: normalized.serviceType,
-    serverId: normalized.serverId,
-    proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
-    addDeviceSlots: normalized.serviceType === "device_slot" ? 1 : 0,
-    at: Date.now(),
-  };
+    : normalized.serviceType === "vps"
+      ? "Пополнение баланса"
+      : `${envDaysLabel(normalized.days)}`;
+  const payloadData = normalized.serviceType === "vps"
+    ? {
+      kind: "balance_topup",
+      telegramId,
+      username: username || null,
+      sourceServiceType: "vps",
+      sourceProductCode: normalized.productCode,
+      sourceDays: normalized.days,
+      at: Date.now(),
+    }
+    : {
+      kind: "telegram_payment",
+      telegramId,
+      username: username || null,
+      days: normalized.days,
+      productCode: normalized.productCode,
+      serviceType: normalized.serviceType,
+      serverId: normalized.serverId,
+      proxyCredits: normalized.serviceType === "proxy" ? 1 : 0,
+      addDeviceSlots: normalized.serviceType === "device_slot" ? 1 : 0,
+      at: Date.now(),
+    };
   const payload = await savePaymentPayload(payloadData);
   return { normalized, title, desc, payload, amountMinor, priceLabel };
 }
@@ -3450,8 +3470,18 @@ async function applySuccessfulBusinessPayload({ payload, paidMinor = 0, username
     });
     return { serviceType: "device_slot", grantedDays: 0, addDeviceSlots: addSlots };
   }
-  await xuiProvisionCore(payload.telegramId, { force: true, username });
-  return { serviceType: "vps", grantedDays: Number(payload.days || 0) || 0 };
+  // Backward compatibility: old VPS payloads were "plan/vps". Now they behave as balance topup.
+  const legacyMinor = Math.max(0, Math.floor(Number(paidMinor || 0)));
+  if (legacyMinor > 0) {
+    await balanceStore.credit(payload.telegramId, legacyMinor);
+    void maybeReconcileBalanceToXui(payload.telegramId, username);
+    await maybeAwardReferralBonus({
+      inviteeTelegramId: payload.telegramId,
+      paidMinor: legacyMinor,
+    }).catch(() => null);
+  }
+  await setXuiClientEnabled(payload.telegramId, true).catch(() => {});
+  return { serviceType: "balance_topup", grantedDays: 0, migratedFrom: "legacy_vps_plan" };
 }
 
 async function sendTelegramInvoiceForSelection({
@@ -3569,18 +3599,30 @@ app.post("/api/payments/checkout-link", authMiddleware, async (req, res) => {
       if (!Number.isFinite(amountMinor) || amountMinor < 1) {
         return res.status(400).json({ error: "bad_amount" });
       }
-      const payloadKey = await savePaymentPayload({
-        kind: "telegram_payment",
-        telegramId: tid,
-        username: username || null,
-        days: selected.serviceType === "device_slot" ? 0 : selected.days,
-        productCode: selected.productCode,
-        serviceType: selected.serviceType,
-        serverId: selected.serverId,
-        proxyCredits: selected.serviceType === "proxy" ? 1 : 0,
-        addDeviceSlots: selected.serviceType === "device_slot" ? 1 : 0,
-        at: Date.now(),
-      });
+      const payloadKey = await savePaymentPayload(
+        selected.serviceType === "vps"
+          ? {
+            kind: "balance_topup",
+            telegramId: tid,
+            username: username || null,
+            sourceServiceType: "vps",
+            sourceProductCode: selected.productCode,
+            sourceDays: selected.days,
+            at: Date.now(),
+          }
+          : {
+            kind: "telegram_payment",
+            telegramId: tid,
+            username: username || null,
+            days: selected.serviceType === "device_slot" ? 0 : selected.days,
+            productCode: selected.productCode,
+            serviceType: selected.serviceType,
+            serverId: selected.serverId,
+            proxyCredits: selected.serviceType === "proxy" ? 1 : 0,
+            addDeviceSlots: selected.serviceType === "device_slot" ? 1 : 0,
+            at: Date.now(),
+          },
+      );
       const yk = await yookassaApi.createRedirectPayment({
         amountMinor,
         description: selected.serviceType === "device_slot"
