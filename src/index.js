@@ -378,8 +378,9 @@ const app = express();
 app.disable("x-powered-by");
 {
   const trustProxyRaw = String(config.trustProxy || "").trim().toLowerCase();
+  // Число хопов (1 = один nginx/caddy перед ботом). Не boolean true — иначе express-rate-limit падает при старте.
   if (trustProxyRaw === "1" || trustProxyRaw === "true") {
-    app.set("trust proxy", true);
+    app.set("trust proxy", 1);
   } else if (/^\d+$/.test(trustProxyRaw)) {
     app.set("trust proxy", Number(trustProxyRaw));
   }
