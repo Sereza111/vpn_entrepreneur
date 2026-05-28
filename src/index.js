@@ -3365,6 +3365,108 @@ app.post("/api/admin/xui/import-inbound", adminGrantAuth, async (req, res) => {
   }
 });
 
+/**
+ * Admin: продлить всем пользователям в inbound на N дней:
+ * - expiryTime в XUI: base = max(now, currentExpiry) + days
+ * - balance в БД: выставить по новому expiry (чтобы миниапп показывал время/баланс)
+ *
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { inboundId?, days?, dryRun?, limit? }
+ */
+app.post("/api/admin/xui/grant-days-all", adminGrantAuth, async (req, res) => {
+  const inboundId = Number(req.body?.inboundId || config.xui.inboundId || 0);
+  const days = Math.max(1, Math.min(3650, Math.floor(Number(req.body?.days || 30))));
+  const dryRun = req.body?.dryRun === true;
+  const limit = Math.max(1, Math.min(5000, Math.floor(Number(req.body?.limit || 2000))));
+  if (!Number.isFinite(inboundId) || inboundId < 1) return res.status(400).json({ error: "bad_inbound_id" });
+  try {
+    const clients = await xui.listInboundClients(inboundId);
+    const now = Date.now();
+    const rate = Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1)));
+    let processed = 0;
+    let updatedXui = 0;
+    let linked = 0;
+    let balanceSet = 0;
+    let skippedNoTgId = 0;
+    let failed = 0;
+    const sample = [];
+
+    for (const c of clients || []) {
+      if (processed >= limit) break;
+      const tid = Number(c?.tgId || 0);
+      if (!Number.isFinite(tid) || tid < 1) {
+        skippedNoTgId += 1;
+        continue;
+      }
+      processed += 1;
+
+      try {
+        // Ensure link in DB (subId is already in client settings in most builds).
+        const subId = String(c?.subId || c?.subID || "").trim();
+        if (subId) {
+          if (!dryRun) await xuiStore.linkXuiSubscription({ telegramId: tid, xuiUrlOrToken: subId });
+          linked += 1;
+        }
+
+        // Update expiry in panel (needs clientId, so query XUI by telegramId).
+        const found = await xui.findClientInInbound({ inboundId, telegramId: tid });
+        if (!found?.client) throw new Error("xui_client_not_found");
+        const clientId = String(found.client.id || found.client.ID || "").trim();
+        if (!clientId) throw new Error("xui_client_id_missing");
+
+        const curExpiry = Number(found.client.expiryTime || 0);
+        const baseMs = Number.isFinite(curExpiry) && curExpiry > now ? curExpiry : now;
+        const nextExpiryMs = baseMs + days * 86400_000;
+
+        if (!dryRun) {
+          const patch = { ...found.client, enable: true, expiryTime: nextExpiryMs };
+          await xui.updateClientInInbound({ inboundId, clientId, client: patch });
+        }
+        updatedXui += 1;
+
+        // Set balance by runway (hours left * rate).
+        const hoursLeft = (nextExpiryMs - now) / 3_600_000;
+        const balanceMinor = Math.max(0, Math.ceil(hoursLeft * rate));
+        if (!dryRun) {
+          await balanceStore.setAbsolute(tid, balanceMinor, { billingStartedAt: now, lastAccruedMs: now, freeMode: false });
+        }
+        balanceSet += 1;
+
+        if (sample.length < 25) {
+          sample.push({
+            telegramId: tid,
+            days,
+            currentExpiryMs: Number.isFinite(curExpiry) ? curExpiry : 0,
+            nextExpiryMs,
+            balanceMinor,
+          });
+        }
+      } catch (e) {
+        failed += 1;
+        if (sample.length < 25) sample.push({ telegramId: tid, error: String(e?.message || e) });
+      }
+    }
+
+    return res.json({
+      ok: true,
+      dryRun,
+      inboundId,
+      days,
+      totalClientsInInbound: Array.isArray(clients) ? clients.length : 0,
+      processed,
+      updatedXui,
+      linked,
+      balanceSet,
+      skippedNoTgId,
+      failed,
+      sample,
+      note: "Рекомендуется запускать dryRun=true сначала. Действие продлевает срок в XUI и ставит баланс как производную от срока.",
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 const bot = new Bot(config.botToken);
 
 async function getTelegramPlanOptions() {
