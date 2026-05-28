@@ -3270,6 +3270,101 @@ app.post("/api/admin/yookassa/reconcile", adminGrantAuth, async (req, res) => {
   }
 });
 
+/**
+ * Admin: импортировать пользователей из XUI inbound в БД бота:
+ * - создать/обновить xui_links по tgId/subId
+ * - выставить balance из expiryTime (runway)
+ *
+ * Header: x-admin-secret = ADMIN_GRANT_SECRET
+ * Body: { inboundId?, dryRun?, limit? }
+ */
+app.post("/api/admin/xui/import-inbound", adminGrantAuth, async (req, res) => {
+  const inboundId = Number(req.body?.inboundId || config.xui.inboundId || 0);
+  const dryRun = req.body?.dryRun === true;
+  const limit = Math.max(1, Math.min(5000, Math.floor(Number(req.body?.limit || 2000))));
+  if (!Number.isFinite(inboundId) || inboundId < 1) return res.status(400).json({ error: "bad_inbound_id" });
+  try {
+    const clients = await xui.listInboundClients(inboundId);
+    const now = Date.now();
+    const rate = Math.max(1, Math.floor(Number(config.balance.hourlyRateMinor || 1)));
+    const out = [];
+    let processed = 0;
+    let linked = 0;
+    let balanceSet = 0;
+    let skippedNoTgId = 0;
+    let skippedNoSubId = 0;
+    let skippedNoExpiry = 0;
+    let failed = 0;
+
+    for (const c of clients || []) {
+      if (processed >= limit) break;
+      const tid = Number(c?.tgId || 0);
+      if (!Number.isFinite(tid) || tid < 1) {
+        skippedNoTgId += 1;
+        continue;
+      }
+      processed += 1;
+
+      const subId = String(c?.subId || c?.subID || "").trim();
+      const expiryMsRaw = Number(c?.expiryTime || 0);
+      const expiryMs = Number.isFinite(expiryMsRaw) ? Math.floor(expiryMsRaw) : 0;
+
+      const snap = {
+        telegramId: tid,
+        subId: subId || null,
+        expiryMs: expiryMs > 0 ? expiryMs : 0,
+        wouldLink: Boolean(subId),
+        wouldSetBalance: expiryMs > now,
+      };
+
+      try {
+        if (subId) {
+          if (!dryRun) {
+            await xuiStore.linkXuiSubscription({ telegramId: tid, xuiUrlOrToken: subId });
+          }
+          linked += 1;
+        } else {
+          skippedNoSubId += 1;
+        }
+
+        if (expiryMs > now) {
+          const hoursLeft = (expiryMs - now) / 3_600_000;
+          const balanceMinor = Math.max(0, Math.ceil(hoursLeft * rate));
+          if (!dryRun) {
+            await balanceStore.setAbsolute(tid, balanceMinor, { billingStartedAt: now, lastAccruedMs: now, freeMode: false });
+          }
+          balanceSet += 1;
+        } else {
+          skippedNoExpiry += 1;
+        }
+
+        out.push(snap);
+      } catch (e) {
+        failed += 1;
+        out.push({ ...snap, error: String(e?.message || e) });
+      }
+    }
+
+    return res.json({
+      ok: true,
+      dryRun,
+      inboundId,
+      totalClientsInInbound: Array.isArray(clients) ? clients.length : 0,
+      processed,
+      linked,
+      balanceSet,
+      skippedNoTgId,
+      skippedNoSubId,
+      skippedNoExpiry,
+      failed,
+      sample: out.slice(0, 25),
+      note: "Повторный запуск безопасен: xui_links перезапишется, balance будет выставлен абсолютом.",
+    });
+  } catch (e) {
+    return res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 const bot = new Bot(config.botToken);
 
 async function getTelegramPlanOptions() {

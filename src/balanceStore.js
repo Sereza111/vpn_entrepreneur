@@ -95,6 +95,38 @@ export async function credit(telegramId, amountMinor) {
   return rec;
 }
 
+/**
+ * Установить баланс абсолютным значением (для импорта из внешнего источника, например XUI expiryTime).
+ * @param {number|string} telegramId
+ * @param {number} balanceMinor
+ * @param {{ billingStartedAt?: number, lastAccruedMs?: number, freeMode?: boolean }} opts
+ */
+export async function setAbsolute(telegramId, balanceMinor, opts = {}) {
+  const tid = String(telegramId);
+  const db = await readJson();
+  const now = Date.now();
+  const nextBal = Math.max(0, Math.floor(Number(balanceMinor) || 0));
+  const existing = db[tid] || { balanceMinor: 0 };
+  const startedAtRaw = Number(opts?.billingStartedAt);
+  const accruedRaw = Number(opts?.lastAccruedMs);
+  const billingStartedAt = Number.isFinite(startedAtRaw) && startedAtRaw > 0 ? startedAtRaw : (existing.billingStartedAt || now);
+  const lastAccruedMs = Number.isFinite(accruedRaw) && accruedRaw > 0 ? accruedRaw : (existing.lastAccruedMs || billingStartedAt);
+
+  const rec = {
+    ...existing,
+    balanceMinor: nextBal,
+    billingStartedAt,
+    lastAccruedMs,
+    suspendedForBilling: nextBal <= 0 ? true : false,
+  };
+  if (opts?.freeMode !== undefined) rec.freeMode = Boolean(opts.freeMode);
+  if (nextBal > 0) rec.suspendedForBilling = false;
+
+  db[tid] = rec;
+  await writeJson(db);
+  return rec;
+}
+
 export async function getRecord(telegramId) {
   const db = await readJson();
   return db[String(telegramId)] || null;

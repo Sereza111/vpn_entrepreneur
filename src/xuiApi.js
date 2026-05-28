@@ -175,6 +175,17 @@ function normalizeClientsFromInbound(inbound) {
   return [];
 }
 
+/**
+ * Вернуть список клиентов из inbound.settings.clients (сырой объект XUI).
+ * Нужен для массового импорта tgId/subId/expiryTime в нашу БД.
+ */
+export async function listInboundClients(inboundId) {
+  const list = await listInbounds();
+  const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
+  if (!inb) return [];
+  return normalizeClientsFromInbound(inb);
+}
+
 function xuiEmailHashHex(telegramId, len = 16) {
   const tid = String(telegramId || "").trim();
   return crypto
