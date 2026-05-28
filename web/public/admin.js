@@ -197,6 +197,8 @@ function bind() {
   const migrateBtn = document.getElementById("migrateBtn");
   const saveServerBtn = document.getElementById("saveServerBtn");
   const deleteServerBtn = document.getElementById("deleteServerBtn");
+  const provisionXuiBtn = document.getElementById("provisionXuiBtn");
+  const balanceReconcileBtn = document.getElementById("balanceReconcileBtn");
   const grantDaysBtn = document.getElementById("grantDaysBtn");
   const creditBtn = document.getElementById("creditBtn");
   const freeOnBtn = document.getElementById("freeOnBtn");
@@ -257,6 +259,37 @@ function bind() {
       cfgEl.value = JSON.stringify(parsed, null, 2);
       return result;
     }).catch(() => null);
+
+  if (provisionXuiBtn) {
+    provisionXuiBtn.onclick = () => {
+      const telegramId = num(document.getElementById("telegramId").value);
+      if (!Number.isFinite(telegramId) || telegramId < 1) {
+        setActionStatus("Введите корректный telegramId", "err");
+        return;
+      }
+      runAction(provisionXuiBtn, "Привязка XUI", () =>
+        api("/api/admin/grant-subscription", {
+          method: "POST",
+          body: JSON.stringify({ telegramId }),
+        }))
+        .catch(() => null);
+    };
+  }
+  if (balanceReconcileBtn) {
+    balanceReconcileBtn.onclick = () => {
+      const telegramId = num(document.getElementById("telegramId").value);
+      if (!Number.isFinite(telegramId) || telegramId < 1) {
+        setActionStatus("Введите корректный telegramId", "err");
+        return;
+      }
+      runAction(balanceReconcileBtn, "Синк баланс → XUI", () =>
+        api("/api/admin/balance-xui-reconcile", {
+          method: "POST",
+          body: JSON.stringify({ telegramId }),
+        }))
+        .catch(() => null);
+    };
+  }
 
   grantDaysBtn.onclick = () => {
     const telegramId = num(document.getElementById("telegramId").value);

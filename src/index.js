@@ -2828,13 +2828,14 @@ app.get("/api/admin/users", adminGrantAuth, async (req, res) => {
 app.post("/api/admin/balance/credit", adminGrantAuth, async (req, res) => {
   const telegramId = Number(req.body?.telegramId || 0);
   const amountMinor = Math.floor(Number(req.body?.amountMinor || 0));
+  const username = req.body?.username != null ? String(req.body.username || "").trim() || null : null;
   if (!Number.isFinite(telegramId) || telegramId < 1) return res.status(400).json({ error: "bad_telegram_id" });
   if (!Number.isFinite(amountMinor) || amountMinor < 1) return res.status(400).json({ error: "bad_amount_minor" });
   try {
     const rec = await balanceStore.credit(telegramId, amountMinor);
-    void maybeReconcileBalanceToXui(telegramId, null);
-    const me = await loadMe(telegramId).catch(() => null);
-    return res.json({ ok: true, telegramId, amountMinor, balanceRecord: rec, data: me });
+    const reconcile = await maybeReconcileBalanceToXui(telegramId, username);
+    const me = await loadMe(telegramId, username).catch(() => null);
+    return res.json({ ok: true, telegramId, amountMinor, balanceRecord: rec, reconcile, data: me });
   } catch (e) {
     return res.status(500).json({ error: String(e?.message || e) });
   }
@@ -2896,20 +2897,23 @@ app.post("/api/admin/grant-days", adminGrantAuth, async (req, res) => {
     return res.status(400).json({ error: "bad_days" });
   }
   try {
+    const provisionResult = await xuiProvisionCore(telegramId, { force: true, username });
     const amountMinor = Math.max(
       1,
       Math.floor(Math.floor(Number(config.balance.hourlyRateMinor || 1)) * 24 * Math.floor(days)),
     );
     const rec = await balanceStore.credit(telegramId, amountMinor);
-    void maybeReconcileBalanceToXui(telegramId, username);
+    const reconcile = await maybeReconcileBalanceToXui(telegramId, username);
     const data = await loadMe(telegramId, username);
     return res.json({
       ok: true,
       telegramId,
+      provisionResult,
       grantedDays: Math.floor(days),
       creditedMinor: amountMinor,
       creditedRub: amountMinor / 100,
       balanceRecord: rec,
+      reconcile,
       data,
     });
   } catch (e) {
