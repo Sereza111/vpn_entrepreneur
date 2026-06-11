@@ -1,6 +1,7 @@
 import { Agent } from "undici";
 import crypto from "crypto";
 import { config } from "./config.js";
+import { loginXuiPanel } from "./integrations/xuiPanelLogin.js";
 import { parsePossiblyConcatenatedJsonText, readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 
 let cachedCookie = null;
@@ -34,30 +35,6 @@ export function getPanelRoot() {
   }
 }
 
-function encodeForm(obj) {
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(obj || {})) {
-    sp.set(k, String(v ?? ""));
-  }
-  return sp.toString();
-}
-
-function pickCookie(setCookieHeaders) {
-  // 3X-UI typically uses session cookies like "3x-ui=...; Path=/; HttpOnly"
-  // We just need "name=value" pairs.
-  const arr = Array.isArray(setCookieHeaders)
-    ? setCookieHeaders
-    : setCookieHeaders
-      ? [setCookieHeaders]
-      : [];
-  const pairs = [];
-  for (const h of arr) {
-    const first = String(h || "").split(";")[0].trim();
-    if (first.includes("=")) pairs.push(first);
-  }
-  return pairs.join("; ");
-}
-
 async function parseResponseJson(res, errorPrefix) {
   return await readXuiApiOrThrow(res, errorPrefix);
 }
@@ -68,33 +45,13 @@ async function xuiLogin() {
     throw new Error("xui_not_configured");
   }
   const dispatcher = getDispatcher();
-  let res;
-  try {
-    res = await fetch(urlJoin(root, "/login"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: encodeForm({ username: config.xui.username, password: config.xui.password }),
-      redirect: "manual",
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-  } catch (e) {
-    const cause = e?.cause?.code || e?.cause?.message || e?.message || e;
-    throw new Error(`xui_login_fetch_failed: ${String(cause)} (root=${root})`);
-  }
-  if (!res.ok && res.status !== 302) {
-    const t = await res.text().catch(() => "");
-    const hint =
-      res.status === 404
-        ? " Проверь XUI_WEB_BASE_PATH: скопируй точный «Web Base Path» из 3X-UI (регистр букв!)."
-        : "";
-    throw new Error(`xui_login_failed: ${res.status} ${t}${hint}`.trim());
-  }
-  const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
-  const cookie = pickCookie(sc);
-  if (!cookie) throw new Error("xui_login_no_cookie");
+  const cookie = await loginXuiPanel({
+    root,
+    username: config.xui.username,
+    password: config.xui.password,
+    dispatcher,
+    errorPrefix: "xui_login",
+  });
   cachedCookie = cookie;
   cookieExpiresAt = Date.now() + 25 * 60 * 1000;
   return cookie;

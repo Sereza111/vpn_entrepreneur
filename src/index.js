@@ -26,6 +26,7 @@ import * as runtimeStateStore from "./runtimeStateStore.js";
 import * as timewebApi from "./timewebApi.js";
 import * as yookassaApi from "./yookassaApi.js";
 import * as adminConfigStore from "./adminConfigStore.js";
+import { loginXuiPanel } from "./integrations/xuiPanelLogin.js";
 import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 import { isActiveSubscriptionProfile, resolveSubscriptionExpiryMs } from "./services/subscriptionState.js";
 import { startDailyUtcJob } from "./jobs/dailyScheduler.js";
@@ -1234,52 +1235,19 @@ function secondaryDispatcher() {
     : undefined;
 }
 
-function encodeForm(obj) {
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(obj || {})) {
-    sp.set(k, String(v ?? ""));
-  }
-  return sp.toString();
-}
-
 async function secondaryLogin() {
   const root = getSecondaryPanelRoot();
   if (!root || !config.xuiSecondary.username || !config.xuiSecondary.password) {
     throw new Error("xui_secondary_not_configured");
   }
   const dispatcher = secondaryDispatcher();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  let res;
-  try {
-    res = await fetch(`${root}/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: encodeForm({
-        username: config.xuiSecondary.username,
-        password: config.xuiSecondary.password,
-      }),
-      redirect: "manual",
-      signal: controller.signal,
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok && res.status !== 302) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_secondary_login_failed: ${res.status} ${t}`.trim());
-  }
-  const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
-  const raw = Array.isArray(sc) ? sc : sc ? [sc] : [];
-  const cookie = raw
-    .map((h) => String(h || "").split(";")[0].trim())
-    .filter((x) => x.includes("="))
-    .join("; ");
-  if (!cookie) throw new Error("xui_secondary_login_no_cookie");
+  const cookie = await loginXuiPanel({
+    root,
+    username: config.xuiSecondary.username,
+    password: config.xuiSecondary.password,
+    dispatcher,
+    errorPrefix: "xui_secondary_login",
+  });
   secondaryCookie = cookie;
   secondaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
   return cookie;
@@ -1357,38 +1325,13 @@ async function tertiaryLogin() {
     throw new Error("xui_tertiary_not_configured");
   }
   const dispatcher = tertiaryDispatcher();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  let res;
-  try {
-    res = await fetch(`${root}/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: encodeForm({
-        username: config.xuiTertiary.username,
-        password: config.xuiTertiary.password,
-      }),
-      redirect: "manual",
-      signal: controller.signal,
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-  if (!res.ok && res.status !== 302) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`xui_tertiary_login_failed: ${res.status} ${t}`.trim());
-  }
-  const sc = res.headers.getSetCookie?.() || res.headers.get("set-cookie");
-  const raw = Array.isArray(sc) ? sc : sc ? [sc] : [];
-  const cookie = raw
-    .map((h) => String(h || "").split(";")[0].trim())
-    .filter((x) => x.includes("="))
-    .join("; ");
-  if (!cookie) throw new Error("xui_tertiary_login_no_cookie");
+  const cookie = await loginXuiPanel({
+    root,
+    username: config.xuiTertiary.username,
+    password: config.xuiTertiary.password,
+    dispatcher,
+    errorPrefix: "xui_tertiary_login",
+  });
   tertiaryCookie = cookie;
   tertiaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
   return cookie;
