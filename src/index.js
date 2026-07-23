@@ -1241,13 +1241,14 @@ async function secondaryLogin() {
     throw new Error("xui_secondary_not_configured");
   }
   const dispatcher = secondaryDispatcher();
-  const cookie = await loginXuiPanel({
+  const session = await loginXuiPanel({
     root,
     username: config.xuiSecondary.username,
     password: config.xuiSecondary.password,
     dispatcher,
     errorPrefix: "xui_secondary_login",
   });
+  const cookie = session && typeof session === "object" ? session.cookie : session;
   secondaryCookie = cookie;
   secondaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
   return cookie;
@@ -1325,13 +1326,14 @@ async function tertiaryLogin() {
     throw new Error("xui_tertiary_not_configured");
   }
   const dispatcher = tertiaryDispatcher();
-  const cookie = await loginXuiPanel({
+  const session = await loginXuiPanel({
     root,
     username: config.xuiTertiary.username,
     password: config.xuiTertiary.password,
     dispatcher,
     errorPrefix: "xui_tertiary_login",
   });
+  const cookie = session && typeof session === "object" ? session.cookie : session;
   tertiaryCookie = cookie;
   tertiaryCookieExpiresAt = Date.now() + 25 * 60 * 1000;
   return cookie;
@@ -1814,14 +1816,20 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     remark,
   });
 
+  const createdSubId = String(
+    created.creds.subIdEffective || created.creds.subId || "",
+  ).trim();
+  if (!createdSubId) {
+    throw new Error("xui_subid_missing_after_create");
+  }
   await xuiStore.linkXuiSubscription({
     telegramId: tid,
-    xuiUrlOrToken: created.creds.subIdEffective || created.creds.subId,
+    xuiUrlOrToken: createdSubId,
     extraXuiUrlOrTokens: existingExtraValues,
   });
   await ensureAllRemoteXuiClients({
     telegramId: tid,
-    subId: String(created.creds.subIdEffective || created.creds.subId),
+    subId: createdSubId,
     baseRemark,
   });
   await runRemarkSync();

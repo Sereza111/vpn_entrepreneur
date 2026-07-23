@@ -102,7 +102,8 @@ export async function fetchXuiCsrfSession(root, { dispatcher } = {}) {
 }
 
 /**
- * @returns {Promise<string>} session Cookie header value
+ * @returns {Promise<string|{cookie:string,csrfToken:string}>}
+ *   string — legacy cookie-only; object — cookie + CSRF for subsequent API POSTs (3X-UI 3.x).
  */
 export async function loginXuiPanel({
   root,
@@ -148,5 +149,7 @@ export async function loginXuiPanel({
   const loginCookie = pickCookie(readSetCookie(res));
   const cookie = mergeCookieHeader(csrfCookies, loginCookie);
   if (!cookie) throw new Error(`${errorPrefix}_no_cookie`);
-  return cookie;
+  // Prefer object so callers can attach CSRF to /panel/api/* POSTs (addClient etc.).
+  // String return kept for any external callers that only need the cookie.
+  return { cookie, csrfToken: csrfToken || "" };
 }

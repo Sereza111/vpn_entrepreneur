@@ -5,6 +5,7 @@ import { loginXuiPanel } from "./integrations/xuiPanelLogin.js";
 import { parsePossiblyConcatenatedJsonText, readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 
 let cachedCookie = null;
+let cachedCsrf = "";
 let cookieExpiresAt = 0;
 
 function getDispatcher() {
@@ -45,16 +46,23 @@ async function xuiLogin() {
     throw new Error("xui_not_configured");
   }
   const dispatcher = getDispatcher();
-  const cookie = await loginXuiPanel({
+  const session = await loginXuiPanel({
     root,
     username: config.xui.username,
     password: config.xui.password,
     dispatcher,
     errorPrefix: "xui_login",
   });
-  cachedCookie = cookie;
+  // loginXuiPanel returns cookie string (legacy) or { cookie, csrfToken }
+  if (session && typeof session === "object" && session.cookie) {
+    cachedCookie = session.cookie;
+    cachedCsrf = String(session.csrfToken || "").trim();
+  } else {
+    cachedCookie = session;
+    cachedCsrf = "";
+  }
   cookieExpiresAt = Date.now() + 25 * 60 * 1000;
-  return cookie;
+  return cachedCookie;
 }
 
 async function xuiCookie() {
@@ -62,14 +70,22 @@ async function xuiCookie() {
   return await xuiLogin();
 }
 
+function applySessionHeaders(headers) {
+  if (cachedCookie) headers.Cookie = cachedCookie;
+  if (cachedCsrf) {
+    headers["X-CSRF-TOKEN"] = cachedCsrf;
+    headers["x-csrf-token"] = cachedCsrf;
+  }
+}
+
 async function xuiFetch(path, { method = "GET", json } = {}) {
   const root = getPanelRoot();
   const dispatcher = getDispatcher();
-  const cookie = await xuiCookie();
+  await xuiCookie();
   const headers = {
     Accept: "application/json",
-    Cookie: cookie,
   };
+  applySessionHeaders(headers);
   if (json !== undefined) headers["Content-Type"] = "application/json";
 
   let res;
@@ -85,10 +101,12 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
     throw new Error(`xui_fetch_failed: ${String(cause)} (url=${urlJoin(root, path)})`);
   }
 
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     cachedCookie = null;
-    const cookie2 = await xuiCookie();
-    headers.Cookie = cookie2;
+    cachedCsrf = "";
+    cookieExpiresAt = 0;
+    await xuiCookie();
+    applySessionHeaders(headers);
     try {
       res = await fetch(urlJoin(root, path), {
         method,
@@ -269,13 +287,32 @@ export async function addClientToInbound({
       settings: JSON.stringify(settings),
     },
   });
-  const data = await parseResponseJson(res, "xui_add_client").catch(() => ({}));
+  // Never swallow API errors: previously .catch(() => ({})) let grant succeed with a
+  // locally generated subId that never existed in 3X-UI → /sub/<id> 404 → upstream_failed.
+  const data = await parseResponseJson(res, "xui_add_client");
+  if (data && typeof data === "object" && data.success === false) {
+    const msg = String(data.msg || data.message || "addClient_rejected").trim();
+    throw new Error(`xui_add_client: ${msg}`);
+  }
+
   const effective = await getClientSubIdFromInbound({
     inboundId,
     telegramId,
     email: creds.email,
   }).catch(() => null);
-  return { ok: true, creds: { ...creds, subIdEffective: effective }, response: data };
+  const subIdEffective = String(effective || "").trim();
+  if (!subIdEffective) {
+    throw new Error(
+      "xui_add_client: client not found in inbound after addClient " +
+        `(inboundId=${inboundId}, telegramId=${telegramId}, expectedSubId=${creds.subId}). ` +
+        "Check XUI_INBOUND_ID, panel credentials, and that addClient actually persists the client.",
+    );
+  }
+  return {
+    ok: true,
+    creds: { ...creds, subId: subIdEffective, subIdEffective },
+    response: data,
+  };
 }
 
 export async function updateClientInInbound({ inboundId, clientId, client }) {
