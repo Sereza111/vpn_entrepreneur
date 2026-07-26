@@ -147,9 +147,36 @@ export async function loginXuiPanel({
   }
 
   const loginCookie = pickCookie(readSetCookie(res));
-  const cookie = mergeCookieHeader(csrfCookies, loginCookie);
+  let cookie = mergeCookieHeader(csrfCookies, loginCookie);
   if (!cookie) throw new Error(`${errorPrefix}_no_cookie`);
+
+  // 3X-UI v3 regenerates the session after successful login. The CSRF token
+  // minted for the anonymous login session is then stale, so fetch the token
+  // again from the authenticated /panel endpoint before any API mutation.
+  // Older panels may not expose this endpoint; in that case keep the token
+  // obtained before login for backwards compatibility.
+  let authenticatedCsrfToken = csrfToken || "";
+  try {
+    const csrfRes = await fetch(urlJoin(root, "/panel/csrf-token"), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Cookie: cookie,
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      redirect: "manual",
+      ...(dispatcher ? { dispatcher } : {}),
+    });
+    cookie = mergeCookieHeader(cookie, pickCookie(readSetCookie(csrfRes)));
+    if (csrfRes.ok) {
+      const text = await csrfRes.text().catch(() => "");
+      const fresh = parseCsrfTokenFromJson(text);
+      if (fresh) authenticatedCsrfToken = fresh;
+    }
+  } catch {
+    // Legacy panel: keep the pre-login token/cookie flow.
+  }
   // Prefer object so callers can attach CSRF to /panel/api/* POSTs (addClient etc.).
   // String return kept for any external callers that only need the cookie.
-  return { cookie, csrfToken: csrfToken || "" };
+  return { cookie, csrfToken: authenticatedCsrfToken };
 }

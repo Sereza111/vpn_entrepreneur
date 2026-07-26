@@ -84,6 +84,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
   await xuiCookie();
   const headers = {
     Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest",
   };
   applySessionHeaders(headers);
   if (json !== undefined) headers["Content-Type"] = "application/json";
