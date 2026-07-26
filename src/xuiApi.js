@@ -76,8 +76,10 @@ async function xuiCookie() {
 function applySessionHeaders(headers) {
   if (cachedCookie) headers.Cookie = cachedCookie;
   if (cachedCsrf) {
-    headers["X-CSRF-TOKEN"] = cachedCsrf;
-    headers["x-csrf-token"] = cachedCsrf;
+    // Header names are case-insensitive. Sending both case variants makes
+    // undici combine them as "token, token", which always fails 3X-UI's
+    // constant-time equality check and results in an empty HTTP 403.
+    headers["X-CSRF-Token"] = cachedCsrf;
   }
 }
 
