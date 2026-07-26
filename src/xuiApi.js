@@ -1,7 +1,10 @@
 import { Agent } from "undici";
 import crypto from "crypto";
 import { config } from "./config.js";
-import { loginXuiPanel } from "./integrations/xuiPanelLogin.js";
+import {
+  fetchAuthenticatedXuiCsrfSession,
+  loginXuiPanel,
+} from "./integrations/xuiPanelLogin.js";
 import { parsePossiblyConcatenatedJsonText, readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 
 let cachedCookie = null;
@@ -78,6 +81,31 @@ function applySessionHeaders(headers) {
   }
 }
 
+async function refreshXuiCsrfToken() {
+  const root = getPanelRoot();
+  if (!root || !cachedCookie) return false;
+  try {
+    const fresh = await fetchAuthenticatedXuiCsrfSession(root, {
+      cookie: cachedCookie,
+      dispatcher: getDispatcher(),
+    });
+    if (fresh.cookies) cachedCookie = fresh.cookies;
+    if (!fresh.ok || !fresh.token) {
+      console.warn("[xui] csrf refresh rejected:", { status: fresh.status, hasToken: false });
+      return false;
+    }
+    cachedCsrf = fresh.token;
+    return true;
+  } catch (e) {
+    console.warn("[xui] csrf refresh failed:", String(e?.message || e));
+    return false;
+  }
+}
+
+async function discardFetchResponse(res) {
+  await res?.arrayBuffer?.().catch(() => {});
+}
+
 async function xuiFetch(path, { method = "GET", json } = {}) {
   const root = getPanelRoot();
   const dispatcher = getDispatcher();
@@ -102,7 +130,29 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
     throw new Error(`xui_fetch_failed: ${String(cause)} (url=${urlJoin(root, path)})`);
   }
 
+  // Match the official 3X-UI v3 SPA: refresh CSRF and retry once on 403.
+  if (res.status === 403) {
+    await discardFetchResponse(res);
+    const refreshed = await refreshXuiCsrfToken();
+    if (refreshed) {
+      applySessionHeaders(headers);
+      try {
+        res = await fetch(urlJoin(root, path), {
+          method,
+          headers,
+          body: json !== undefined ? JSON.stringify(json) : undefined,
+          ...(dispatcher ? { dispatcher } : {}),
+        });
+      } catch (e) {
+        const cause = e?.cause?.code || e?.cause?.message || e?.message || e;
+        throw new Error(`xui_fetch_failed_after_csrf_refresh: ${String(cause)} (url=${urlJoin(root, path)})`);
+      }
+      if (res.status !== 401 && res.status !== 403) return res;
+    }
+  }
+
   if (res.status === 401 || res.status === 403) {
+    await discardFetchResponse(res);
     cachedCookie = null;
     cachedCsrf = "";
     cookieExpiresAt = 0;

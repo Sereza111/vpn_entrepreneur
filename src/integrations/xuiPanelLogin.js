@@ -43,6 +43,28 @@ function readSetCookie(res) {
   return res.headers.getSetCookie?.() || res.headers.get("set-cookie");
 }
 
+/** Получить CSRF-токен уже авторизованной SPA-сессии 3X-UI v3. */
+export async function fetchAuthenticatedXuiCsrfSession(root, { cookie, dispatcher } = {}) {
+  const res = await fetch(urlJoin(root, "/panel/csrf-token"), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      ...(cookie ? { Cookie: cookie } : {}),
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    redirect: "manual",
+    ...(dispatcher ? { dispatcher } : {}),
+  });
+  const cookies = mergeCookieHeader(cookie, pickCookie(readSetCookie(res)));
+  const text = await res.text().catch(() => "");
+  return {
+    ok: res.ok,
+    status: res.status,
+    token: res.ok ? parseCsrfTokenFromJson(text) : "",
+    cookies,
+  };
+}
+
 function parseCsrfTokenFromJson(text) {
   try {
     const j = JSON.parse(String(text || ""));
@@ -157,22 +179,9 @@ export async function loginXuiPanel({
   // obtained before login for backwards compatibility.
   let authenticatedCsrfToken = csrfToken || "";
   try {
-    const csrfRes = await fetch(urlJoin(root, "/panel/csrf-token"), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Cookie: cookie,
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      redirect: "manual",
-      ...(dispatcher ? { dispatcher } : {}),
-    });
-    cookie = mergeCookieHeader(cookie, pickCookie(readSetCookie(csrfRes)));
-    if (csrfRes.ok) {
-      const text = await csrfRes.text().catch(() => "");
-      const fresh = parseCsrfTokenFromJson(text);
-      if (fresh) authenticatedCsrfToken = fresh;
-    }
+    const fresh = await fetchAuthenticatedXuiCsrfSession(root, { cookie, dispatcher });
+    cookie = fresh.cookies || cookie;
+    if (fresh.ok && fresh.token) authenticatedCsrfToken = fresh.token;
   } catch {
     // Legacy panel: keep the pre-login token/cookie flow.
   }
