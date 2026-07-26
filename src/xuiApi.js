@@ -216,6 +216,45 @@ function normalizeClientsFromInbound(inbound) {
   return [];
 }
 
+function normalizeV3ClientRecord(record) {
+  if (!record || typeof record !== "object") return null;
+  const uuid = String(record.uuid || record.id || "").trim();
+  return {
+    ...record,
+    // /clients/get uses numeric `id` for the database row and `uuid` for the
+    // Xray credential. Legacy inbound clients expose that credential as `id`.
+    ...(uuid ? { id: uuid } : {}),
+  };
+}
+
+async function findClientViaV3Api({ inboundId, telegramId }) {
+  const email = stableXuiEmailFromTelegramId(telegramId);
+  let res;
+  try {
+    res = await xuiFetch(`/panel/api/clients/get/${encodeURIComponent(email)}`);
+  } catch {
+    return null;
+  }
+  if (endpointUnavailable(res)) {
+    await discardResponse(res);
+    return null;
+  }
+  let data;
+  try {
+    data = await parseResponseJson(res, "xui_get_client");
+  } catch {
+    return null;
+  }
+  const obj = data?.obj ?? data?.response ?? data;
+  const client = normalizeV3ClientRecord(obj?.client);
+  if (!client) return null;
+  const inboundIds = Array.isArray(obj?.inboundIds)
+    ? obj.inboundIds.map((id) => Number(id)).filter(Number.isFinite)
+    : [];
+  if (Number(inboundId) > 0 && !inboundIds.includes(Number(inboundId))) return null;
+  return { inbound: null, client, inboundIds, api: "clients-v3" };
+}
+
 /**
  * Вернуть список клиентов из inbound.settings.clients (сырой объект XUI).
  * Нужен для массового импорта tgId/subId/expiryTime в нашу БД.
@@ -274,6 +313,11 @@ export function stableXuiEmailFromTelegramId(telegramId) {
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */
 export async function findClientInInbound({ inboundId, telegramId }) {
+  // 3X-UI v3.5 stores clients as first-class rows. The new row is visible via
+  // /clients/get even when /inbounds/list no longer embeds it in settings.
+  const v3 = await findClientViaV3Api({ inboundId, telegramId });
+  if (v3?.client) return v3;
+
   const list = await listInbounds();
   const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
   if (!inb) return null;
