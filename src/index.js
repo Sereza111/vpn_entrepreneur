@@ -665,6 +665,8 @@ app.get("/sub/xui/:token", async (req, res) => {
     const mergedLines = [];
     const seen = new Set();
     let firstHeaders = null;
+    let firstSuccessfulBody = null;
+    let firstBodyWasBase64 = false;
     let okCount = 0;
     let failCount = 0;
     let firstStatus = 500;
@@ -696,6 +698,10 @@ app.get("/sub/xui/:token", async (req, res) => {
         continue;
       }
       if (!firstHeaders) firstHeaders = upstream.headers;
+      if (firstSuccessfulBody === null) {
+        firstSuccessfulBody = tt;
+        firstBodyWasBase64 = isProbablyBase64(tt);
+      }
       okCount += 1;
       for (const line of decodeSubscriptionToLines(tt)) {
         if (seen.has(line)) continue;
@@ -712,8 +718,23 @@ app.get("/sub/xui/:token", async (req, res) => {
     res.setHeader("x-sub-upstreams", `ok=${okCount};fail=${failCount};total=${targets.length}`);
     // Не пробрасываем content-type с панели: часто не совпадает с нашим телом (HAPP/V2 пробуют парсить JSON и ломаются).
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+
+    // Один upstream не нужно декодировать и собирать заново: прозрачный ответ гарантирует,
+    // что ссылка от бота совместима с теми же клиентами, что и прямая ссылка 3X-UI
+    // (включая base64, YAML/JSON и будущие форматы панели).
+    if (
+      targets.length === 1 &&
+      okCount === 1 &&
+      config.xui.subProxyMergeBodyMode === "auto"
+    ) {
+      return res.status(200).send(firstSuccessfulBody ?? "");
+    }
+
     const mergedText = mergedLines.join("\n");
-    const bodyOut = config.xui.subProxyMergeBodyBase64
+    const outputBase64 =
+      config.xui.subProxyMergeBodyMode === "base64" ||
+      (config.xui.subProxyMergeBodyMode === "auto" && firstBodyWasBase64);
+    const bodyOut = outputBase64
       ? Buffer.from(mergedText, "utf8").toString("base64")
       : mergedText;
     return res.status(200).send(bodyOut);
@@ -2246,6 +2267,11 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     });
   } catch (e) {
     const msg = String(e?.message || e);
+    console.error("[xui] provision failed:", {
+      requestId: req.requestId,
+      telegramId: Number(req.tgSession?.sub || req.tgSession?.tg || 0),
+      error: msg,
+    });
     if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
       return res.status(503).json({ error: msg });
     }

@@ -57,12 +57,16 @@ export const config = {
     /** В некоторых клиентах имя узла = remark-email. Здесь можно задать красивый суффикс (например 🇷🇺). */
     clientDisplaySuffix: String(process.env.XUI_CLIENT_DISPLAY_SUFFIX || "🌐").trim(),
     /**
-     * GET /sub/xui/:token — тело ответа после merge:
-     * - plain (по умолчанию): строки подписки, как в доках HAPP («open format»); хорошо для Happ и многих клиентов.
-     * - base64: как классический raw body 3X-UI; включите XUI_SUB_PROXY_BODY_BASE64=1 если нужен старый режим.
+     * GET /sub/xui/:token — формат тела после объединения подписок.
+     * По умолчанию (auto) сохраняем формат первого успешного ответа 3X-UI.
+     * Явные значения: 1/true/base64 или 0/false/plain.
      */
-    subProxyMergeBodyBase64:
-      String(process.env.XUI_SUB_PROXY_BODY_BASE64 || "").toLowerCase().trim() === "1",
+    subProxyMergeBodyMode: (() => {
+      const value = String(process.env.XUI_SUB_PROXY_BODY_BASE64 || "auto").toLowerCase().trim();
+      if (["1", "true", "base64"].includes(value)) return "base64";
+      if (["0", "false", "plain"].includes(value)) return "plain";
+      return "auto";
+    })(),
   },
   xuiSecondary: {
     enabled:
