@@ -122,6 +122,14 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
   return res;
 }
 
+function endpointUnavailable(res) {
+  return res?.status === 404 || res?.status === 405;
+}
+
+async function discardResponse(res) {
+  await res?.arrayBuffer?.().catch(() => {});
+}
+
 export async function listInbounds() {
   const res = await xuiFetch("/panel/api/inbounds/list");
   return await parseResponseJson(res, "xui_list_inbounds");
@@ -131,7 +139,12 @@ export async function listInbounds() {
 export async function getClientTrafficsByEmail(email) {
   const enc = encodeURIComponent(String(email || "").trim());
   if (!enc) throw new Error("xui_email_required");
-  const res = await xuiFetch(`/panel/api/inbounds/getClientTraffics/${enc}`);
+  // 3X-UI v3.5 moved client operations out of /inbounds into /clients.
+  let res = await xuiFetch(`/panel/api/clients/traffic/${enc}`);
+  if (endpointUnavailable(res)) {
+    await discardResponse(res);
+    res = await xuiFetch(`/panel/api/inbounds/getClientTraffics/${enc}`);
+  }
   return await parseResponseJson(res, "xui_get_traffic");
 }
 
@@ -270,23 +283,44 @@ export async function addClientToInbound({
     limitIp,
     totalGB,
     expiryTime,
-    tgId: String(telegramId),
+    // 3X-UI v3.x models tgId as int64. Sending a JSON number is accepted by
+    // both the new /clients/add endpoint and legacy inbound settings.
+    tgId: Number(telegramId),
     subId: creds.subId,
+    security: "auto",
+    reset: 0,
+    comment: "",
   };
   const r = String(remark || "").trim();
-  if (r) clientRow.remark = r;
+  if (r) {
+    clientRow.remark = r;
+    clientRow.comment = r;
+  }
 
   const settings = {
     clients: [clientRow],
   };
 
-  const res = await xuiFetch("/panel/api/inbounds/addClient", {
+  // 3X-UI v3.5 client-first API. It creates the client and attaches it to
+  // the requested inbound in one transaction. Older panels return 404/405,
+  // in which case we retry through the legacy inbound endpoint.
+  let res = await xuiFetch("/panel/api/clients/add", {
     method: "POST",
     json: {
-      id: Number(inboundId),
-      settings: JSON.stringify(settings),
+      client: clientRow,
+      inboundIds: [Number(inboundId)],
     },
   });
+  if (endpointUnavailable(res)) {
+    await discardResponse(res);
+    res = await xuiFetch("/panel/api/inbounds/addClient", {
+      method: "POST",
+      json: {
+        id: Number(inboundId),
+        settings: JSON.stringify(settings),
+      },
+    });
+  }
   // Never swallow API errors: previously .catch(() => ({})) let grant succeed with a
   // locally generated subId that never existed in 3X-UI → /sub/<id> 404 → upstream_failed.
   const data = await parseResponseJson(res, "xui_add_client");
@@ -321,15 +355,25 @@ export async function updateClientInInbound({ inboundId, clientId, client }) {
   if (!cid) throw new Error("xui_client_id_required");
   if (!client || typeof client !== "object") throw new Error("xui_client_required");
 
-  const settings = { clients: [client] };
-  const res = await xuiFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(cid)}`, {
-    method: "POST",
-    json: {
-      id: Number(inboundId),
-      settings: JSON.stringify(settings),
-    },
-  });
-  return await parseResponseJson(res, "xui_update_client").catch(() => ({}));
+  const email = String(client.email || "").trim();
+  let res = email
+    ? await xuiFetch(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
+        method: "POST",
+        json: client,
+      })
+    : null;
+  if (!res || endpointUnavailable(res)) {
+    if (res) await discardResponse(res);
+    const settings = { clients: [client] };
+    res = await xuiFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(cid)}`, {
+      method: "POST",
+      json: {
+        id: Number(inboundId),
+        settings: JSON.stringify(settings),
+      },
+    });
+  }
+  return await parseResponseJson(res, "xui_update_client");
 }
 
 export async function incrementClientLimitIp({ inboundId, telegramId, addSlots = 1, minFloor = 1 }) {

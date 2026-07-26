@@ -2267,6 +2267,11 @@ app.post("/api/xui/provision", authMiddleware, async (req, res) => {
     });
   } catch (e) {
     const msg = String(e?.message || e);
+    console.error("[xui] provision failed:", {
+      requestId: req.requestId,
+      telegramId: Number(req.tgSession?.sub || req.tgSession?.tg || 0),
+      error: msg,
+    });
     if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
       return res.status(503).json({ error: msg });
     }

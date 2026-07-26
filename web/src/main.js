@@ -1668,7 +1668,16 @@ async function boot() {
           const me2 = await api("/api/me", {
             headers: { Authorization: `Bearer ${token}` },
           });
-          if (me2?.xui?.linked && me2?.subscriptionUrl) {
+          // A persisted xui_links token alone does not prove that the client
+          // exists in 3X-UI. PENDING means exactly that stale-link situation.
+          const panelStatus = String(me2?.subscriptionStatus?.panelStatus || "").toUpperCase();
+          if (
+            me2?.xui?.linked &&
+            me2?.subscriptionUrl &&
+            me2?.subscriptionStatus?.source === "xui" &&
+            panelStatus &&
+            panelStatus !== "PENDING"
+          ) {
             showToast("Ссылка восстановлена. Обновляем...");
             setTimeout(() => window.location.reload(), 700);
             return;
