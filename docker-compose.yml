@@ -34,6 +34,8 @@ services:
       XUI_INBOUND_ID: ${XUI_INBOUND_ID}
       XUI_SUB_PATH: ${XUI_SUB_PATH:-/sub}
       XUI_INSECURE_TLS: ${XUI_INSECURE_TLS:-0}
+      # auto сохраняет формат ответа 3X-UI; также можно задать plain/0 или base64/1.
+      XUI_SUB_PROXY_BODY_BASE64: ${XUI_SUB_PROXY_BODY_BASE64:-auto}
       # XUI_CLIENT_REMARK_TEMPLATE: "{subscriptionTitle} · @{username}"
       XUI_CLIENT_DISPLAY_SUFFIX: ${XUI_CLIENT_DISPLAY_SUFFIX:-🌐}
       XUI_EXTRA_BASE_URLS: ${XUI_EXTRA_BASE_URLS:-}
