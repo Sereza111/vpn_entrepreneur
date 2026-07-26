@@ -1211,7 +1211,9 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
     })
     .catch(() => null);
   if (!found?.client) return;
-  const cur = String(found.client.remark ?? found.client.Remark ?? "").trim();
+  const cur = String(
+    found.client.remark ?? found.client.Remark ?? found.client.comment ?? "",
+  ).trim();
   const curEmail = String(found.client.email || "").trim();
   const wantEmail = xui.stableXuiEmailFromTelegramId(telegramId);
   const needsRemarkUpdate = Boolean(want) && cur !== want;
@@ -1223,7 +1225,10 @@ async function syncXuiClientRemarkIfNeeded(telegramId, username) {
   const clientId = String(found.client.id || found.client.ID || "").trim();
   if (!clientId) return;
   const patch = { ...found.client };
-  if (needsRemarkUpdate) patch.remark = want;
+  if (needsRemarkUpdate) {
+    patch.remark = want; // legacy inbound API
+    patch.comment = want; // 3X-UI v3 clients API
+  }
   if (needsEmailSanitize) patch.email = wantEmail;
   await xui.updateClientInInbound({
     inboundId: config.xui.inboundId,
