@@ -385,6 +385,7 @@ export async function addClientToInbound({
     tgId: Number(telegramId),
     subId: creds.subId,
     security: "auto",
+    flow: "xtls-rprx-vision",
     reset: 0,
     comment: "",
   };
