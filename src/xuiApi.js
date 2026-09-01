@@ -227,6 +227,31 @@ function normalizeV3ClientRecord(record) {
   };
 }
 
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (value == null) return [];
+
+  const text = String(value).trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed !== value) return normalizeStringArray(parsed);
+  } catch {
+    // Older 3X-UI versions may return a plain comma-separated string.
+  }
+  return text.split(/[\r\n,]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeClientForWrite(client) {
+  const normalized = { ...client };
+  if (Object.prototype.hasOwnProperty.call(normalized, "allowedIPs")) {
+    normalized.allowedIPs = normalizeStringArray(normalized.allowedIPs);
+  }
+  return normalized;
+}
+
 async function findClientViaV3Api({ inboundId, telegramId }) {
   const email = stableXuiEmailFromTelegramId(telegramId);
   let res;
@@ -453,16 +478,17 @@ export async function updateClientInInbound({ inboundId, clientId, client }) {
   if (!cid) throw new Error("xui_client_id_required");
   if (!client || typeof client !== "object") throw new Error("xui_client_required");
 
-  const email = String(client.email || "").trim();
+  const normalizedClient = normalizeClientForWrite(client);
+  const email = String(normalizedClient.email || "").trim();
   let res = email
     ? await xuiFetch(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
         method: "POST",
-        json: client,
+        json: normalizedClient,
       })
     : null;
   if (!res || endpointUnavailable(res)) {
     if (res) await discardResponse(res);
-    const settings = { clients: [client] };
+    const settings = { clients: [normalizedClient] };
     res = await xuiFetch(`/panel/api/inbounds/updateClient/${encodeURIComponent(cid)}`, {
       method: "POST",
       json: {
