@@ -54,6 +54,7 @@ export async function fetchAuthenticatedXuiCsrfSession(root, { cookie, dispatche
     },
     redirect: "manual",
     ...(dispatcher ? { dispatcher } : {}),
+    signal: AbortSignal.timeout(15000),
   });
   const cookies = mergeCookieHeader(cookie, pickCookie(readSetCookie(res)));
   const text = await res.text().catch(() => "");
@@ -96,6 +97,7 @@ export async function fetchXuiCsrfSession(root, { dispatcher } = {}) {
     redirect: "follow",
     headers: { Accept: "application/json, text/html;q=0.9,*/*;q=0.8" },
     ...(dispatcher ? { dispatcher } : {}),
+    signal: AbortSignal.timeout(15000),
     ...extra,
   });
 
@@ -151,6 +153,7 @@ export async function loginXuiPanel({
       body: encodeForm({ username, password }),
       redirect: "manual",
       ...(dispatcher ? { dispatcher } : {}),
+      signal: AbortSignal.timeout(15000),
     });
   } catch (e) {
     const cause = e?.cause?.code || e?.cause?.message || e?.message || e;
