@@ -27,6 +27,10 @@ export const config = {
     primary: "xui",
   },
   mtproto: {
+    // Full URL of a separate 3X-UI panel, including its web base path.
+    // Empty uses the primary XUI panel as before.
+    panelBaseUrl: String(process.env.XUI_MTPROTO_PANEL_BASE_URL || "").trim(),
+    apiToken: String(process.env.XUI_MTPROTO_API_TOKEN || "").trim(),
     inboundId: Number(process.env.XUI_MTPROTO_INBOUND_ID || 0),
     email: String(process.env.XUI_MTPROTO_SHARED_EMAIL || "").trim(),
     host: String(process.env.XUI_MTPROTO_PUBLIC_HOST || "").trim(),

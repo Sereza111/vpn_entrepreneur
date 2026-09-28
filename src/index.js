@@ -1115,6 +1115,7 @@ async function loadMe(telegramId, username = null) {
     subscriptionUi,
     proxy: proxyPayload,
     mtproto,
+    mtprotoConfigured: Boolean(config.mtproto.inboundId && config.mtproto.email && config.mtproto.host),
     proxyServers: proxyServers.map((s) => ({
       id: s.id,
       country: s.country,

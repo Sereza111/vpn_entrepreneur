@@ -7,7 +7,7 @@ import {
 } from "./integrations/xuiPanelLogin.js";
 import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
 import { parsePanelObject, selectProvisioningInbounds, clientFlowForInbounds } from "./integrations/xuiClients.js";
-import { sharedMtprotoFromInbounds } from "./integrations/mtproto.js";
+import { createMtprotoReader } from "./integrations/mtprotoPanel.js";
 
 let cachedCookie = null;
 let cachedCsrf = "";
@@ -194,15 +194,7 @@ export async function listInbounds() {
   return await parseResponseJson(res, "xui_list_inbounds");
 }
 
-let sharedMtprotoCache;
-export async function getSharedMtproto() {
-  if (!config.mtproto.inboundId || !config.mtproto.email || !config.mtproto.host) return null;
-  if (sharedMtprotoCache?.until > Date.now()) return sharedMtprotoCache.promise;
-  const promise = listInbounds().then((data) => sharedMtprotoFromInbounds(data.obj || [], config.mtproto));
-  sharedMtprotoCache = { until: Date.now() + 30_000, promise };
-  try { return await promise; }
-  catch (error) { sharedMtprotoCache = null; throw error; }
-}
+export const getSharedMtproto = createMtprotoReader({ settings: config.mtproto, readPrimaryInbounds: listInbounds });
 
 /** Статистика трафика клиента по email (как в панели). */
 export async function getClientTrafficsByEmail(email) {

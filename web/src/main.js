@@ -141,7 +141,9 @@ function mtprotoCardHtml(me) {
   const servers = Array.isArray(me?.proxyServers) ? me.proxyServers : [];
   const first = servers.find((s) => s?.mtproto?.secret && s?.mtproto?.host && s?.mtproto?.port) || null;
   const links = buildMtprotoLinks(me?.mtproto || first?.mtproto);
-  if (!links) return "";
+  if (!links) return me?.mtprotoConfigured
+    ? `<div class="proxy-service-card"><div class="proxy-service-card__title">MTProto (Telegram)</div><p class="muted" role="status">Telegram-прокси временно недоступен. Попробуйте обновить экран позже.</p></div>`
+    : "";
   return `
     <div class="proxy-service-card" style="margin-top:12px">
       <div class="proxy-service-card__head">
