@@ -6,7 +6,12 @@ import {
   loginXuiPanel,
 } from "./integrations/xuiPanelLogin.js";
 import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
-import { parsePanelObject, selectProvisioningInbounds, clientFlowForInbounds } from "./integrations/xuiClients.js";
+import {
+  parsePanelObject,
+  resolveProvisioningInboundIds,
+  selectProvisioningInbounds,
+  clientFlowForInbounds,
+} from "./integrations/xuiClients.js";
 import { createMtprotoReader } from "./integrations/mtprotoPanel.js";
 
 let cachedCookie = null;
@@ -361,7 +366,12 @@ export async function findClientInInbound({ inboundId, telegramId, allowUnattach
 
 export async function getProvisioningInbounds(inboundIds = config.xui.inboundIds) {
   const list = await listInbounds();
-  return selectProvisioningInbounds(list.obj || [], inboundIds);
+  const rows = list.obj || [];
+  const resolvedIds = resolveProvisioningInboundIds(rows, inboundIds, {
+    autoDiscover: config.xui.autoDiscoverInbounds,
+    excludedIds: config.xui.inboundExcludeIds,
+  });
+  return selectProvisioningInbounds(rows, resolvedIds);
 }
 
 export async function ensureClientInbounds({ found, inbounds }) {
@@ -382,8 +392,12 @@ export async function ensureClientInbounds({ found, inbounds }) {
     const inbound = list.obj?.find((row) => Number(row.id) === id);
     const existing = normalizeClientsFromInbound(inbound).find((c) => c.email === found.client.email);
     if (existing) continue;
+    const client = normalizeClientForWrite(found.client);
+    if (String(inbound?.protocol || "").toLowerCase() === "hysteria" && !client.auth) {
+      client.auth = crypto.randomBytes(16).toString("hex");
+    }
     const added = await xuiFetch("/panel/api/inbounds/addClient", {
-      method: "POST", json: { id, settings: JSON.stringify({ clients: [normalizeClientForWrite(found.client)] }) },
+      method: "POST", json: { id, settings: JSON.stringify({ clients: [client] }) },
     });
     await parseResponseJson(added, "xui_attach_client");
   }
@@ -411,7 +425,8 @@ export function generateClientCreds({ telegramId }) {
   // Using UUID here can lead to 400 errors on /sub/<id> on some builds.
   const subId = crypto.randomBytes(8).toString("hex"); // 16 chars
   const email = stableXuiEmailFromTelegramId(telegramId);
-  return { id, subId, email };
+  const auth = crypto.randomBytes(16).toString("hex");
+  return { id, subId, email, auth };
 }
 
 export async function addClientToInbound({
@@ -425,6 +440,7 @@ export async function addClientToInbound({
 }) {
   if (!inboundId) throw new Error("xui_inbound_id_required");
   const inbounds = await getProvisioningInbounds(inboundIds);
+  const provisioningInboundIds = inbounds.map((row) => Number(row.id));
   const creds = generateClientCreds({ telegramId });
 
   // 3X-UI expects settings as a JSON string containing { clients: [...] }
@@ -439,6 +455,7 @@ export async function addClientToInbound({
     // both the new /clients/add endpoint and legacy inbound settings.
     tgId: Number(telegramId),
     subId: creds.subId,
+    auth: creds.auth,
     security: "auto",
     flow: clientFlowForInbounds(inbounds),
     reset: 0,
@@ -461,7 +478,7 @@ export async function addClientToInbound({
     method: "POST",
     json: {
       client: clientRow,
-      inboundIds,
+      inboundIds: provisioningInboundIds,
     },
   });
   if (endpointUnavailable(res)) {

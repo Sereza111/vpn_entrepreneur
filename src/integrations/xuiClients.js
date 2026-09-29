@@ -11,19 +11,43 @@ export function parsePanelObject(value) {
   try { return JSON.parse(String(value || "{}")); } catch { return null; }
 }
 
+const provisioningProtocols = new Set(["vless", "hysteria"]);
+
+export function resolveProvisioningInboundIds(
+  rows,
+  configuredIds,
+  { autoDiscover = false, excludedIds = [] } = {},
+) {
+  const excluded = new Set(excludedIds.map(Number));
+  const ids = configuredIds.map(Number);
+  if (autoDiscover) {
+    for (const row of rows) {
+      const id = Number(row?.id);
+      const protocol = String(row?.protocol || "").toLowerCase();
+      if (!id || row?.enable === false || excluded.has(id) || !provisioningProtocols.has(protocol)) {
+        continue;
+      }
+      ids.push(id);
+    }
+  }
+  return [...new Set(ids)];
+}
+
 export function selectProvisioningInbounds(rows, ids) {
   if (!ids.length) throw new Error("xui_inbound_id_required");
   return ids.map((id) => {
     const inbound = rows.find((row) => Number(row.id) === id);
     if (!inbound) throw new Error(`xui_inbound_not_found: ${id}`);
     if (inbound.enable === false) throw new Error(`xui_inbound_disabled: ${id}`);
-    if (inbound.protocol !== "vless") throw new Error(`xui_inbound_protocol_unsupported: ${id}`);
+    if (!provisioningProtocols.has(String(inbound.protocol || "").toLowerCase())) {
+      throw new Error(`xui_inbound_protocol_unsupported: ${id}`);
+    }
     return inbound;
   });
 }
 
 export function clientFlowForInbounds(inbounds) {
-  return inbounds.every((inbound) => {
+  return inbounds.some((inbound) => {
     const stream = parsePanelObject(inbound.streamSettings);
     return inbound.protocol === "vless" && ["tcp", "raw"].includes(stream?.network) &&
       ["reality", "tls"].includes(stream?.security);

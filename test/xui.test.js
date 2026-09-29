@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
-import { parseInboundIds, xuiSubscriptionStatus, clientFlowForInbounds } from "../src/integrations/xuiClients.js";
+import {
+  parseInboundIds,
+  resolveProvisioningInboundIds,
+  selectProvisioningInbounds,
+  xuiSubscriptionStatus,
+  clientFlowForInbounds,
+} from "../src/integrations/xuiClients.js";
 import { createKeyedLock } from "../src/services/keyedLock.js";
 
 test("panel upgrade: provision, recover attachments and preserve identity", async (t) => {
@@ -11,10 +17,14 @@ test("panel upgrade: provision, recover attachments and preserve identity", asyn
     state = { modern: true, rows: [], adds: 0, failLookup: false, csrf: "session-csrf", rejectOnce: false };
   };
   reset();
-  const inbounds = () => [3, 4].map((id) => ({
-    id, protocol: "vless", enable: true,
-    settings: { clients: state.rows.filter((r) => r.inboundIds.includes(id)).map((r) => r.client) },
-    streamSettings: { network: "tcp", security: "reality" },
+  const inbounds = () => [
+    { id: 3, protocol: "vless", enable: true, streamSettings: { network: "tcp", security: "reality" } },
+    { id: 4, protocol: "vless", enable: true, streamSettings: { network: "tcp", security: "reality" } },
+    { id: 7, protocol: "vless", enable: true, streamSettings: { network: "xhttp", security: "reality" } },
+    { id: 9, protocol: "hysteria", enable: true, streamSettings: { network: "hysteria", security: "tls" } },
+  ].map((row) => ({
+    ...row,
+    settings: { clients: state.rows.filter((r) => r.inboundIds.includes(row.id)).map((r) => r.client) },
   }));
   const server = http.createServer(async (req, res) => {
     let body = ""; for await (const chunk of req) body += chunk;
@@ -36,7 +46,8 @@ test("panel upgrade: provision, recover attachments and preserve identity", asyn
     if (path === "/panel/api/clients/add") {
       const payload = JSON.parse(body); state.adds++;
       assert.equal(typeof payload.client.tgId, "number");
-      assert.deepEqual(payload.inboundIds, [3, 4]);
+      assert.deepEqual(payload.inboundIds, [3, 4, 7, 9]);
+      assert.match(payload.client.auth, /^[a-f0-9]{32}$/);
       const client = { ...payload.client, uuid: payload.client.id, id: 123, allowedIPs: "[]" };
       state.rows.push({ client, inboundIds: payload.inboundIds });
       return send({ success: true });
@@ -63,6 +74,7 @@ test("panel upgrade: provision, recover attachments and preserve identity", asyn
     BOT_TOKEN: "test", WEB_APP_URL: "http://localhost/app/", SESSION_JWT_SECRET: "test",
     XUI_PANEL_BASE_URL: `http://127.0.0.1:${server.address().port}`,
     XUI_USERNAME: "test", XUI_PASSWORD: "test", XUI_INBOUND_IDS: "3,4",
+    XUI_AUTO_DISCOVER_INBOUNDS: "1",
   });
   const api = await import("../src/xuiApi.js");
   await t.test("creates one identity on both routes and normalizes v3 update payload", async () => {
@@ -81,7 +93,7 @@ test("panel upgrade: provision, recover attachments and preserve identity", asyn
     const found = await api.findClientInInbound({ inboundId: 3, telegramId: 90001, allowUnattached: true });
     await api.ensureClientInbounds({ found, inbounds: await api.getProvisioningInbounds() });
     await api.ensureClientInbounds({ found: await api.findClientInInbound({ inboundId: 3, telegramId: 90001 }), inbounds: await api.getProvisioningInbounds() });
-    assert.deepEqual(row.inboundIds, [77, 3, 4]);
+    assert.deepEqual(row.inboundIds, [77, 3, 4, 7, 9]);
     assert.deepEqual(row.client, before);
     assert.equal(state.adds, 1);
   });
@@ -102,7 +114,7 @@ test("panel upgrade: provision, recover attachments and preserve identity", asyn
   });
   await t.test("refreshes CSRF after a 403 without duplicating the header", async () => {
     state.csrf = "rotated-csrf";
-    assert.equal((await api.listInbounds()).obj.length, 2);
+    assert.equal((await api.listInbounds()).obj.length, 4);
   });
 });
 
@@ -118,6 +130,27 @@ test("explicit inbound IDs and gRPC flow selection", () => {
   assert.deepEqual(parseInboundIds("3,4,3"), [3,4]);
   assert.throws(() => parseInboundIds("3,garbage"));
   assert.equal(clientFlowForInbounds([{ protocol: "vless", streamSettings: '{"network":"grpc","security":"tls"}' }]), "");
+});
+
+test("automatic provisioning selects enabled VLESS and Hysteria inbounds", () => {
+  const rows = [
+    { id: 3, protocol: "vless", enable: true },
+    { id: 7, protocol: "vless", enable: true },
+    { id: 9, protocol: "hysteria", enable: true },
+    { id: 11, protocol: "mtproto", enable: true },
+    { id: 12, protocol: "vless", enable: false },
+  ];
+  const ids = resolveProvisioningInboundIds(rows, [3], {
+    autoDiscover: true,
+    excludedIds: [7],
+  });
+  assert.deepEqual(ids, [3, 9]);
+  assert.deepEqual(selectProvisioningInbounds(rows, ids).map((row) => row.id), [3, 9]);
+  assert.equal(clientFlowForInbounds([
+    { protocol: "vless", streamSettings: { network: "tcp", security: "reality" } },
+    { protocol: "vless", streamSettings: { network: "xhttp", security: "reality" } },
+    { protocol: "hysteria", streamSettings: { network: "hysteria", security: "tls" } },
+  ]), "xtls-rprx-vision");
 });
 
 test("concurrent provision attempts are serialized and failures release the lock", async () => {

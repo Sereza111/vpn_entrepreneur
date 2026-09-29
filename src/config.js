@@ -2,6 +2,7 @@ import "dotenv/config";
 import { parseInboundIds } from "./integrations/xuiClients.js";
 
 const xuiInboundIds = parseInboundIds(process.env.XUI_INBOUND_IDS || process.env.XUI_INBOUND_ID);
+const xuiInboundExcludeIds = parseInboundIds(process.env.XUI_INBOUND_EXCLUDE_IDS);
 
 function req(name) {
   const v = process.env[name];
@@ -49,6 +50,11 @@ export const config = {
     password: process.env.XUI_PASSWORD || "",
     inboundId: xuiInboundIds[0] || 0,
     inboundIds: xuiInboundIds,
+    autoDiscoverInbounds: (() => {
+      const value = String(process.env.XUI_AUTO_DISCOVER_INBOUNDS ?? "1").trim().toLowerCase();
+      return !["0", "false", "no"].includes(value);
+    })(),
+    inboundExcludeIds: xuiInboundExcludeIds,
     // Subscription path root on subscription host.
     // Usually "/sub" (or custom if you changed "Корневой путь URL-адреса подписки" in 3X-UI).
     subPath: process.env.XUI_SUB_PATH || "/sub",
