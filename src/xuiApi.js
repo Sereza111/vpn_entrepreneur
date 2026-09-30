@@ -5,15 +5,23 @@ import {
   fetchAuthenticatedXuiCsrfSession,
   loginXuiPanel,
 } from "./integrations/xuiPanelLogin.js";
-import { parsePossiblyConcatenatedJsonText, readXuiApiOrThrow } from "./integrations/xuiResponse.js";
+import { readXuiApiOrThrow } from "./integrations/xuiResponse.js";
+import {
+  parsePanelObject,
+  resolveProvisioningInboundIds,
+  selectProvisioningInbounds,
+  clientFlowForInbounds,
+} from "./integrations/xuiClients.js";
+import { createMtprotoReader } from "./integrations/mtprotoPanel.js";
 
 let cachedCookie = null;
 let cachedCsrf = "";
 let cookieExpiresAt = 0;
+let insecureDispatcher;
 
 function getDispatcher() {
   return config.xui.insecureTls
-    ? new Agent({ connect: { rejectUnauthorized: false } })
+    ? (insecureDispatcher ||= new Agent({ connect: { rejectUnauthorized: false } }))
     : undefined;
 }
 
@@ -125,6 +133,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
       method,
       headers,
       body: json !== undefined ? JSON.stringify(json) : undefined,
+      signal: AbortSignal.timeout(15000),
       ...(dispatcher ? { dispatcher } : {}),
     });
   } catch (e) {
@@ -143,6 +152,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
           method,
           headers,
           body: json !== undefined ? JSON.stringify(json) : undefined,
+          signal: AbortSignal.timeout(15000),
           ...(dispatcher ? { dispatcher } : {}),
         });
       } catch (e) {
@@ -165,6 +175,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
         method,
         headers,
         body: json !== undefined ? JSON.stringify(json) : undefined,
+        signal: AbortSignal.timeout(15000),
         ...(dispatcher ? { dispatcher } : {}),
       });
     } catch (e) {
@@ -188,6 +199,8 @@ export async function listInbounds() {
   return await parseResponseJson(res, "xui_list_inbounds");
 }
 
+export const getSharedMtproto = createMtprotoReader({ settings: config.mtproto, readPrimaryInbounds: listInbounds });
+
 /** Статистика трафика клиента по email (как в панели). */
 export async function getClientTrafficsByEmail(email) {
   const enc = encodeURIComponent(String(email || "").trim());
@@ -202,11 +215,7 @@ export async function getClientTrafficsByEmail(email) {
 }
 
 function safeJsonParse(s) {
-  try {
-    return JSON.parse(String(s || ""));
-  } catch {
-    return null;
-  }
+  return parsePanelObject(s);
 }
 
 function normalizeClientsFromInbound(inbound) {
@@ -252,31 +261,25 @@ function normalizeClientForWrite(client) {
   return normalized;
 }
 
-async function findClientViaV3Api({ inboundId, telegramId }) {
-  const email = stableXuiEmailFromTelegramId(telegramId);
-  let res;
-  try {
-    res = await xuiFetch(`/panel/api/clients/get/${encodeURIComponent(email)}`);
-  } catch {
-    return null;
-  }
+async function findClientViaV3Api({ inboundId, telegramId, allowUnattached = false }) {
+  const res = await xuiFetch(`/panel/api/clients/get/tgId/${encodeURIComponent(telegramId)}`);
   if (endpointUnavailable(res)) {
     await discardResponse(res);
     return null;
   }
-  let data;
-  try {
-    data = await parseResponseJson(res, "xui_get_client");
-  } catch {
-    return null;
-  }
-  const obj = data?.obj ?? data?.response ?? data;
+  const data = await parseResponseJson(res, "xui_get_client");
+  const rows = data?.obj ?? data?.response ?? data;
+  if (!Array.isArray(rows)) throw new Error("xui_get_client: invalid response");
+  const attached = rows.filter((row) => row.inboundIds?.map(Number).includes(Number(inboundId)));
+  const candidates = attached.length ? attached : allowUnattached ? rows : [];
+  const obj = candidates.find((row) => row.client?.email === stableXuiEmailFromTelegramId(telegramId)) ||
+    (candidates.length === 1 ? candidates[0] : null);
+  if (!obj && candidates.length > 1) throw new Error("xui_ambiguous_client");
   const client = normalizeV3ClientRecord(obj?.client);
   if (!client) return null;
   const inboundIds = Array.isArray(obj?.inboundIds)
     ? obj.inboundIds.map((id) => Number(id)).filter(Number.isFinite)
     : [];
-  if (Number(inboundId) > 0 && !inboundIds.includes(Number(inboundId))) return null;
   return { inbound: null, client, inboundIds, api: "clients-v3" };
 }
 
@@ -337,15 +340,15 @@ export function stableXuiEmailFromTelegramId(telegramId) {
 }
 
 /** Первый клиент в инбаунде с этим Telegram (по tgId / стабильному email). */
-export async function findClientInInbound({ inboundId, telegramId }) {
+export async function findClientInInbound({ inboundId, telegramId, allowUnattached = false }) {
   // 3X-UI v3.5 stores clients as first-class rows. The new row is visible via
   // /clients/get even when /inbounds/list no longer embeds it in settings.
-  const v3 = await findClientViaV3Api({ inboundId, telegramId });
+  const v3 = await findClientViaV3Api({ inboundId, telegramId, allowUnattached });
   if (v3?.client) return v3;
 
   const list = await listInbounds();
   const inb = list?.obj?.find?.((x) => Number(x?.id) === Number(inboundId)) || null;
-  if (!inb) return null;
+  if (!inb) throw new Error(`xui_inbound_not_found: ${inboundId}`);
   const clients = normalizeClientsFromInbound(inb);
   const tid = String(telegramId);
   const emailStable = stableXuiEmailFromTelegramId(telegramId);
@@ -358,7 +361,46 @@ export async function findClientInInbound({ inboundId, telegramId }) {
     clients.find((c) => String(c?.email || "").startsWith(`${emailStable}_`)) ||
     null;
   if (!pick) return null;
-  return { inbound: inb, client: pick };
+  return { inbound: inb, client: pick, inboundIds: [Number(inboundId)] };
+}
+
+export async function getProvisioningInbounds(inboundIds = config.xui.inboundIds) {
+  const list = await listInbounds();
+  const rows = list.obj || [];
+  const resolvedIds = resolveProvisioningInboundIds(rows, inboundIds, {
+    autoDiscover: config.xui.autoDiscoverInbounds,
+    excludedIds: config.xui.inboundExcludeIds,
+  });
+  return selectProvisioningInbounds(rows, resolvedIds);
+}
+
+export async function ensureClientInbounds({ found, inbounds }) {
+  const ids = inbounds.map((row) => Number(row.id));
+  const missing = ids.filter((id) => !found.inboundIds?.includes(id));
+  if (!missing.length) return;
+  const res = await xuiFetch(`/panel/api/clients/${encodeURIComponent(found.client.email)}/attach`, {
+    method: "POST", json: { inboundIds: missing },
+  });
+  if (!endpointUnavailable(res)) {
+    await parseResponseJson(res, "xui_attach_client");
+    return;
+  }
+  await discardResponse(res);
+  // Legacy panels keep credentials inside each inbound. Preserve those credentials.
+  const list = await listInbounds();
+  for (const id of missing) {
+    const inbound = list.obj?.find((row) => Number(row.id) === id);
+    const existing = normalizeClientsFromInbound(inbound).find((c) => c.email === found.client.email);
+    if (existing) continue;
+    const client = normalizeClientForWrite(found.client);
+    if (String(inbound?.protocol || "").toLowerCase() === "hysteria" && !client.auth) {
+      client.auth = crypto.randomBytes(16).toString("hex");
+    }
+    const added = await xuiFetch("/panel/api/inbounds/addClient", {
+      method: "POST", json: { id, settings: JSON.stringify({ clients: [client] }) },
+    });
+    await parseResponseJson(added, "xui_attach_client");
+  }
 }
 
 export async function getClientSubIdFromInbound({ inboundId, telegramId, email }) {
@@ -383,11 +425,13 @@ export function generateClientCreds({ telegramId }) {
   // Using UUID here can lead to 400 errors on /sub/<id> on some builds.
   const subId = crypto.randomBytes(8).toString("hex"); // 16 chars
   const email = stableXuiEmailFromTelegramId(telegramId);
-  return { id, subId, email };
+  const auth = crypto.randomBytes(16).toString("hex");
+  return { id, subId, email, auth };
 }
 
 export async function addClientToInbound({
   inboundId,
+  inboundIds = [Number(inboundId)],
   telegramId,
   totalGB = 0,
   expiryTime = 0,
@@ -395,6 +439,8 @@ export async function addClientToInbound({
   remark = "",
 }) {
   if (!inboundId) throw new Error("xui_inbound_id_required");
+  const inbounds = await getProvisioningInbounds(inboundIds);
+  const provisioningInboundIds = inbounds.map((row) => Number(row.id));
   const creds = generateClientCreds({ telegramId });
 
   // 3X-UI expects settings as a JSON string containing { clients: [...] }
@@ -409,8 +455,9 @@ export async function addClientToInbound({
     // both the new /clients/add endpoint and legacy inbound settings.
     tgId: Number(telegramId),
     subId: creds.subId,
+    auth: creds.auth,
     security: "auto",
-    flow: "xtls-rprx-vision",
+    flow: clientFlowForInbounds(inbounds),
     reset: 0,
     comment: "",
   };
@@ -431,7 +478,7 @@ export async function addClientToInbound({
     method: "POST",
     json: {
       client: clientRow,
-      inboundIds: [Number(inboundId)],
+      inboundIds: provisioningInboundIds,
     },
   });
   if (endpointUnavailable(res)) {
@@ -452,6 +499,9 @@ export async function addClientToInbound({
     throw new Error(`xui_add_client: ${msg}`);
   }
 
+  const found = await findClientInInbound({ inboundId, telegramId });
+  if (found) await ensureClientInbounds({ found, inbounds });
+
   const effective = await getClientSubIdFromInbound({
     inboundId,
     telegramId,
@@ -461,7 +511,7 @@ export async function addClientToInbound({
   if (!subIdEffective) {
     throw new Error(
       "xui_add_client: client not found in inbound after addClient " +
-        `(inboundId=${inboundId}, telegramId=${telegramId}, expectedSubId=${creds.subId}). ` +
+        `(inboundId=${inboundId}). ` +
         "Check XUI_INBOUND_ID, panel credentials, and that addClient actually persists the client.",
     );
   }

@@ -12,6 +12,8 @@ import { validateWebAppInitData } from "./telegramWebApp.js";
 import { signSession, verifySession } from "./session.js";
 import * as xuiStore from "./xuiLinksStore.js";
 import * as xui from "./xuiApi.js";
+import { xuiSubscriptionStatus } from "./integrations/xuiClients.js";
+import { createKeyedLock } from "./services/keyedLock.js";
 import * as proxyStore from "./proxyStore.js";
 import {
   ensureProxyUserOnServer,
@@ -967,21 +969,7 @@ async function loadMe(telegramId, username = null) {
         }
         const trJson = await xui.getClientTrafficsByEmail(email);
         const t = trJson?.obj ?? trJson?.response ?? trJson;
-        const up = Number(t?.up ?? 0);
-        const down = Number(t?.down ?? 0);
-        const client = found.client;
-        const totalGb = Number(client.totalGB ?? client.totalGb ?? 0);
-        const expMs = Number(client.expiryTime ?? 0);
-        const limitIp = Number(client.limitIp ?? 0);
-        subscriptionStatus = {
-          source: "xui",
-          username: email,
-          panelStatus: client.enable === false ? "DISABLED" : "ACTIVE",
-          expireAt: expMs > 0 ? new Date(expMs).toISOString() : null,
-          usedTrafficBytes: up + down,
-          trafficLimitBytes: totalGb > 0 ? Math.round(totalGb * 1024 * 1024 * 1024) : 0,
-          ipLimit: Number.isFinite(limitIp) ? limitIp : null,
-        };
+        subscriptionStatus = xuiSubscriptionStatus(found.client, t);
       } else if (xuiLink) {
         subscriptionStatus = {
           source: "xui",
@@ -1010,6 +998,7 @@ async function loadMe(telegramId, username = null) {
     : { linked: false };
 
   const proxyServers = await getProxyServersConfig();
+  const mtproto = await xui.getSharedMtproto().catch(() => null);
   const proxyRec = await proxyStore.getProxyByTelegramId(telegramId);
   const remaining = proxyStore.computeProxyRemaining(proxyRec);
   const proxyItems = Array.isArray(proxyRec?.items) ? proxyRec.items : [];
@@ -1125,6 +1114,8 @@ async function loadMe(telegramId, username = null) {
     subscriptionStatus,
     subscriptionUi,
     proxy: proxyPayload,
+    mtproto,
+    mtprotoConfigured: Boolean(config.mtproto.inboundId && config.mtproto.email && config.mtproto.host),
     proxyServers: proxyServers.map((s) => ({
       id: s.id,
       country: s.country,
@@ -1758,7 +1749,12 @@ async function ensureAllRemoteXuiClients(args, { strict = false } = {}) {
  * Создаёт клиента в 3X-UI (если нет) и привязывает subId в боте.
  * @returns {"already_linked"|"reused"|"created"}
  */
-async function xuiProvisionCore(telegramId, { force, username }) {
+const withProvisionLock = createKeyedLock();
+async function xuiProvisionCore(telegramId, options) {
+  return withProvisionLock(String(telegramId), () => provisionXuiClient(telegramId, options));
+}
+
+async function provisionXuiClient(telegramId, { username }) {
   const tid = Number(telegramId);
   if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
     throw new Error("xui_not_configured");
@@ -1776,39 +1772,12 @@ async function xuiProvisionCore(telegramId, { force, username }) {
     ? existing.extraLinks.map((x) => x?.value).filter(Boolean)
     : [];
   const baseRemark = buildXuiClientRemark(tid, username, null);
-  if (existing && !force) {
-    // Even if already linked, keep NL in sync when secondary is enabled.
-    const subId = extractSubIdFromStoredLink(existing);
-    if (subId) {
-      await ensureAllRemoteXuiClients({
-        telegramId: tid,
-        subId,
-        baseRemark,
-      });
-    }
-    await runRemarkSync();
-    return "already_linked";
-  }
-
-  const found = await xui
-    .findClientInInbound({
-      inboundId: config.xui.inboundId,
-      telegramId: tid,
-    })
-    .catch(() => null);
+  const inbounds = await xui.getProvisioningInbounds();
+  const found = await xui.findClientInInbound({
+    inboundId: config.xui.inboundId, telegramId: tid, allowUnattached: true,
+  });
   if (found?.client) {
-    const currentLimitIp = Number(found.client.limitIp ?? 0);
-    if (!Number.isFinite(currentLimitIp) || currentLimitIp < 2) {
-      const clientId = String(found.client.id || found.client.ID || "").trim();
-      if (clientId) {
-        const patch = { ...found.client, limitIp: 2 };
-        await xui.updateClientInInbound({
-          inboundId: config.xui.inboundId,
-          clientId,
-          client: patch,
-        }).catch((e) => console.warn("[xui] enforce min limitIp:", e?.message || e));
-      }
-    }
+    await xui.ensureClientInbounds({ found, inbounds });
     const subFromClient = found.client.subId ? String(found.client.subId) : "";
     const effective =
       subFromClient ||
@@ -1837,6 +1806,7 @@ async function xuiProvisionCore(telegramId, { force, username }) {
 
   const created = await xui.addClientToInbound({
     inboundId: config.xui.inboundId,
+    inboundIds: config.xui.inboundIds,
     telegramId: tid,
     limitIp: 2,
     remark,
@@ -2460,12 +2430,15 @@ app.post("/api/proxy/repair", authMiddleware, async (req, res) => {
       }
     }
     const mtServer = servers.find((s) => s?.mtprotoSecret && Number(s?.mtprotoPort) > 0) || null;
-    const mtproto = mtServer
+    const panelMtproto = await xui.getSharedMtproto().catch(() => null);
+    const mtHost = panelMtproto?.host || mtServer?.host;
+    const mtPort = panelMtproto?.port || mtServer?.mtprotoPort;
+    const mtproto = mtHost && mtPort
       ? {
           configured: true,
-          host: String(mtServer.host || ""),
-          port: Number(mtServer.mtprotoPort),
-          reachable: await checkTcpReachable(mtServer.host, mtServer.mtprotoPort),
+          host: String(mtHost),
+          port: Number(mtPort),
+          reachable: await checkTcpReachable(mtHost, mtPort),
         }
       : { configured: false, reachable: false };
     const data = await loadMe(tid, req.tgSession?.u ?? null);

@@ -1,4 +1,5 @@
 import "./style.css";
+import { applyAppearance, bindAppearance } from "./theme.js";
 function markPngUrl() {
   return `${import.meta.env.BASE_URL}branding/vl-mark.png`;
 }
@@ -16,7 +17,11 @@ function escAttr(s) {
 function vlMarkHeroBlock() {
   const url = escAttr(markPngUrl());
   return `<div class="vl-mark vl-mark--brand" aria-hidden="true">
+    <span class="vl-mark__halo"></span>
+    <span class="vl-mark__frame"><i></i><b></b></span>
     <img class="vl-mark__img" src="${url}" alt="" decoding="async" />
+    <span class="vl-mark__spark vl-mark__spark--one">✦</span>
+    <span class="vl-mark__spark vl-mark__spark--two">✦</span>
   </div>`;
 }
 
@@ -139,15 +144,17 @@ function buildMtprotoLinks(mt) {
 function mtprotoCardHtml(me) {
   const servers = Array.isArray(me?.proxyServers) ? me.proxyServers : [];
   const first = servers.find((s) => s?.mtproto?.secret && s?.mtproto?.host && s?.mtproto?.port) || null;
-  const links = buildMtprotoLinks(first?.mtproto);
-  if (!links) return "";
+  const links = buildMtprotoLinks(me?.mtproto || first?.mtproto);
+  if (!links) return me?.mtprotoConfigured
+    ? `<div class="proxy-service-card"><div class="proxy-service-card__title">MTProto (Telegram)</div><p class="muted" role="status">Telegram-прокси временно недоступен. Попробуйте обновить экран позже.</p></div>`
+    : "";
   return `
     <div class="proxy-service-card" style="margin-top:12px">
       <div class="proxy-service-card__head">
         <span class="proxy-service-card__glyph" aria-hidden="true">✈</span>
         <div>
           <div class="proxy-service-card__title">MTProto (Telegram)</div>
-          <div class="proxy-service-card__sub">Shared · добавляется прямо в Telegram</div>
+          <div class="proxy-service-card__sub">Бесплатный доступ для Telegram</div>
         </div>
       </div>
       <div class="link-block" style="margin-top:10px">
@@ -219,7 +226,7 @@ function bindReferralButtons(tg) {
 function proxyServerPickButtonsHtml(servers) {
   const list = Array.isArray(servers) ? servers : [];
   if (!list.length) {
-    return `<div class="muted country-picker-empty">Нет серверов в PROXY_SERVERS_JSON</div>`;
+    return `<div class="muted country-picker-empty">Серверы пока недоступны</div>`;
   }
   return list
     .map((s) => {
@@ -248,7 +255,7 @@ function vpnPlanTileHtml(p) {
   const title = escAttr(safeDays ? `${safeDays} дней` : p.title || "Тариф");
   const priceMinor = Number(p.priceMinor || 0);
   const priceLabel = priceMinor > 0 ? `${(priceMinor / 100).toFixed(0)} ₽` : "цена по запросу";
-  const meta = escAttr(safeDays ? `${safeDays} дн. · ${priceLabel}` : `VPS Premium · ${priceLabel}`);
+  const meta = escAttr(safeDays ? `${safeDays} дн. · ${priceLabel}` : `VPN · ${priceLabel}`);
   return `<button type="button" class="plan-tile" data-days="${safeDays}" data-product-code="${code}">
     <span class="plan-tile__title">${title}</span>
     <span class="plan-tile__meta">${meta}</span>
@@ -319,7 +326,7 @@ function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
   }
   const hours = bal / rate;
   if (hours <= 0) {
-    return { main: "0", sub: "Баланс пуст — пополните, чтобы снова включить VPS" };
+    return { main: "0", sub: "Баланс пуст — пополните, чтобы снова включить VPN" };
   }
   let main;
   if (hours < 1) {
@@ -333,7 +340,7 @@ function formatBalanceTimeEstimate(balanceRub, hourlyRateRub, billingActive) {
   }
   const sub =
     billingActive && bal > 0
-      ? "Оценка при активном VPS и текущей ставке"
+      ? "Оценка при активном VPN и текущей ставке"
       : "Оценка по текущей ставке (списание — после первого пополнения)";
   return { main, sub };
 }
@@ -373,33 +380,6 @@ function balanceTopupBlockHtml(balance) {
     </div>`;
 }
 
-function applyTelegramChrome(tg) {
-  try {
-    const p = tg.themeParams;
-    if (p?.secondary_bg_color && tg.setHeaderColor) tg.setHeaderColor(p.secondary_bg_color);
-    if (p?.bg_color && tg.setBackgroundColor) tg.setBackgroundColor(p.bg_color);
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Светлая тема Telegram → класс для контрастных готических рамок */
-function applyThemeVariant(tg) {
-  try {
-    const hex = tg.themeParams?.bg_color;
-    if (!hex || typeof hex !== "string") return;
-    const h = hex.replace(/^#/, "");
-    if (h.length !== 6) return;
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    document.documentElement.classList.toggle("vl-theme-light", lum > 0.52);
-  } catch {
-    /* ignore */
-  }
-}
-
 function appendAppFooter(container) {
   container.appendChild(
     el(
@@ -414,25 +394,18 @@ function wheelNavHtml(hasProxy, balanceMode = false) {
   const rows = hasProxy
     ? [
         { target: "status", label: "Статус", glyph: "◇" },
-        { target: "connect", label: "Сеть", glyph: "◎" },
+        { target: "connect", label: "VPN", glyph: "◎" },
         { target: "proxy", label: "Прокси", glyph: "◈" },
         { target: "extend", label: extendLabel, glyph: "⬡" },
       ]
     : [
         { target: "status", label: "Статус", glyph: "◇" },
-        { target: "connect", label: "Сеть", glyph: "◎" },
+        { target: "connect", label: "VPN", glyph: "◎" },
         { target: "extend", label: extendLabel, glyph: "⬡" },
       ];
   const n = rows.length;
-  const lift =
-    n === 4 ? ["8px", "0px", "0px", "8px"] : ["8px", "2px", "8px"];
-  const btns = rows
-    .map(
-      (r, i) =>
-        `<button type="button" class="seg-btn wheel-dock__btn${i === 0 ? " active" : ""}" data-target="${r.target}" style="--wheel-lift:${lift[i]}"><span class="wheel-dock__glyph" aria-hidden="true">${r.glyph}</span><span class="wheel-dock__label">${r.label}</span></button>`,
-    )
-    .join("");
-  return `<nav class="wheel-dock wheel-dock--${n}" id="vlWheelDock" aria-label="Разделы"><div class="wheel-dock__plate"><div class="wheel-dock__rim" aria-hidden="true"></div><div class="wheel-dock__nodes">${btns}</div></div></nav>`;
+  const btns = rows.map((r, i) => `<button type="button" class="seg-btn wheel-dock__btn${i === 0 ? " active" : ""}" data-target="${r.target}"><span class="wheel-dock__glyph" aria-hidden="true">${r.glyph}</span><span class="wheel-dock__label">${r.label}</span></button>`).join("");
+  return `<nav class="wheel-dock wheel-dock--${n}" id="vlWheelDock" aria-label="Разделы"><div class="wheel-dock__nodes">${btns}</div></nav>`;
 }
 
 function bindWheelSwipe(dock) {
@@ -900,8 +873,7 @@ async function boot() {
   }
   tg.ready();
   tg.expand();
-  applyTelegramChrome(tg);
-  applyThemeVariant(tg);
+  applyAppearance(tg);
 
   const initData = tg.initData;
   if (!initData) {
@@ -1015,39 +987,22 @@ async function boot() {
     return `${mbps.toFixed(mbps >= 10 ? 0 : 1)} Mbps`;
   };
 
-  const head = el(
-    `<div class="card card--hero card--hero-scene">
-      <div class="hero-scene__content">
-        <div class="brand brand--center">
-          <div class="brand-mark brand-mark--center" aria-hidden="true">
-            ${vlMarkHeroBlock()}
-          </div>
-        </div>
-      </div>
-    </div>`,
-  );
+  const head = el(`<header class="masthead">
+    <div class="masthead__top"><span class="masthead__eyebrow"><i aria-hidden="true"></i> VL / PRIVATE NETWORK</span><div class="masthead__controls"><button type="button" class="palette-toggle" id="paletteToggle"><span class="palette-toggle__mark" aria-hidden="true">✦</span><span>Готика</span></button><button type="button" class="appearance-toggle" id="appearanceToggle">Светлая ◑</button></div></div>
+    <div class="masthead__brand">${vlMarkHeroBlock()}<div class="masthead__copy"><div class="masthead__kicker">VL · PRIVATE NETWORK</div><h1>Личный<br>кабинет</h1><p>Связь без границ.</p></div></div>
+    ${isAdmin ? '<a class="admin-link" href="/app/admin">Управление сервисом ↗</a>' : ''}
+  </header>`);
   root.appendChild(head);
-  if (isAdmin) {
-    const adminQuick = el(
-      `<div class="card section is-visible" style="padding:10px 12px;margin-top:10px">
-        <div class="muted" style="margin-bottom:8px">Режим администратора</div>
-        <button class="btn secondary" type="button" id="openAdminPanelBtn">Открыть админ-панель</button>
-      </div>`,
-    );
-    root.appendChild(adminQuick);
-    const openAdminBtn = document.getElementById("openAdminPanelBtn");
-    if (openAdminBtn) {
-      openAdminBtn.onclick = () => {
-        // Open inside current Telegram Mini App context so initData is available.
-        window.location.assign("/app/admin");
-      };
-    }
-  }
+  bindAppearance(tg);
+  root.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-go]")?.dataset.go;
+    if (target) document.querySelector(`.seg-btn[data-target="${target}"]`)?.click();
+  });
 
   if (!hasAccount) {
     root.appendChild(
       el(
-        `<div class="card section is-visible" id="section-status"><p><b>Аккаунт в панели еще не привязан к вашему Telegram ID.</b></p><p class="muted">После оплаты бот создаст пользователя автоматически, либо обратитесь в поддержку.</p></div>`,
+        `<div class="card section is-visible" id="section-status"><div class="eyebrow">ВАШ ДОСТУП</div><h2 class="status-title">Начнём<br>с подключения.</h2><p class="muted">Пополните баланс — подключение появится здесь автоматически.</p><button class="btn" type="button" data-go="extend">${me.balance?.enabled ? "Пополнить баланс" : "Выбрать тариф"} ↗</button></div>`,
       ),
     );
 
@@ -1055,7 +1010,7 @@ async function boot() {
       el(`
         <div class="card section" id="section-connect">
           <h2 class="section-title">Подключение</h2>
-          <p class="muted">После оплаты доступ к VPS Premium выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
+          <p class="muted">После оплаты доступ к VPN выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
           <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
         </div>
       `),
@@ -1066,11 +1021,11 @@ async function boot() {
         <div class="card section" id="section-extend">
           ${
             me.balance?.enabled
-              ? `<h2 class="section-title section-title--balance">Баланс VPS</h2>
+              ? `<h2 class="section-title section-title--balance">Баланс</h2>
           ${balanceTopupBlockHtml(me.balance)}
           <p class="balance-footnote">После пополнения бот привяжет доступ. Оплата через Telegram.</p>`
-              : `<h2 class="section-title">Покупка VPS Premium</h2>
-          <p class="muted">Выберите тариф и оплатите доступ к VPS Premium.</p>
+              : `<h2 class="section-title">Покупка VPN</h2>
+          <p class="muted">Выберите тариф и оплатите доступ к VPN.</p>
           <button class="btn" type="button" id="payBtn">Оплатить / Продлить</button>`
           }
           <button class="btn secondary" type="button" id="supportBtnNoAcc">Связаться с поддержкой</button>
@@ -1260,40 +1215,28 @@ async function boot() {
       ? me.subscriptionUrl || "—"
       : me.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
-  const isPending = String(status).toUpperCase() === "PENDING";
   const usedBytes = Number(
     st?.usedTrafficBytes ?? 0,
   );
   const limitBytes = Number(st?.trafficLimitBytes ?? 0);
   const hasLimit = Number.isFinite(limitBytes) && limitBytes > 0;
-  const displayUser = st?.username || "—";
-  const hwidOrDash = st?.deviceLimit ?? "—";
-  const limitEndStat =
-    st?.source === "xui"
-      ? `<div class="stat">
-        <div class="label">Лимит IP</div>
-        <div class="value">${st.ipLimit > 0 ? st.ipLimit : "∞"}</div>
-      </div>`
-      : `<div class="stat">
-        <div class="label">Лимит устройств</div>
-        <div class="value">${hwidOrDash}</div>
-      </div>`;
-
+  const labelForStatus = (status) => ({ ACTIVE: "Доступ активен", DISABLED: "Доступ приостановлен", EXPIRED: "Срок истёк", LIMITED: "Трафик израсходован", PENDING: "Нужно восстановить доступ" }[status] || "Статус временно недоступен");
+  const statusLabel = labelForStatus(status);
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
 
   const card = el(`<div class="card section is-visible" id="section-status">
-    <div class="chip ${isActive ? "active" : ""}" style="${isPending ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.35)" : ""}">
-      ${isActive ? "Активна" : isPending ? "Создайте клиента" : "Неактивна"}
-    </div>
+    <div class="eyebrow">ВАШ ДОСТУП</div>
+    <h2 class="status-title">VPN-подписка</h2>
+    <div class="chip ${isActive ? "active" : ""}" id="subscriptionState">${statusLabel}</div>
     <div class="meter" style="margin-top:10px">
       <div class="meter-head">
         <div>
           <div class="label">Трафик</div>
-          <div class="value" id="trafficText">${hasLimit ? `${fmtBytes(usedBytes)} / ${fmtBytes(limitBytes)}` : `${fmtBytes(usedBytes)} / ∞`}</div>
+          <div class="value" id="trafficText">${st ? (hasLimit ? `${fmtBytes(usedBytes)} / ${fmtBytes(limitBytes)}` : `${fmtBytes(usedBytes)} / ∞`) : "—"}</div>
         </div>
         <div style="text-align:right">
-          <div class="label">Сейчас</div>
-          <div class="value" id="speedText">0 Mbps</div>
+          <div class="label">В среднем за 5 с</div>
+          <div class="value" id="speedText">—</div>
         </div>
       </div>
       <div class="meter-bar" aria-hidden="true">
@@ -1301,42 +1244,12 @@ async function boot() {
       </div>
       <div class="label" id="trafficHint">${hasLimit ? "Прогресс по лимиту" : "Безлимит: показываем использовано"}</div>
     </div>
-    <div class="mini-gauges">
-      <div class="mini-gauge">
-        <div class="mini-gauge__head">
-          <span>Канал*</span>
-          <span id="netGaugeValue">0%</span>
-        </div>
-        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="netGaugeFill" style="width:0%"></div></div>
-      </div>
-      <div class="mini-gauge">
-        <div class="mini-gauge__head">
-          <span>API*</span>
-          <span id="srvGaugeValue">100%</span>
-        </div>
-        <div class="mini-gauge__bar"><div class="mini-gauge__fill" id="srvGaugeFill" style="width:100%"></div></div>
-      </div>
+    <div class="grid status-details">
+      <div class="stat"><div class="label">Действует до</div><div class="value">${st ? (st.expireAt ? exp : "Без ограничения") : "—"}</div></div>
+      <div class="stat"><div class="label">Одновременно IP</div><div class="value">${st ? (st.ipLimit > 0 ? st.ipLimit : "Без ограничения") : "—"}</div></div>
     </div>
-    <div class="muted" style="margin-top:6px;font-size:0.78rem">*Не CPU сервера: это индикаторы активности канала и доступности API.</div>
-    <div class="grid" style="margin-top:10px">
-      <div class="stat">
-        <div class="label">Пользователь</div>
-        <div class="value">${displayUser}</div>
-      </div>
-      <div class="stat">
-        <div class="label">${st?.source === "xui" ? "Статус (XUI)" : "Статус панели"}</div>
-        <div class="value">${status}</div>
-      </div>
-      <div class="stat">
-        <div class="label">Действует до</div>
-        <div class="value">${exp}</div>
-      </div>
-      <div class="stat">
-        <div class="label">Трафик лимит</div>
-        <div class="value">${hasLimit ? fmtBytes(limitBytes) : "∞"}</div>
-      </div>
-      ${limitEndStat}
-    </div>
+    <button type="button" class="btn" data-go="connect">К подключению ↗</button>
+    <p class="status-note" id="statusFreshness">Данные вашей подписки</p>
   </div>`);
   root.appendChild(card);
 
@@ -1367,14 +1280,14 @@ async function boot() {
     : "";
 
   const connect = el(`<div class="card section" id="section-connect">
-    <h2 class="section-title">Подключение VPS Premium</h2>
-    <p class="muted">Скопируйте URL и импортируйте подписку в клиент.</p>
+    <h2 class="section-title">Ваше подключение</h2>
+    <p class="muted">Скопируйте ссылку и добавьте её в VPN-приложение. Одна подписка содержит все доступные направления.</p>
     ${uiExtras}
     <div class="link-block link-block--compact">
       <div class="label">URL подписки</div>
       <div class="subscription-url" id="subUrl" title="${escAttr(sub)}">${compactSubscriptionUrl(sub)}</div>
     </div>
-    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку"}</button>
+    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Восстановить подключение" : "Получить подключение"}</button>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
   </div>`);
@@ -1550,14 +1463,14 @@ async function boot() {
   const extend = el(
     balanceMode
       ? `<div class="card section" id="section-extend">
-    <h2 class="section-title section-title--balance">Баланс VPS</h2>
+    <h2 class="section-title section-title--balance">Баланс</h2>
     ${balanceTopupBlockHtml(me.balance)}
     <p class="balance-footnote">${invoiceEnabled ? "Оплата через Telegram — счёт можно открыть здесь или в чате с ботом. При балансе 0 ₽ доступ к VPN временно отключается автоматически и включится снова после пополнения." : "Платежи временно недоступны."}</p>
     <div class="actions-stack">
     ${
       isXuiPrimary
         ? `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Почасовая надбавка. Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+           <p class="muted" style="margin-top:10px;line-height:1.45">Увеличивает число одновременных IP-адресов на один. Несколько устройств в одной Wi-Fi сети используют один IP.</p>`
         : `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
@@ -1565,7 +1478,7 @@ async function boot() {
     ${referralCardHtml(me)}
   </div>`
       : `<div class="card section" id="section-extend">
-    <h2 class="section-title">Покупка VPS Premium</h2>
+    <h2 class="section-title">Покупка VPN</h2>
     ${
       invoiceEnabled
         ? `<p class="muted" style="margin-top:6px;line-height:1.45">После выбора тарифа счёт придёт в чат с ботом.</p>`
@@ -1580,7 +1493,7 @@ async function boot() {
       <div class="vpn-renew-card__head">
         <span class="vpn-renew-card__glyph" aria-hidden="true">◎</span>
         <div class="vpn-renew-card__head-text">
-          <span class="vpn-renew-card__kind">VPS Premium</span>
+          <span class="vpn-renew-card__kind">VPN</span>
           <span class="vpn-renew-card__sub">Продление подписки</span>
         </div>
       </div>
@@ -1593,7 +1506,7 @@ async function boot() {
     ${
       isXuiPrimary
         ? `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>
-           <p class="muted" style="margin-top:10px;line-height:1.45">Почасовая надбавка. Для XUI «устройство» = увеличение лимита IP в панели 3X-UI (limit IP) для вашего клиента.</p>`
+           <p class="muted" style="margin-top:10px;line-height:1.45">Увеличивает число одновременных IP-адресов на один. Несколько устройств в одной Wi-Fi сети используют один IP.</p>`
         : `<button class="btn secondary" type="button" id="addDeviceBtn">+1 устройство (+${deviceSlotPerItemRub} ₽/час)</button>`
     }
     <button class="btn secondary" type="button" id="supportBtn">Поддержка</button>
@@ -1663,42 +1576,10 @@ async function boot() {
         showToast("Готово. Обновляем...");
         setTimeout(() => window.location.reload(), 700);
       } catch (e) {
-        // Fallback: если provision не удался, пробуем /api/me — там есть авто-восстановление привязки.
-        try {
-          const me2 = await api("/api/me", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          // A persisted xui_links token alone does not prove that the client
-          // exists in 3X-UI. PENDING means exactly that stale-link situation.
-          const panelStatus = String(me2?.subscriptionStatus?.panelStatus || "").toUpperCase();
-          if (
-            me2?.xui?.linked &&
-            me2?.subscriptionUrl &&
-            me2?.subscriptionStatus?.source === "xui" &&
-            panelStatus &&
-            panelStatus !== "PENDING"
-          ) {
-            showToast("Ссылка восстановлена. Обновляем...");
-            setTimeout(() => window.location.reload(), 700);
-            return;
-          }
-        } catch {
-          // ignored
-        }
-
-        const msg = String(e?.message || "");
-        if (msg === "xui_not_configured" || msg === "xui_inbound_id_required") {
-          showToast("XUI не настроен на сервере (панель/инбаунд)");
-        } else if (msg.includes("xui_login_failed")) {
-          showToast("Не удалось войти в XUI: проверь URL/логин/пароль/WebBasePath");
-        } else if (msg.includes("xui_add_client")) {
-          showToast("XUI не создал клиента. Проверь inbound и логи панели");
-        } else {
-          showToast(`Ошибка: ${msg || "не удалось обновить ссылку"}`);
-        }
+        showToast("Не удалось восстановить подключение. Попробуйте позже или напишите в поддержку.");
       } finally {
         provBtn.disabled = false;
-        provBtn.textContent = xui?.linked ? "Обновить ссылку (XUI)" : "Создать XUI-подписку";
+        provBtn.textContent = xui?.linked ? "Восстановить подключение" : "Получить подключение";
       }
     };
   }
@@ -1726,13 +1607,14 @@ async function boot() {
   // "Спидометр": считаем скорость как прирост usedTrafficBytes за интервал.
   // Никаких внешних speedtest — только то, что реально прошло через подписку.
   let last = { at: Date.now(), used: usedBytes };
-  let pollFailStreak = 0;
   const tick = async () => {
+    if (document.hidden) return;
     try {
       const me2 = await api("/api/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const st2 = me2.subscriptionStatus;
+      if (!st2) throw new Error("status_unavailable");
       const used2 = Number(
         st2?.usedTrafficBytes ?? 0,
       );
@@ -1744,21 +1626,15 @@ async function boot() {
       const bps = du / dt;
       last = { at: now, used: used2 };
 
+      const stateEl = document.getElementById("subscriptionState");
+      if (stateEl) {
+        stateEl.textContent = labelForStatus(st2.panelStatus);
+        stateEl.classList.toggle("active", st2.panelStatus === "ACTIVE");
+      }
       const speedEl = document.getElementById("speedText");
       if (speedEl) speedEl.textContent = fmtSpeed(bps);
-      const mbpsNow = (bps * 8) / 1_000_000;
-      const netPct = Math.max(2, Math.min(100, Math.round((mbpsNow / 25) * 100)));
-      const netVal = document.getElementById("netGaugeValue");
-      const netFill = document.getElementById("netGaugeFill");
-      if (netVal) netVal.textContent = `${netPct}%`;
-      if (netFill) netFill.style.width = `${netPct}%`;
-      pollFailStreak = 0;
-      const srvPct = 96;
-      const srvVal = document.getElementById("srvGaugeValue");
-      const srvFill = document.getElementById("srvGaugeFill");
-      if (srvVal) srvVal.textContent = `${srvPct}%`;
-      if (srvFill) srvFill.style.width = `${srvPct}%`;
-
+      const freshness = document.getElementById("statusFreshness");
+      if (freshness) freshness.textContent = st2 ? "Данные обновлены" : "Статус временно недоступен";
       const trafficEl = document.getElementById("trafficText");
       if (trafficEl) {
         trafficEl.textContent = hasLimit2
@@ -1773,13 +1649,9 @@ async function boot() {
         }
       }
     } catch {
-      // If /api/me polling fails, show degraded server health.
-      pollFailStreak += 1;
-      const srvPct = Math.max(12, 96 - pollFailStreak * 22);
-      const srvVal = document.getElementById("srvGaugeValue");
-      const srvFill = document.getElementById("srvGaugeFill");
-      if (srvVal) srvVal.textContent = `${srvPct}%`;
-      if (srvFill) srvFill.style.width = `${srvPct}%`;
+      const freshness = document.getElementById("statusFreshness");
+      if (freshness) freshness.textContent = "Не удалось обновить данные. Повторяем…";
+
     }
   };
   setInterval(tick, 5000);

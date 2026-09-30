@@ -1,4 +1,8 @@
 import "dotenv/config";
+import { parseInboundIds } from "./integrations/xuiClients.js";
+
+const xuiInboundIds = parseInboundIds(process.env.XUI_INBOUND_IDS || process.env.XUI_INBOUND_ID);
+const xuiInboundExcludeIds = parseInboundIds(process.env.XUI_INBOUND_EXCLUDE_IDS);
 
 function req(name) {
   const v = process.env[name];
@@ -23,6 +27,15 @@ export const config = {
   subscriptions: {
     primary: "xui",
   },
+  mtproto: {
+    // Full URL of a separate 3X-UI panel, including its web base path.
+    // Empty uses the primary XUI panel as before.
+    panelBaseUrl: String(process.env.XUI_MTPROTO_PANEL_BASE_URL || "").trim(),
+    apiToken: String(process.env.XUI_MTPROTO_API_TOKEN || "").trim(),
+    inboundId: Number(process.env.XUI_MTPROTO_INBOUND_ID || 0),
+    email: String(process.env.XUI_MTPROTO_SHARED_EMAIL || "").trim(),
+    host: String(process.env.XUI_MTPROTO_PUBLIC_HOST || "").trim(),
+  },
   xui: {
     // Base URL for 3X-UI subscription host (where /sub/<id> is served).
     // Example: https://your-3xui-domain:2096
@@ -35,7 +48,13 @@ export const config = {
     webBasePath: String(process.env.XUI_WEB_BASE_PATH || "").trim(),
     username: process.env.XUI_USERNAME || "",
     password: process.env.XUI_PASSWORD || "",
-    inboundId: Number(process.env.XUI_INBOUND_ID || 0),
+    inboundId: xuiInboundIds[0] || 0,
+    inboundIds: xuiInboundIds,
+    autoDiscoverInbounds: (() => {
+      const value = String(process.env.XUI_AUTO_DISCOVER_INBOUNDS ?? "1").trim().toLowerCase();
+      return !["0", "false", "no"].includes(value);
+    })(),
+    inboundExcludeIds: xuiInboundExcludeIds,
     // Subscription path root on subscription host.
     // Usually "/sub" (or custom if you changed "Корневой путь URL-адреса подписки" in 3X-UI).
     subPath: process.env.XUI_SUB_PATH || "/sub",
