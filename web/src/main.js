@@ -1,6 +1,5 @@
 import "./style.css";
 import { applyAppearance, bindAppearance } from "./theme.js";
-import framesUrl from "./branding/vl-frames.svg";
 function markPngUrl() {
   return `${import.meta.env.BASE_URL}branding/vl-mark.png`;
 }
@@ -18,12 +17,11 @@ function escAttr(s) {
 function vlMarkHeroBlock() {
   const url = escAttr(markPngUrl());
   return `<div class="vl-mark vl-mark--brand" aria-hidden="true">
-    <span class="vl-mark__orbit vl-mark__orbit--outer"></span>
-    <span class="vl-mark__orbit vl-mark__orbit--inner"></span>
-    <img class="vl-mark__frames" src="${escAttr(framesUrl)}" alt="" decoding="async" />
+    <span class="vl-mark__halo"></span>
+    <span class="vl-mark__frame"><i></i><b></b></span>
     <img class="vl-mark__img" src="${url}" alt="" decoding="async" />
     <span class="vl-mark__spark vl-mark__spark--one">✦</span>
-    <span class="vl-mark__spark vl-mark__spark--two">·</span>
+    <span class="vl-mark__spark vl-mark__spark--two">✦</span>
   </div>`;
 }
 
