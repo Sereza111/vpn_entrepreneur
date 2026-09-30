@@ -989,7 +989,7 @@ async function boot() {
 
   const head = el(`<header class="masthead">
     <div class="masthead__top"><span class="masthead__eyebrow"><i aria-hidden="true"></i> VL / PRIVATE NETWORK</span><div class="masthead__controls"><button type="button" class="palette-toggle" id="paletteToggle"><span class="palette-toggle__mark" aria-hidden="true">✦</span><span>Готика</span></button><button type="button" class="appearance-toggle" id="appearanceToggle">Светлая ◑</button></div></div>
-    <div class="masthead__brand">${vlMarkHeroBlock()}<div><h1>Личный<br>кабинет</h1><p>Связь без границ.</p></div></div>
+    <div class="masthead__brand">${vlMarkHeroBlock()}<div class="masthead__copy"><div class="masthead__kicker">VL · PRIVATE NETWORK</div><h1>Личный<br>кабинет</h1><p>Связь без границ.</p></div></div>
     ${isAdmin ? '<a class="admin-link" href="/app/admin">Управление сервисом ↗</a>' : ''}
   </header>`);
   root.appendChild(head);
