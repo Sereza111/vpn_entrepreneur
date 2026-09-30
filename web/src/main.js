@@ -1,5 +1,6 @@
 import "./style.css";
 import { applyAppearance, bindAppearance } from "./theme.js";
+import framesUrl from "./branding/vl-frames.svg";
 function markPngUrl() {
   return `${import.meta.env.BASE_URL}branding/vl-mark.png`;
 }
@@ -17,7 +18,12 @@ function escAttr(s) {
 function vlMarkHeroBlock() {
   const url = escAttr(markPngUrl());
   return `<div class="vl-mark vl-mark--brand" aria-hidden="true">
+    <span class="vl-mark__orbit vl-mark__orbit--outer"></span>
+    <span class="vl-mark__orbit vl-mark__orbit--inner"></span>
+    <img class="vl-mark__frames" src="${escAttr(framesUrl)}" alt="" decoding="async" />
     <img class="vl-mark__img" src="${url}" alt="" decoding="async" />
+    <span class="vl-mark__spark vl-mark__spark--one">✦</span>
+    <span class="vl-mark__spark vl-mark__spark--two">·</span>
   </div>`;
 }
 
@@ -984,7 +990,7 @@ async function boot() {
   };
 
   const head = el(`<header class="masthead">
-    <div class="masthead__top"><span>VL / PRIVATE NETWORK</span><button type="button" class="appearance-toggle" id="appearanceToggle">Светлая ◑</button></div>
+    <div class="masthead__top"><span class="masthead__eyebrow"><i aria-hidden="true"></i> VL / PRIVATE NETWORK</span><div class="masthead__controls"><button type="button" class="palette-toggle" id="paletteToggle"><span class="palette-toggle__mark" aria-hidden="true">✦</span><span>Готика</span></button><button type="button" class="appearance-toggle" id="appearanceToggle">Светлая ◑</button></div></div>
     <div class="masthead__brand">${vlMarkHeroBlock()}<div><h1>Личный<br>кабинет</h1><p>Связь без границ.</p></div></div>
     ${isAdmin ? '<a class="admin-link" href="/app/admin">Управление сервисом ↗</a>' : ''}
   </header>`);
