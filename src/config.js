@@ -48,6 +48,8 @@ export const config = {
     webBasePath: String(process.env.XUI_WEB_BASE_PATH || "").trim(),
     username: process.env.XUI_USERNAME || "",
     password: process.env.XUI_PASSWORD || "",
+    // Dedicated 3X-UI API credential; when set, cookie login is unnecessary.
+    apiToken: String(process.env.XUI_API_TOKEN || "").trim(),
     inboundId: xuiInboundIds[0] || 0,
     inboundIds: xuiInboundIds,
     autoDiscoverInbounds: (() => {

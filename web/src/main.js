@@ -1,10 +1,10 @@
 import "./style.css";
 import { applyAppearance, bindAppearance } from "./theme.js";
+const root = document.getElementById("root");
+
 function markPngUrl() {
   return `${import.meta.env.BASE_URL}branding/vl-mark.png`;
 }
-
-const root = document.getElementById("root");
 
 function escAttr(s) {
   return String(s ?? "")
@@ -16,14 +16,48 @@ function escAttr(s) {
 
 function vlMarkHeroBlock() {
   const url = escAttr(markPngUrl());
-  return `<div class="vl-mark vl-mark--brand" aria-hidden="true">
-    <span class="vl-mark__halo"></span>
-    <span class="vl-mark__frame"><i></i><b></b></span>
-    <img class="vl-mark__img" src="${url}" alt="" decoding="async" />
-    <span class="vl-mark__spark vl-mark__spark--one">✦</span>
-    <span class="vl-mark__spark vl-mark__spark--two">✦</span>
-  </div>`;
+  return `<span class="vl-mark" aria-hidden="true"><span class="vl-mark__halo"></span><span class="vl-mark__arch"></span><img class="vl-mark__img" src="${url}" alt="" decoding="async" /><span class="vl-mark__spark vl-mark__spark--one">✦</span><span class="vl-mark__spark vl-mark__spark--two">✦</span></span>`;
 }
+
+function navIcon(name) {
+  const paths = {
+    status: '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+    connect: '<path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    proxy: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z"/>',
+    extend: '<rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18m-6 6h3M7 5V3h10"/>',
+  };
+  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.connect}</svg>`;
+}
+
+function appHeaderHtml(isAdmin = false) {
+  return `<header class="masthead">
+    <div class="masthead__top"><div class="brand-lockup"><span class="brand-lockup__mark"><b>VL</b></span><span>VL VPN<small>PRIVATE NETWORK</small></span></div><div class="masthead__controls"><button type="button" class="palette-toggle" id="paletteToggle" aria-label="Сменить акцент">Серебро</button><button type="button" class="appearance-toggle" id="appearanceToggle" aria-label="Сменить тему">◑</button></div></div>
+    <div class="masthead__brand"><button type="button" class="emblem-button" data-emblem aria-label="Запустить анимацию эмблемы VL">${vlMarkHeroBlock()}</button><span class="masthead__coordinate" aria-hidden="true">VL / PRIVATE ACCESS</span><div class="masthead__copy"><div class="masthead__kicker">ЛИЧНЫЙ КАБИНЕТ</div><h1>За пределами<br><span>ограничений.</span></h1><p>Твоя сеть. Твой собственный ритм.</p></div></div>
+    ${isAdmin ? '<a class="admin-link" href="/app/admin">Управление сервисом <span aria-hidden="true">↗</span></a>' : ''}
+  </header>`;
+}
+
+function showTelegramWelcome() {
+  root.innerHTML = `${appHeaderHtml()}<section class="card welcome-card"><span class="welcome-icon">${navIcon("connect")}</span><div class="eyebrow">ЛИЧНЫЙ КАБИНЕТ</div><h2 class="status-title">Продолжим<br>в Telegram.</h2><p class="muted">Открой бота и нажми кнопку мини-приложения. Там тебя ждут твоя подписка, настройки подключения и баланс.</p><a class="btn" href="https://t.me/VL_VPNbot">Открыть Telegram <span aria-hidden="true">↗</span></a><a class="welcome-site" href="/site/">Подробнее о VL VPN</a></section>`;
+  bindAppearance(window.Telegram?.WebApp);
+}
+
+// Decorative interactions never change subscription or connection state.
+root.addEventListener("click", (event) => {
+  const emblem = event.target.closest("[data-emblem]");
+  if (emblem) {
+    emblem.classList.remove("is-pulsing");
+    void emblem.offsetWidth;
+    emblem.classList.add("is-pulsing");
+    setTimeout(() => emblem.classList.remove("is-pulsing"), 1000);
+  }
+  const tab = event.target.closest(".seg-btn");
+  if (tab) {
+    root.dataset.screen = tab.dataset.target;
+    root.querySelectorAll(".seg-btn").forEach((button) => button.setAttribute("aria-current", button === tab ? "page" : "false"));
+    document.getElementById(`section-${tab.dataset.target}`)?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
+});
 
 function extractCountryAlpha2(countryCode) {
   const c = String(countryCode || "")
@@ -299,12 +333,12 @@ function proxyAddonCardHtml(me) {
     <div class="proxy-addon-card">
       <div class="proxy-addon-card__head">
         <div class="proxy-addon-card__title">Тип прокси</div>
-        <div class="proxy-addon-card__sub muted">Shared: +${proxyHr.toFixed(2)} ₽/час · Dedicated IP: +${ipHr.toFixed(2)} ₽/час</div>
-        <div class="proxy-addon-card__sub muted">Shared считается по количеству выданных прокси: ${proxyItemsCount} × ${proxyPerItemHr.toFixed(2)} ₽/час</div>
+        <div class="proxy-addon-card__sub muted">Общий: +${proxyHr.toFixed(2)} ₽/час · Выделенный IP: +${ipHr.toFixed(2)} ₽/час</div>
+        <div class="proxy-addon-card__sub muted">Общий доступ: ${proxyItemsCount} прокси × ${proxyPerItemHr.toFixed(2)} ₽/час</div>
       </div>
       <div class="proxy-addon-choice" role="radiogroup" aria-label="Тип прокси">
-        <button type="button" class="proxy-addon-choice__btn ${proxyOn && !ipOn ? "active" : ""}" id="proxyTypeSharedBtn" data-type="shared">Shared</button>
-        <button type="button" class="proxy-addon-choice__btn ${ipOn ? "active" : ""}" id="proxyTypeDedicatedBtn" data-type="dedicated">Dedicated IP</button>
+        <button type="button" class="proxy-addon-choice__btn ${proxyOn && !ipOn ? "active" : ""}" id="proxyTypeSharedBtn" data-type="shared">Общий</button>
+        <button type="button" class="proxy-addon-choice__btn ${ipOn ? "active" : ""}" id="proxyTypeDedicatedBtn" data-type="dedicated">Выделенный IP</button>
       </div>
       <div class="proxy-addon-card__foot muted">
         ${ded?.ip ? `Текущий IP: <b>${escAttr(ded.ip)}</b>` : ""}
@@ -370,7 +404,7 @@ function balanceTopupBlockHtml(balance) {
         <div class="balance-time-block__hint">${escAttr(est.sub)}</div>
       </div>
       <div class="balance-topup-panel">
-        <div class="balance-topup-panel__label">Пополнить на сумму</div>
+        <label class="balance-topup-panel__label" for="balanceTopupAmount">Пополнить на сумму</label>
         <div class="balance-input-row">
           <input type="number" class="balance-input text-input" id="balanceTopupAmount" inputmode="numeric" min="${minRub}" max="500000" step="1" placeholder="От ${minRub} ₽" autocomplete="transaction-amount" />
         </div>
@@ -393,18 +427,18 @@ function wheelNavHtml(hasProxy, balanceMode = false) {
   const extendLabel = balanceMode ? "Баланс" : "Срок";
   const rows = hasProxy
     ? [
-        { target: "status", label: "Статус", glyph: "◇" },
+        { target: "status", label: "Главная", glyph: "◇" },
         { target: "connect", label: "VPN", glyph: "◎" },
         { target: "proxy", label: "Прокси", glyph: "◈" },
         { target: "extend", label: extendLabel, glyph: "⬡" },
       ]
     : [
-        { target: "status", label: "Статус", glyph: "◇" },
+        { target: "status", label: "Главная", glyph: "◇" },
         { target: "connect", label: "VPN", glyph: "◎" },
         { target: "extend", label: extendLabel, glyph: "⬡" },
       ];
   const n = rows.length;
-  const btns = rows.map((r, i) => `<button type="button" class="seg-btn wheel-dock__btn${i === 0 ? " active" : ""}" data-target="${r.target}"><span class="wheel-dock__glyph" aria-hidden="true">${r.glyph}</span><span class="wheel-dock__label">${r.label}</span></button>`).join("");
+  const btns = rows.map((r, i) => `<button type="button" class="seg-btn wheel-dock__btn${i === 0 ? " active" : ""}" data-target="${r.target}" aria-controls="section-${r.target}" aria-current="${i === 0 ? "page" : "false"}"><span class="wheel-dock__glyph" aria-hidden="true">${navIcon(r.target)}</span><span class="wheel-dock__label">${r.label}</span></button>`).join("");
   return `<nav class="wheel-dock wheel-dock--${n}" id="vlWheelDock" aria-label="Разделы"><div class="wheel-dock__nodes">${btns}</div></nav>`;
 }
 
@@ -656,14 +690,15 @@ function el(html) {
 }
 
 function showError(msg) {
-  root.innerHTML = "";
-  root.appendChild(el(`<div class="card"><p class="err">${msg}</p></div>`));
+  root.innerHTML = `${appHeaderHtml()}<section class="card"><div class="eyebrow">НЕ УДАЛОСЬ ПОДКЛЮЧИТЬСЯ</div><h2 class="status-title">Попробуем ещё раз?</h2><p class="err" role="alert">${escAttr(msg)}</p><button class="btn" id="retryAppBtn" type="button">Обновить страницу</button><a class="welcome-site" href="https://t.me/VL_VPNbot">Обратиться в поддержку ↗</a></section>`;
+  document.getElementById("retryAppBtn").onclick = () => window.location.reload();
+  bindAppearance(window.Telegram?.WebApp);
 }
 
 function showToast(message) {
   let toast = document.getElementById("toast");
   if (!toast) {
-    toast = el(`<div id="toast" class="toast"></div>`);
+    toast = el(`<div id="toast" class="toast" role="status" aria-live="polite"></div>`);
     document.body.appendChild(toast);
   }
   toast.textContent = message;
@@ -868,7 +903,7 @@ function bindProxyMaintenanceButtons(token, tg) {
 async function boot() {
   const tg = window.Telegram?.WebApp;
   if (!tg) {
-    showError("Откройте мини-приложение из Telegram.");
+    showTelegramWelcome();
     return;
   }
   tg.ready();
@@ -877,16 +912,17 @@ async function boot() {
 
   const initData = tg.initData;
   if (!initData) {
-    showError("Нет initData. Откройте через кнопку бота /start.");
+    showTelegramWelcome();
     return;
   }
 
-  root.innerHTML = `
-      <div class="card">
+  root.innerHTML = `${appHeaderHtml()}
+      <div class="loading-label" role="status">Загружаем твой кабинет…</div>
+      <div class="card" aria-hidden="true">
         <div class="skeleton s1"></div>
         <div class="skeleton s2"></div>
       </div>
-      <div class="card">
+      <div class="card" aria-hidden="true">
         <div class="skeleton s3"></div>
         <div class="skeleton s4"></div>
         <div class="skeleton s4"></div>
@@ -987,11 +1023,7 @@ async function boot() {
     return `${mbps.toFixed(mbps >= 10 ? 0 : 1)} Mbps`;
   };
 
-  const head = el(`<header class="masthead">
-    <div class="masthead__top"><span class="masthead__eyebrow"><i aria-hidden="true"></i> VL / PRIVATE NETWORK</span><div class="masthead__controls"><button type="button" class="palette-toggle" id="paletteToggle"><span class="palette-toggle__mark" aria-hidden="true">✦</span><span>Готика</span></button><button type="button" class="appearance-toggle" id="appearanceToggle">Светлая ◑</button></div></div>
-    <div class="masthead__brand">${vlMarkHeroBlock()}<div class="masthead__copy"><div class="masthead__kicker">VL · PRIVATE NETWORK</div><h1>Личный<br>кабинет</h1><p>Связь без границ.</p></div></div>
-    ${isAdmin ? '<a class="admin-link" href="/app/admin">Управление сервисом ↗</a>' : ''}
-  </header>`);
+  const head = el(appHeaderHtml(isAdmin));
   root.appendChild(head);
   bindAppearance(tg);
   root.addEventListener("click", (event) => {
@@ -1225,7 +1257,7 @@ async function boot() {
   const hasProxy = Boolean(me.proxy) || Array.isArray(me.proxyServers);
 
   const card = el(`<div class="card section is-visible" id="section-status">
-    <div class="eyebrow">ВАШ ДОСТУП</div>
+    <div class="status-crest" aria-hidden="true">${navIcon("connect")}<i></i><b></b></div><div class="eyebrow">ВАШ ДОСТУП</div>
     <h2 class="status-title">VPN-подписка</h2>
     <div class="chip ${isActive ? "active" : ""}" id="subscriptionState">${statusLabel}</div>
     <div class="meter" style="margin-top:10px">
@@ -1248,6 +1280,7 @@ async function boot() {
       <div class="stat"><div class="label">Действует до</div><div class="value">${st ? (st.expireAt ? exp : "Без ограничения") : "—"}</div></div>
       <div class="stat"><div class="label">Одновременно IP</div><div class="value">${st ? (st.ipLimit > 0 ? st.ipLimit : "Без ограничения") : "—"}</div></div>
     </div>
+    ${me.balance?.enabled ? `<button type="button" class="balance-shortcut" data-go="extend"><span><small>Баланс</small><strong>${Number(me.balance.balanceRub ?? 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽</strong></span><span>Пополнить ↗</span></button>` : ""}
     <button type="button" class="btn" data-go="connect">К подключению ↗</button>
     <p class="status-note" id="statusFreshness">Данные вашей подписки</p>
   </div>`);
@@ -1290,6 +1323,7 @@ async function boot() {
     <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Восстановить подключение" : "Получить подключение"}</button>
     <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
     <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
+    <details class="connection-guide"><summary>Как подключиться <span aria-hidden="true">+</span></summary><ol><li><strong>Установи VPN-клиент.</strong><br>Например, Hiddify или v2rayN на своё устройство.</li><li><strong>Скопируй ссылку выше.</strong><br>В клиенте выбери импорт подписки из буфера обмена.</li><li><strong>Выбери направление.</strong><br>Включи подключение в VPN-клиенте.</li></ol></details>
   </div>`);
   root.appendChild(connect);
 
@@ -1299,7 +1333,7 @@ async function boot() {
     const items = Array.isArray(p.items) ? p.items : [];
     const proxySec = el(`<div class="card section" id="section-proxy">
       <h2 class="section-title">Прокси</h2>
-      <p class="muted">SOCKS5 и HTTP прокси. Shared включается как почасовой аддон, dedicated IP — отдельная доп. опция.</p>
+      <p class="muted">Доступ SOCKS5 и HTTP с почасовой оплатой. Выбери общую площадку или выделенный IP под свои задачи.</p>
 
       ${
         `${

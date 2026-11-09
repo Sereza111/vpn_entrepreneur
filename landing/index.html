@@ -1,102 +1,248 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="VL VPN — доступ через Telegram: подписка, баланс, прокси. Быстро подключиться к защищённому интернету." />
-  <title>VL VPN</title>
-  <link rel="stylesheet" href="./styles.css" />
-</head>
-<body>
-  <header class="top">
-    <div class="wrap top-inner">
-      <span class="logo">VL VPN</span>
-      <nav class="nav">
-        <a href="#how">Как работает</a>
-        <a href="#pricing">Тарифы</a>
-        <a href="#faq">FAQ</a>
-      </nav>
-      <a class="btn btn-primary" id="cta-open-bot" href="https://t.me/VL_VPNbot">Открыть в Telegram</a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09090e" />
+    <meta
+      name="description"
+      content="VL VPN — управление защищённым подключением через Telegram."
+    />
+    <title>VL VPN · защищённый маршрут</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=UnifrakturCook:wght@700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true">
+      <span></span><span></span><span></span>
     </div>
-  </header>
-
-  <main>
-    <section class="hero wrap">
-      <div class="hero-copy">
-        <h1>Стабильный VPN с удобным управлением в Telegram</h1>
-        <p class="lead">
-          Подключайся за минуту: пополнение баланса, управление доступом и рабочий обход в одном мини-приложении.
-        </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary lg" href="https://t.me/VL_VPNbot">Перейти к боту</a>
-          <a class="btn btn-outline lg" href="#how">Подробнее</a>
+    <header class="top">
+      <div class="wrap top-inner">
+        <a class="brand" href="#top" aria-label="VL VPN, наверх"
+          ><span class="brand-mark"
+            ><img src="./branding/vl-mark.png" alt="" /></span
+          ><span><b>VL</b><small>VPN / PRIVATE ROUTE</small></span></a
+        >
+        <nav class="nav" aria-label="Основная навигация">
+          <a href="#how">Маршрут</a><a href="#pricing">Доступ</a
+          ><a href="#faq">Ответы</a>
+        </nav>
+        <a
+          class="btn btn-primary top-cta"
+          id="cta-open-bot"
+          href="https://t.me/VL_VPNbot"
+          aria-label="Открыть VL VPN в Telegram"
+          ><span>Открыть бот</span><i>↗</i></a
+        >
+      </div>
+    </header>
+    <main id="top">
+      <section class="hero wrap">
+        <div class="hero-copy reveal">
+          <div class="eyebrow">
+            <span class="pulse"></span> PRIVATE NETWORK · VL VPN
+          </div>
+          <h1>Твой интернет.<br /><em>Твой маршрут.</em></h1>
+          <p class="lead">
+            VPN-доступ с управлением в Telegram. Один экран для подписки,
+            баланса и узлов — без лишнего шума.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary lg" href="https://t.me/VL_VPNbot"
+              >Перейти в Telegram <i>↗</i></a
+            ><a class="btn btn-outline lg" href="#how"
+              >Узнать принцип <i>↓</i></a
+            >
+          </div>
+          <div class="hero-meta">
+            <span><b>01</b> Открой бота</span
+            ><span><b>02</b> Выбери доступ</span
+            ><span><b>03</b> Подключись</span>
+          </div>
         </div>
+        <div
+          class="hero-visual reveal reveal-delay"
+          aria-label="Схема подключения"
+        >
+          <div class="sigil-frame" data-active="profile">
+            <div class="sigil-orbit orbit-a"></div>
+            <div class="sigil-orbit orbit-b"></div>
+            <div class="sigil-core">
+              <img src="./branding/vl-mark.png" alt="" />
+            </div>
+            <button
+              class="sigil-node n1"
+              data-view="profile"
+              type="button"
+              aria-label="Профиль подключения"
+              aria-pressed="true"
+              aria-describedby="route-description"
+            >
+              01</button
+            ><button
+              class="sigil-node n2"
+              data-view="access"
+              type="button"
+              aria-label="Доступ через Telegram"
+              aria-pressed="false"
+              aria-describedby="route-description"
+            >
+              02</button
+            ><button
+              class="sigil-node n3"
+              data-view="control"
+              type="button"
+              aria-label="Управление подпиской"
+              aria-pressed="false"
+              aria-describedby="route-description"
+            >
+              03
+            </button>
+          </div>
+          <div class="visual-caption">
+            <span id="route-caption" aria-live="polite"
+              >01 / ЕДИНЫЙ ПРОФИЛЬ</span
+            ><strong>VL / 2026</strong>
+          </div>
+          <p
+            class="route-description"
+            id="route-description"
+            aria-live="polite"
+          >
+            Скопируй ссылку подписки и импортируй её в VPN-клиент.
+          </p>
+        </div>
+      </section>
+      <section class="signal-strip wrap" aria-label="Возможности">
+        <div>
+          <span class="strip-icon">◈</span><strong>Telegram first</strong
+          ><small>вход без паролей</small>
+        </div>
+        <div>
+          <span class="strip-icon">⌁</span><strong>Multi-node</strong
+          ><small>узлы в одном профиле</small>
+        </div>
+        <div>
+          <span class="strip-icon">◌</span><strong>Live control</strong
+          ><small>баланс и статус онлайн</small>
+        </div>
+      </section>
+      <section class="section-grid wrap" id="how">
+        <div class="section-heading reveal">
+          <span class="section-index">I / ROUTE</span>
+          <h2>Доступ, который<br /><em>не мешает жить.</em></h2>
+          <p>
+            Всё управление остаётся там, где ты уже общаешься — в Telegram.
+            Выбери доступ, получи ссылку подключения и следи за подпиской в
+            одном мини-приложении.
+          </p>
+        </div>
+        <div class="steps reveal reveal-delay">
+          <article class="step">
+            <span>01</span>
+            <div>
+              <h3>Запусти бота</h3>
+              <p>Нажми Start и открой мини-приложение VL VPN.</p>
+            </div>
+            <b>↗</b>
+          </article>
+          <article class="step">
+            <span>02</span>
+            <div>
+              <h3>Выбери режим</h3>
+              <p>Подписка VPN, прокси и дополнительные узлы — в одном месте.</p>
+            </div>
+            <b>↗</b>
+          </article>
+          <article class="step">
+            <span>03</span>
+            <div>
+              <h3>Импортируй профиль</h3>
+              <p>
+                Ссылка подписки для v2rayN, Hiddify, Streisand и других
+                клиентов.
+              </p>
+            </div>
+            <b>↗</b>
+          </article>
+        </div>
+      </section>
+      <section class="pricing wrap" id="pricing">
+        <div class="section-heading compact reveal">
+          <span class="section-index">II / ACCESS</span>
+          <h2>Выбери свой<br /><em>уровень доступа.</em></h2>
+        </div>
+        <div class="grid reveal reveal-delay">
+          <article class="card">
+            <span class="card-no">01</span><span class="card-glyph">◒</span>
+            <h3>Баланс</h3>
+            <p>Пополнение и почасовое списание за активный доступ.</p>
+            <a href="https://t.me/VL_VPNbot">Смотреть в боте <b>↗</b></a>
+          </article>
+          <article class="card featured">
+            <span class="card-no">02 / VPN</span
+            ><span class="card-glyph">✦</span>
+            <h3>Пакет</h3>
+            <p>Выбери доступный период и стоимость в мини-приложении.</p>
+            <a href="https://t.me/VL_VPNbot">Выбрать период <b>↗</b></a>
+          </article>
+          <article class="card">
+            <span class="card-no">03</span><span class="card-glyph">⌁</span>
+            <h3>Прокси</h3>
+            <p>SOCKS5, HTTP и MTProto через доступные серверы.</p>
+            <a href="https://t.me/VL_VPNbot">Добавить узел <b>↗</b></a>
+          </article>
+        </div>
+      </section>
+      <section class="faq wrap" id="faq">
+        <div class="section-heading compact reveal">
+          <span class="section-index">III / ARCHIVE</span>
+          <h2>Частые<br /><em>вопросы.</em></h2>
+        </div>
+        <div class="faq-list reveal reveal-delay">
+          <details open>
+            <summary><span>01</span>Где происходит оплата?<b>+</b></summary>
+            <p>
+              Доступные способы оплаты и итоговая сумма показываются в
+              мини-приложении перед подтверждением.
+            </p>
+          </details>
+          <details>
+            <summary>
+              <span>02</span>Как подключить VPN на устройстве?<b>+</b>
+            </summary>
+            <p>
+              Открой раздел подключения в мини-приложении, скопируй ссылку
+              подписки и добавь её в совместимый VPN-клиент. Инструкция
+              находится рядом со ссылкой.
+            </p>
+          </details>
+          <details>
+            <summary><span>03</span>Как получить помощь?<b>+</b></summary>
+            <p>
+              Открой раздел поддержки в мини-приложении. Там указаны актуальные
+              контакты сервиса.
+            </p>
+          </details>
+        </div>
+      </section>
+    </main>
+    <footer class="foot">
+      <div class="wrap foot-inner">
+        <div class="brand footer-brand">
+          <span class="brand-mark"
+            ><img src="./branding/vl-mark.png" alt="" /></span
+          ><span><b>VL</b><small>PRIVATE ROUTE</small></span>
+        </div>
+        <span class="muted">© VL VPN · защищённый доступ через Telegram</span
+        ><a href="#top" class="to-top">↑ наверх</a>
       </div>
-      <aside class="hero-card" aria-label="Что включено">
-        <ul class="checks">
-          <li>Единый вход через Telegram и мини‑приложение</li>
-          <li>Внутренний баланс с почасовым списанием</li>
-          <li>Опционально общий и выделенный прокси</li>
-          <li>Несколько узлов и сценарий отказоустойчивости (RU / FI / ...)</li>
-        </ul>
-      </aside>
-    </section>
-
-    <section class="strip wrap" id="how">
-      <h2 class="sect-title">Как подключиться</h2>
-      <ol class="steps">
-        <li><strong>Открой бота.</strong> Нажми «Старт» и авторизуйся как обычный пользователь Telegram.</li>
-        <li><strong>Запусти мини-приложение.</strong> В меню выбери WebApp или кнопку из приветственного сообщения.</li>
-        <li><strong>Оформи доступ.</strong> Пополни баланс или возьми пакет с фиксированным сроком — дальше подписка придёт автоматически.</li>
-        <li><strong>Скопируй профиль.</strong> Импортируй ссылку или QR в свой клиент (v2rayN, Hiddify, Streisand и др.).</li>
-      </ol>
-      <p class="note">
-        Актуальное имя бота задаётся в проде переменными окружения; ссылку выше можно заменить своим через разметку лендинга.
-      </p>
-    </section>
-
-    <section class="pricing wrap" id="pricing">
-      <h2 class="sect-title">Тарифы</h2>
-      <div class="grid">
-        <article class="card">
-          <h3>Через баланс</h3>
-          <p>Списание за VPS после начала биллинга, ставка задаётся в настройках бота.</p>
-        </article>
-        <article class="card featured">
-          <h3>Пакеты по дням</h3>
-          <p>Классические периоды 7 / 30 / 90 дней — удобно для предоплаты и промо-кампаний.</p>
-        </article>
-        <article class="card">
-          <h3>Прокси дополнением</h3>
-          <p>Доступ SOCKS/HTTP через выбранные площадки с отдельной выдачей логина и порта.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="faq wrap" id="faq">
-      <h2 class="sect-title">FAQ</h2>
-      <details open>
-        <summary>Где происходит оплата?</summary>
-        <p>По умолчанию — через Telegram Payments / ЮKassa в мини-приложении. Этот лендинг только рассказывает о сервисе.</p>
-      </details>
-      <details>
-        <summary>Сохраняются ли данные при перезапуске?</summary>
-        <p>В прод-сборках рекомендуется MySQL (см. <code>docs/DATABASE_CUTOVER.md</code>). Резервное копирование томов и дампов — ваш админ-процесс.</p>
-      </details>
-      <details>
-        <summary>Куда писать в поддержку?</summary>
-        <p>Например: <a id="cta-support-link" href="https://t.me/VL_VPNbot"> Telegram бот поддержки </a>.</p>
-      </details>
-    </section>
-  </main>
-
-  <footer class="foot">
-    <div class="wrap foot-inner">
-      <span>&copy; VL VPN</span>
-      <span class="muted">Страница статическая; реальную ссылку на бота задай под свой домен при деплое.</span>
-    </div>
-  </footer>
-
-  <script src="./landing.js"></script>
-</body>
+    </footer>
+    <script src="./landing.js"></script>
+  </body>
 </html>

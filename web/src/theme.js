@@ -1,9 +1,11 @@
 const storageKey = "vl-appearance";
 const paletteStorageKey = "vl-palette";
+// Keep the old storage keys so existing users retain their preference, while
+// presenting a modern gothic palette without the previous gold treatment.
 const palettes = [
-  { key: "gothic", label: "Готика", next: "Ноктюрн" },
-  { key: "nocturne", label: "Ноктюрн", next: "Серебро" },
-  { key: "silver", label: "Серебро", next: "Готика" },
+  { key: "gothic", label: "Серебро", next: "Ноктюрн" },
+  { key: "nocturne", label: "Ноктюрн", next: "Лёд" },
+  { key: "silver", label: "Лёд", next: "Серебро" },
 ];
 let current = "dark";
 let palette = "gothic";
@@ -13,11 +15,16 @@ try {
   if (palettes.some((item) => item.key === savedPalette)) palette = savedPalette;
 } catch { /* private webview */ }
 
+const colors = {
+  dark: { gothic: "#09090d", nocturne: "#0b0a14", silver: "#090c10" },
+  light: { gothic: "#ececf1", nocturne: "#eeedf4", silver: "#edf1f4" },
+};
+
 export function applyAppearance(tg = window.Telegram?.WebApp) {
   document.documentElement.classList.toggle("vl-theme-light", current === "light");
   document.documentElement.classList.remove(...palettes.map((item) => `vl-palette-${item.key}`));
   document.documentElement.classList.add(`vl-palette-${palette}`);
-  const background = current === "light" ? "#f4f4f4" : palette === "nocturne" ? "#090812" : "#090909";
+  const background = colors[current]?.[palette] || colors.dark.gothic;
   for (const setter of ["setHeaderColor", "setBackgroundColor", "setBottomBarColor"]) {
     try { tg?.[setter]?.(background); } catch { /* older Telegram clients */ }
   }
@@ -29,7 +36,7 @@ export function applyAppearance(tg = window.Telegram?.WebApp) {
   const paletteButton = document.getElementById("paletteToggle");
   if (paletteButton) {
     const item = palettes.find((entry) => entry.key === palette) || palettes[0];
-    paletteButton.innerHTML = `<span class="palette-toggle__mark" aria-hidden="true">✦</span><span>${item.label}</span>`;
+    paletteButton.textContent = item.label;
     paletteButton.setAttribute("aria-label", `Сменить палитру. Сейчас: ${item.label}. Следующая: ${item.next}`);
     paletteButton.title = `Следующая палитра: ${item.next}`;
   }

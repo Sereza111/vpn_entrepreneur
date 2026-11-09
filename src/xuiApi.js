@@ -47,6 +47,10 @@ export function getPanelRoot() {
   }
 }
 
+export function isXuiConfigured() {
+  return Boolean(getPanelRoot() && (config.xui.apiToken || (config.xui.username && config.xui.password)));
+}
+
 async function parseResponseJson(res, errorPrefix) {
   return await readXuiApiOrThrow(res, errorPrefix);
 }
@@ -119,12 +123,15 @@ async function discardFetchResponse(res) {
 async function xuiFetch(path, { method = "GET", json } = {}) {
   const root = getPanelRoot();
   const dispatcher = getDispatcher();
-  await xuiCookie();
+  const apiToken = config.xui.apiToken;
+  if (!root) throw new Error("xui_not_configured");
+  if (!apiToken) await xuiCookie();
   const headers = {
     Accept: "application/json",
     "X-Requested-With": "XMLHttpRequest",
   };
-  applySessionHeaders(headers);
+  if (apiToken) headers.Authorization = `Bearer ${apiToken}`;
+  else applySessionHeaders(headers);
   if (json !== undefined) headers["Content-Type"] = "application/json";
 
   let res;
@@ -142,7 +149,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
   }
 
   // Match the official 3X-UI v3 SPA: refresh CSRF and retry once on 403.
-  if (res.status === 403) {
+  if (!apiToken && res.status === 403) {
     await discardFetchResponse(res);
     const refreshed = await refreshXuiCsrfToken();
     if (refreshed) {
@@ -163,7 +170,7 @@ async function xuiFetch(path, { method = "GET", json } = {}) {
     }
   }
 
-  if (res.status === 401 || res.status === 403) {
+  if (!apiToken && (res.status === 401 || res.status === 403)) {
     await discardFetchResponse(res);
     cachedCookie = null;
     cachedCsrf = "";

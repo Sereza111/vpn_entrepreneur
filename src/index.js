@@ -408,6 +408,14 @@ app.use(
   }),
 );
 
+// Telegram Web embeds the Mini App in an iframe on web.telegram.org.
+// Keep clickjacking protection elsewhere, and restrict this exception to its host.
+app.use("/app", (_req, res, next) => {
+  res.removeHeader("X-Frame-Options");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://web.telegram.org");
+  next();
+});
+
 app.use(
   rateLimit({
     windowMs: 60 * 1000,
@@ -935,7 +943,7 @@ async function loadMe(telegramId, username = null) {
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
   const canQueryXui =
-    Boolean(config.xui.panelBaseUrl && config.xui.username && config.xui.password) &&
+    xui.isXuiConfigured() &&
     Number(config.xui.inboundId) > 0;
 
   if (canQueryXui) {
@@ -1756,7 +1764,7 @@ async function xuiProvisionCore(telegramId, options) {
 
 async function provisionXuiClient(telegramId, { username }) {
   const tid = Number(telegramId);
-  if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) {
+  if (!xui.isXuiConfigured()) {
     throw new Error("xui_not_configured");
   }
   if (!config.xui.inboundId) {
@@ -1833,7 +1841,7 @@ async function provisionXuiClient(telegramId, { username }) {
 }
 
 async function setXuiClientEnabled(telegramId, enabled) {
-  if (!config.xui.panelBaseUrl || !config.xui.username || !config.xui.password) return;
+  if (!xui.isXuiConfigured()) return;
   if (!config.xui.inboundId) return;
   const tid = Number(telegramId);
   const found = await xui.findClientInInbound({

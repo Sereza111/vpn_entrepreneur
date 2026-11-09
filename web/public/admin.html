@@ -3,128 +3,48 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    <title>VL Admin</title>
+    <meta name="theme-color" content="#09090d" />
+    <title>VL / Control</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-      body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #0b1020; color: #e8ecf7; }
-      .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
-      .card { background: #141b31; border: 1px solid #243053; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-      input, textarea, button { border-radius: 10px; border: 1px solid #33426b; background: #0f162b; color: #e8ecf7; padding: 10px; }
-      input, textarea { flex: 1; min-width: 180px; }
-      textarea { min-height: 150px; width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-      button { cursor: pointer; }
-      .out { white-space: pre-wrap; font-size: 13px; line-height: 1.4; background: #0f162b; border-radius: 10px; padding: 10px; }
-      .muted { color: #9fb0db; font-size: 13px; }
-      .status { margin-top: 8px; font-size: 13px; color: #9fb0db; min-height: 20px; }
-      .status.ok { color: #70e7a5; }
-      .status.err { color: #ff8f8f; }
-      button[disabled] { opacity: .6; cursor: wait; }
-    </style>
+    <link rel="stylesheet" href="/app/admin.css" />
   </head>
   <body>
-    <div class="wrap">
-      <div class="card">
-        <h2>VL Admin Panel (MVP)</h2>
-        <div id="status" class="muted">Инициализация...</div>
-      </div>
-
-      <div class="card">
-        <h3>Пользователь</h3>
-        <div class="row">
-          <input id="telegramId" placeholder="telegramId" />
-          <button id="loadUser">Загрузить</button>
-          <button id="debugXuiMergeBtn">Проверить XUI merge</button>
-        </div>
-        <div class="row">
-          <button id="provisionXuiBtn">Привязать XUI</button>
-          <button id="balanceReconcileBtn">Синк баланс → XUI</button>
-        </div>
-        <div class="row">
-          <input id="grantDays" placeholder="Дни (например 30)" />
-          <button id="grantDaysBtn">Выдать дни</button>
-          <input id="creditMinor" placeholder="Сумма в копейках (например 5000)" />
-          <button id="creditBtn">Пополнить баланс</button>
-        </div>
-        <p class="muted">«Выдать дни» = привязка XUI + баланс + синк срока. Сначала «Привязать XUI», если подписка пустая.</p>
-        <div class="row">
-          <button id="freeOnBtn">FreeMode ON</button>
-          <button id="freeOffBtn">FreeMode OFF</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>YooKassa Reconcile</h3>
-        <div class="row">
-          <input id="paymentId" placeholder="paymentId" />
-          <button id="reconcileBtn">Reconcile</button>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Массовая синхронизация XUI</h3>
-        <div class="row">
-          <input id="reconcileRemoteLimit" type="number" min="1" max="1000" step="1" placeholder="Лимит пользователей (по умолчанию 200)" />
-          <label style="display:flex;align-items:center;gap:6px;padding:10px;border:1px solid #33426b;border-radius:10px;">
-            <input id="reconcileOnlyActive" type="checkbox" checked />
-            Только активные
-          </label>
-          <button id="reconcileRemoteXuiBtn">Синхронизировать US/NL у активных</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Конфиг админки</h3>
-        <div class="row">
-          <button id="loadConfigBtn">Обновить конфиг</button>
-          <button id="migrateBtn">Мигрировать из env</button>
-        </div>
-        <div class="row">
-          <input id="srvId" placeholder="id (напр. us1)" />
-          <input id="srvCountry" placeholder="country (US)" />
-          <input id="srvLabel" placeholder="label (США · US1)" />
-        </div>
-        <div class="row">
-          <input id="srvHost" placeholder="host (IP/домен)" />
-          <input id="srvTimewebId" placeholder="timewebServerId (опц.)" />
-        </div>
-        <div class="row">
-          <input id="srvSocksPort" placeholder="socksPort (1080)" />
-          <input id="srvHttpPort" placeholder="httpPort (3128)" />
-          <input id="srvMtprotoPort" placeholder="mtprotoPort (8443, опц.)" />
-          <input id="srvMtprotoSecret" placeholder="mtprotoSecret (опц.)" />
-        </div>
-        <div class="row">
-          <input id="srvSshHost" placeholder="ssh.host" />
-          <input id="srvSshPort" placeholder="ssh.port (22)" />
-          <input id="srvSshUser" placeholder="ssh.user (root)" />
-        </div>
-        <div class="row">
-          <input id="srvSshKey" placeholder="ssh.privateKeyB64" />
-          <input id="srvSshPassword" type="password" placeholder="ssh.password (если без ключа)" />
-        </div>
-        <div class="row">
-          <input id="srvContainer" placeholder="containerName (3proxy)" />
-          <input id="srvConfigPath" placeholder="configPath (/opt/3proxy/3proxy.cfg)" />
-        </div>
-        <div class="row">
-          <button id="saveServerBtn">Сохранить сервер</button>
-          <button id="deleteServerBtn">Удалить сервер по id</button>
-        </div>
-        <div class="muted">admins[] и proxyServers[] можно редактировать как JSON целиком.</div>
-        <textarea id="configJson"></textarea>
-        <div class="row">
-          <button id="saveConfigBtn">Сохранить admins + proxyServers</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Ответ API</h3>
-        <div id="actionStatus" class="status">Готово</div>
-        <div id="out" class="out">—</div>
-        <div class="muted" style="margin-top:8px;">История операций</div>
-        <div id="actionLog" class="out" style="max-height:180px; overflow:auto;">—</div>
+    <div class="ambient ambient--one" aria-hidden="true"></div><div class="ambient ambient--two" aria-hidden="true"></div>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="VL Control"><span class="brand-mark" aria-hidden="true"><span>V</span><span>L</span></span><span class="brand-copy"><strong>VL</strong><small>CONTROL CENTER</small></span></a>
+        <div class="topbar-meta"><span class="live-dot" aria-hidden="true"></span><span class="topbar-label">SECURE CONSOLE</span><div id="status" class="status-chip" role="status">Инициализация...</div></div>
+      </header>
+      <div class="layout" id="top">
+        <aside class="sidebar" aria-label="Навигация по разделам">
+          <p class="eyebrow">WORKSPACE</p>
+          <nav class="side-nav"><a class="side-nav__link is-active" href="#user"><span class="side-icon">◈</span>Пользователь</a><a class="side-nav__link" href="#payments"><span class="side-icon">⌁</span>Платежи</a><a class="side-nav__link" href="#network"><span class="side-icon">✦</span>Сеть XUI</a><a class="side-nav__link" href="#config"><span class="side-icon">⟡</span>Конфигурация</a><a class="side-nav__link" href="#output"><span class="side-icon">▣</span>Журнал</a></nav>
+          <div class="sidebar-note"><span class="sidebar-note__glyph">✧</span><p>Подписки, платежи и сеть. Единое пространство управления VL.</p></div>
+        </aside>
+        <main class="content">
+          <section class="hero-panel" aria-labelledby="page-title"><div class="hero-panel__grid"></div><div class="hero-panel__copy"><p class="eyebrow">VL VPN / ADMINISTRATION</p><h1 id="page-title">Контроль доступа<br /><em>без лишнего шума.</em></h1><p class="hero-lead">Управляйте подписками, балансом и узлами из одного защищённого пространства.</p></div><div class="hero-seal" aria-hidden="true"><span>VL</span><small>ACCESS / CONTROL</small></div></section>
+          <section class="panel panel--user" id="user" aria-labelledby="user-title">
+            <div class="panel-heading"><div class="panel-index">01</div><div><p class="eyebrow">IDENTITY / SUBSCRIPTION</p><h2 id="user-title">Пользователь</h2></div><span class="panel-symbol" aria-hidden="true">◈</span></div>
+            <p class="panel-intro">Найдите Telegram-профиль и выполните операцию с его подпиской.</p>
+            <div class="field-line field-line--search"><label class="field"><span>Telegram ID</span><input id="telegramId" inputmode="numeric" autocomplete="off" placeholder="Например, 123456789" /></label><button class="button button--primary" id="loadUser"><span>Загрузить</span><b>↗</b></button><button class="button button--ghost" id="debugXuiMergeBtn"><span>Проверить merge</span><b>⌁</b></button></div>
+            <div class="action-grid action-grid--three"><button class="button button--soft" id="provisionXuiBtn"><span>Привязать XUI</span><b>＋</b></button><button class="button button--soft" id="balanceReconcileBtn"><span>Синк → XUI</span><b>↔</b></button><button class="button button--soft" id="freeOnBtn"><span>FreeMode ON</span><b>◉</b></button><button class="button button--danger" id="freeOffBtn"><span>FreeMode OFF</span><b>○</b></button></div>
+            <div class="subsection"><div class="subsection-title"><span>Ручная выдача</span><small>действие влияет на срок доступа</small></div><div class="field-line field-line--grant"><label class="field"><span>Срок, дней</span><input id="grantDays" inputmode="numeric" placeholder="30" /></label><button class="button button--primary" id="grantDaysBtn"><span>Выдать дни</span><b>＋</b></button><label class="field"><span>Баланс, копеек</span><input id="creditMinor" inputmode="numeric" placeholder="5000" /></label><button class="button button--outline" id="creditBtn"><span>Пополнить</span><b>↗</b></button></div><p class="hint">Выдача дней включает привязку XUI, баланс и синхронизацию срока.</p></div>
+          </section>
+          <div class="split-grid">
+            <section class="panel panel--compact" id="payments" aria-labelledby="payments-title"><div class="panel-heading"><div class="panel-index">02</div><div><p class="eyebrow">PAYMENT PIPELINE</p><h2 id="payments-title">Платежи</h2></div><span class="panel-symbol" aria-hidden="true">⌁</span></div><p class="panel-intro">Проверьте состояние платежа через YooKassa.</p><div class="field-line"><label class="field"><span>Payment ID</span><input id="paymentId" autocomplete="off" placeholder="Идентификатор платежа" /></label><button class="button button--primary" id="reconcileBtn"><span>Reconcile</span><b>↗</b></button></div></section>
+            <section class="panel panel--compact" id="network" aria-labelledby="network-title"><div class="panel-heading"><div class="panel-index">03</div><div><p class="eyebrow">REMOTE NODES</p><h2 id="network-title">Сеть XUI</h2></div><span class="panel-symbol" aria-hidden="true">✦</span></div><p class="panel-intro">Синхронизация удалённых узлов для активных клиентов.</p><div class="field-line"><label class="field"><span>Лимит клиентов</span><input id="reconcileRemoteLimit" type="number" min="1" max="1000" step="1" placeholder="200" /></label><label class="check-field"><input id="reconcileOnlyActive" type="checkbox" checked /><span>Только активные</span></label></div><button class="button button--outline button--wide" id="reconcileRemoteXuiBtn"><span>Синхронизировать US / NL</span><b>↻</b></button></section>
+          </div>
+          <section class="panel" id="config" aria-labelledby="config-title"><div class="panel-heading"><div class="panel-index">04</div><div><p class="eyebrow">INFRASTRUCTURE / ACCESS</p><h2 id="config-title">Конфигурация</h2></div><span class="panel-symbol" aria-hidden="true">⟡</span></div><div class="panel-toolbar"><p class="panel-intro">Администраторы и proxy-серверы приложения.</p><div class="toolbar-actions"><button class="button button--ghost" id="loadConfigBtn"><span>Обновить</span><b>↻</b></button><button class="button button--ghost" id="migrateBtn"><span>Мигрировать из env</span><b>⇥</b></button></div></div>
+            <div class="subsection subsection--server"><div class="subsection-title"><span>Карточка proxy-сервера</span><small>сохранение по server id</small></div><div class="form-grid form-grid--three">
+              <label class="field"><span>ID</span><input id="srvId" placeholder="us1" /></label><label class="field"><span>Страна</span><input id="srvCountry" placeholder="US" /></label><label class="field"><span>Название</span><input id="srvLabel" placeholder="США · US1" /></label><label class="field field--wide"><span>Host / IP</span><input id="srvHost" placeholder="host.example.com" /></label><label class="field"><span>Timeweb ID</span><input id="srvTimewebId" placeholder="необязательно" /></label><label class="field"><span>SOCKS порт</span><input id="srvSocksPort" inputmode="numeric" placeholder="1080" /></label><label class="field"><span>HTTP порт</span><input id="srvHttpPort" inputmode="numeric" placeholder="3128" /></label><label class="field"><span>MTProto порт</span><input id="srvMtprotoPort" inputmode="numeric" placeholder="8443" /></label><label class="field"><span>MTProto secret</span><input id="srvMtprotoSecret" placeholder="необязательно" /></label><label class="field"><span>SSH host</span><input id="srvSshHost" placeholder="host.example.com" /></label><label class="field"><span>SSH порт</span><input id="srvSshPort" inputmode="numeric" placeholder="22" /></label><label class="field"><span>SSH user</span><input id="srvSshUser" placeholder="root" /></label><label class="field field--wide"><span>SSH private key (base64)</span><input id="srvSshKey" autocomplete="off" placeholder="оставьте пустым, если не используется" /></label><label class="field"><span>SSH password</span><input id="srvSshPassword" type="password" autocomplete="new-password" placeholder="если без ключа" /></label><label class="field"><span>Container name</span><input id="srvContainer" placeholder="3proxy" /></label><label class="field field--wide"><span>Config path</span><input id="srvConfigPath" placeholder="/opt/3proxy/3proxy.cfg" /></label>
+            </div><div class="action-grid action-grid--two"><button class="button button--primary" id="saveServerBtn"><span>Сохранить сервер</span><b>↓</b></button><button class="button button--danger" id="deleteServerBtn"><span>Удалить по ID</span><b>×</b></button></div></div>
+            <div class="subsection"><div class="subsection-title"><span>Raw configuration</span><small>admins[] и proxyServers[]</small></div><textarea id="configJson" spellcheck="false" aria-label="JSON конфигурация"></textarea><button class="button button--primary button--wide" id="saveConfigBtn"><span>Сохранить admins + proxyServers</span><b>↓</b></button></div>
+          </section>
+          <section class="panel panel--output" id="output" aria-labelledby="output-title"><div class="panel-heading"><div class="panel-index">05</div><div><p class="eyebrow">OBSERVABILITY / AUDIT</p><h2 id="output-title">Журнал операций</h2></div><span class="panel-symbol" aria-hidden="true">▣</span></div><div id="actionStatus" class="status-line" role="status">Готово</div><pre id="out" class="output-box">—</pre><div class="subsection-title"><span>История операций</span><small>последние 20 действий</small></div><pre id="actionLog" class="output-box output-box--log">—</pre></section>
+          <footer class="footer"><span>VL / CONTROL</span><span>AUTHORIZED OPERATIONS ONLY</span></footer>
+        </main>
       </div>
     </div>
     <script type="module" src="/app/admin.js"></script>
   </body>
-  </html>
+</html>
