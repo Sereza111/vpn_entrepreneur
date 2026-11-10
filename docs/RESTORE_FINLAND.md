@@ -8,8 +8,8 @@
 - Working directory: `/root/vpn-bot`.
 - Runtime configuration: `/root/vpn-bot/.env` (mode 0600; contains secrets, never commit or print it).
 - Compose file: `/root/vpn-bot/docker-compose.yml`.
-- Deployed image: `vl-vpn:restore-20261109` (image ID prefix `15e4735ba892`).
-- Build sources: `/root/vpn-bot-build/release-20261109`; source archive alongside it.
+- Deployed image: `vl-vpn:cabinet-5c0f90f` (image ID prefix `ba171f5e875b`; updated 10 November 2026).
+- Build sources: `/root/vpn-bot-build/release-cabinet-5c0f90f`; source archive `/root/vpn-bot-build/cabinet-5c0f90f.tar.gz`.
 - Application is bound to `127.0.0.1:3001` behind nginx.
 - nginx virtual host: `/etc/nginx/sites-available/vl.errorclub.club`, enabled through `sites-enabled`.
 - TLS certificate: `/etc/letsencrypt/live/vl.errorclub.club/fullchain.pem`; private key in the same directory.
@@ -36,7 +36,21 @@ Compose defines `host.docker.internal:host-gateway`. UFW allows only the bot bri
 
 Existing billing and balance reconciliation remain enabled. Expiry notification jobs and test grants are disabled. YooKassa credentials were checked with the read-only `/v3/me` endpoint: account enabled, production mode. No invoice or payment was created during verification.
 
-## Validation performed
+## Telegram cabinet deployment — 10 November 2026
+
+Source commit `5c0f90fcf21f6d2719a8dbb712b0ddb9b68f1898` adds the private-chat HTML Widget cabinet, text fallback and device connection instructions. The widget is generated from `src/bot/widget.source.html` during the Docker build; the deployed result is 9,456 raw bytes / 4,042 zlib bytes.
+
+- All 35 automated tests and the production build passed before deployment. An isolated candidate with separate empty data, no network and background jobs disabled passed process health, Mini App HTML and anonymous API checks.
+- Backup: `/root/vpn-bot-backups/cabinet-5c0f90f-20261110T202040Z`, containing the current protected `.env`, compose, data snapshot and container/network baseline. `data-before-switch` is an additional snapshot taken immediately before replacement.
+- Only `IMAGE` changed in the runtime `.env`; `docker compose up -d --no-deps bot` replaced the bot container. Its existing data mount and Compose network were retained. All other container IDs and start times remained unchanged.
+- Public `/health` and `/app/` return HTTP 200. `/app/assets/index-D7_MflUp.js` and `/app/assets/index-DFRHBVvU.css` return HTTP 200. Anonymous `/api/me` and `/api/admin/config` return HTTP 401. The Mini App still permits framing by Telegram Web.
+- Telegram confirms `allowed_updates`: `message`, `callback_query`, `pre_checkout_query`, `widget_query`; zero pending updates and no delivery error at verification.
+- A `sendWidget` preflight used nonexistent `chat_id=0` and returned HTTP 400 `chat not found`, confirming that the endpoint recognizes the method. No message was sent to a real chat. Native Telegram rendering and a real user's widget refresh remain unverified; no payment or customer provisioning was performed during this deployment.
+- Existing subscription associations were unchanged. Balance records retained their accounts and continued the already-enabled billing accrual; runtime data was not replaced with a backup.
+
+The preceding image `vl-vpn:restore-20261109` (ID prefix `15e4735ba892`) and its sources `/root/vpn-bot-build/release-20261109` remain available. To roll back application code, snapshot current runtime files again, select that image via `IMAGE`, and run `docker compose up -d --no-deps bot`. Preserve the current `.env` settings, live data and network; do not restore older balances merely to revert the UI.
+
+## Restoration validation — 9 November 2026
 
 - Full automated suite: 17 passing tests. Production build completed.
 - Website, Mini App, admin HTML/CSS/JS and emblem assets return HTTP 200 through Cloudflare.
