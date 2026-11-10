@@ -8,6 +8,7 @@ export const NS = {
   RUNTIME_STATE: "runtime_state",
   ADMIN_CONFIG: "admin_config",
   NOTIFY_EXPIRING: "notify_expiring",
+  TELEGRAM_CABINETS: "telegram_cabinets",
 };
 
 export const LEGACY_FILENAME = {
@@ -19,4 +20,5 @@ export const LEGACY_FILENAME = {
   [NS.RUNTIME_STATE]: "runtime-state.json",
   [NS.ADMIN_CONFIG]: "admin-config.json",
   [NS.NOTIFY_EXPIRING]: "notify-expiring.json",
+  [NS.TELEGRAM_CABINETS]: "telegram-cabinets.json",
 };

@@ -14,6 +14,7 @@ import * as xuiStore from "./xuiLinksStore.js";
 import * as xui from "./xuiApi.js";
 import { xuiSubscriptionStatus } from "./integrations/xuiClients.js";
 import { createKeyedLock } from "./services/keyedLock.js";
+import { createCabinet, CABINET_UPDATES } from "./bot/cabinet.js";
 import * as proxyStore from "./proxyStore.js";
 import {
   ensureProxyUserOnServer,
@@ -327,7 +328,10 @@ async function setupTelegramTransport() {
   const base = config.publicBaseUrl?.replace(/\/$/, "");
   if (base) {
     const url = `${base}${whPath}`;
-    const extra = config.webhookSecret ? { secret_token: config.webhookSecret } : {};
+    const extra = {
+      allowed_updates: CABINET_UPDATES,
+      ...(config.webhookSecret ? { secret_token: config.webhookSecret } : {}),
+    };
     let lastErr;
     for (let i = 0; i < retries; i++) {
       try {
@@ -368,7 +372,7 @@ async function setupTelegramTransport() {
   console.log("PUBLIC_BASE_URL not set, using long polling");
   try {
     await bot.api.deleteWebhook({ drop_pending_updates: true });
-    bot.start();
+    bot.start({ allowed_updates: CABINET_UPDATES });
   } catch (e) {
     console.error(
       "[telegram] long polling setup failed:",
@@ -942,6 +946,7 @@ async function loadMe(telegramId, username = null) {
 
   /** Единый блок для вкладки «Статус» (XUI или Remnawave). */
   let subscriptionStatus = null;
+  let subscriptionCheck = "unavailable";
   const canQueryXui =
     xui.isXuiConfigured() &&
     Number(config.xui.inboundId) > 0;
@@ -952,6 +957,7 @@ async function loadMe(telegramId, username = null) {
         inboundId: config.xui.inboundId,
         telegramId,
       });
+      subscriptionCheck = "ok";
       if (found?.client) {
         const email =
           String(found.client.email || "").trim() ||
@@ -990,6 +996,7 @@ async function loadMe(telegramId, username = null) {
         };
       }
     } catch {
+      subscriptionCheck = "unavailable";
       // не ломаем /api/me, если панель временно недоступна
     }
   }
@@ -1120,6 +1127,7 @@ async function loadMe(telegramId, username = null) {
     subscriptionPrimarySource,
     xui: xuiPayload,
     subscriptionStatus,
+    subscriptionCheck,
     subscriptionUi,
     proxy: proxyPayload,
     mtproto,
@@ -3431,6 +3439,13 @@ app.post("/api/admin/xui/grant-days-all", adminGrantAuth, async (req, res) => {
 });
 
 const bot = new Bot(config.botToken);
+const cabinet = createCabinet({
+  api: bot.api,
+  loadMe,
+  webAppUrl: config.webAppUrl,
+  widgetsEnabled: process.env.TELEGRAM_WIDGETS_ENABLED !== "0",
+});
+bot.use(cabinet.middleware);
 
 async function getTelegramPlanOptions() {
   return [
@@ -3597,6 +3612,13 @@ async function createBalanceTopupInvoiceLink({ telegramId, username, amountMinor
 }
 
 async function applySuccessfulBusinessPayload({ payload, paidMinor = 0, username = null }) {
+  const result = await applySuccessfulBusinessPayloadCore({ payload, paidMinor, username });
+  // A Telegram delivery failure must never retry or roll back a successful payment.
+  void cabinet.refreshUser(payload.telegramId).catch(() => console.warn("[cabinet] payment refresh failed"));
+  return result;
+}
+
+async function applySuccessfulBusinessPayloadCore({ payload, paidMinor = 0, username = null }) {
   if (!payload) throw new Error("payment_payload_missing");
   if (payload.kind === "balance_topup") {
     const minor = Math.max(0, Math.floor(Number(paidMinor || 0)));
@@ -4036,12 +4058,11 @@ bot.command("start", async (ctx) => {
       .bindInviterIfEmpty({ inviteeTelegramId: inviteeId, inviterTelegramId: inviterId })
       .catch(() => null);
   }
-  const kb = new InlineKeyboard().webApp("VL — мини‑приложение", config.webAppUrl);
-  await ctx.reply(
-    "Открой мини-приложение: там статус подписки и доступ к VPS Premium.",
-    { reply_markup: kb },
-  );
+  await cabinet.show(ctx);
 });
+
+bot.command("cabinet", (ctx) => cabinet.show(ctx));
+bot.command("menu", (ctx) => cabinet.show(ctx, { textOnly: true }));
 
 bot.command("paytest", async (ctx) => {
   if (config.payment.mode !== "test") {
@@ -4134,7 +4155,18 @@ bot.on("message:successful_payment", async (ctx) => {
 });
 
 if (config.publicBaseUrl) {
-  app.use(whPath, webhookCallback(bot, "express", { secretToken: config.webhookSecret || undefined }));
+  const telegramWebhook = webhookCallback(bot, "express", {
+    secretToken: config.webhookSecret || undefined,
+    timeoutMilliseconds: 30_000,
+    onTimeout: "return",
+  });
+  app.use(whPath, (req, res, next) => {
+    Promise.resolve(telegramWebhook(req, res, next)).catch(() => {
+      // Express 4 does not automatically handle rejected async middleware.
+      console.warn("[telegram] webhook update failed");
+      if (!res.headersSent) res.sendStatus(500);
+    });
+  });
 }
 
 app.use(express.static(path.join(publicDir, "site"), { index: false, fallthrough: true }));

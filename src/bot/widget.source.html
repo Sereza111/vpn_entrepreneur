@@ -1,0 +1,528 @@
+<style>
+  :root {
+    --ink: var(--tg-theme-text-color);
+    --hint: var(--tg-theme-hint-color);
+    --soft: var(--tg-theme-secondary-bg-color);
+    --line: var(--tg-theme-section-separator-color);
+    --accent: var(--tg-theme-accent-text-color);
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    color: var(--ink);
+    font-family: system-ui;
+    font-size: var(--tg-text-font-size);
+    line-height: 1.35;
+  }
+  .wrap {
+    padding: 12px 14px 0;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--hint);
+    font-size: 0.65em;
+  }
+  .crest {
+    color: var(--accent);
+    font: 1.7em serif;
+  }
+  .tabs,
+  .row {
+    display: flex;
+    gap: 6px;
+  }
+  .tabs {
+    margin: 10px 0 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  button {
+    font: inherit;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--soft);
+    color: var(--ink);
+    padding: 9px 10px;
+    transition: transform 0.18s;
+  }
+  .tabs button {
+    flex: 1;
+    font-size: 0.76em;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--hint);
+  }
+  .tabs .selected {
+    color: var(--ink);
+    border-color: var(--accent);
+  }
+  button:active {
+    transform: translateY(1px);
+  }
+  button[disabled] {
+    color: var(--hint);
+    transform: none;
+  }
+  .primary {
+    background: var(--tg-theme-button-color);
+    color: var(--tg-theme-button-text-color);
+    border-color: transparent;
+  }
+  .full {
+    width: 100%;
+  }
+  .row {
+    margin-top: 7px;
+  }
+  .row button {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.76em;
+  }
+  .row .selected {
+    border-color: var(--accent);
+  }
+  .state {
+    color: var(--accent);
+    font-size: 0.82em;
+  }
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding: 12px 0 15px;
+  }
+  .hero:after {
+    content: "";
+    position: absolute;
+    width: 70px;
+    height: 100px;
+    border: 1px solid var(--line);
+    border-radius: 50% 50% 0 0;
+    right: 12px;
+    top: 8px;
+    transform: rotate(15deg);
+    box-shadow:
+      10px 0 0 -1px var(--soft),
+      11px 0 var(--line);
+  }
+  h2 {
+    position: relative;
+    z-index: 1;
+    font: 2.8em/1.12 serif;
+    margin: 0;
+  }
+  h2 small {
+    font: 0.36em system-ui;
+  }
+  h3 {
+    font: 1.6em/1.2 serif;
+    margin: 0 0 7px;
+  }
+  p {
+    font-size: 0.78em;
+    color: var(--hint);
+    margin: 7px 0;
+    line-height: 1.45;
+  }
+  .hero p {
+    position: relative;
+    z-index: 1;
+    max-width: 85%;
+  }
+  .stats {
+    display: flex;
+    gap: 12px;
+    border-top: 1px solid var(--line);
+    padding: 12px 0;
+  }
+  .stats div {
+    flex: 1;
+    min-width: 0;
+  }
+  .stats small {
+    display: block;
+    color: var(--hint);
+    font-size: 0.68em;
+    margin-bottom: 4px;
+  }
+  .steps {
+    padding: 0;
+    list-style: none;
+    margin: 12px 0;
+  }
+  .steps li {
+    display: flex;
+    gap: 9px;
+    margin: 10px 0;
+    font-size: 0.8em;
+  }
+  .steps b {
+    color: var(--accent);
+    font-family: serif;
+  }
+  .choice {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 7px;
+    font-size: 0.78em;
+  }
+  .result {
+    padding: 12px;
+    border-left: 2px solid var(--accent);
+    background: var(--soft);
+    margin: 12px 0;
+    font-size: 0.8em;
+  }
+  .foot {
+    font-size: 0.63em;
+    color: var(--hint);
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+    padding-left: var(--tg-content-safe-area-corner-left, 0px);
+    padding-right: var(--tg-content-safe-area-corner-right, 0px);
+  }
+  #notice {
+    min-height: 1.4em;
+  }
+  .error {
+    color: var(--tg-theme-destructive-text-color);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button {
+      transition: none;
+    }
+    button:active {
+      transform: none;
+    }
+  }
+</style>
+<div class="wrap">
+  <div class="brand">
+    <span>VL / ЛИЧНЫЙ ДОСТУП</span><span class="crest">✧</span>
+  </div>
+  <div class="tabs" id="tabs">
+    <button data-view="access">Доступ</button
+    ><button data-view="connect">Подключение</button
+    ><button data-view="help">Помощь</button>
+  </div>
+  <div id="content"></div>
+  <div class="foot">
+    <div id="notice"></div>
+    <span id="stamp"></span>
+  </div>
+</div>
+<script>
+  (() => {
+    const W = window.TelegramWidget,
+      $ = (id) => document.getElementById(id),
+      content = $("content");
+    let view = "access",
+      device = "android",
+      issue = "",
+      pending = false,
+      timer,
+      data = {};
+    const status = {
+      ACTIVE: "Доступ активен",
+      EXPIRED: "Срок истёк",
+      DISABLED: "Доступ выключен",
+      LIMITED: "Трафик израсходован",
+      PENDING: "Нужна проверка",
+      UNLINKED: "Нет подписки",
+      UNKNOWN: "Нет данных",
+    };
+    const issues = {
+      import: "Не импортируется",
+      connect: "Не подключается",
+      sites: "Не открываются сайты",
+      access: "Проверить доступ",
+    };
+    const number = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+    const date = (v) => (typeof v === "string" ? Date.parse(v) : NaN);
+    const format = (v) =>
+      new Date(v).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "short",
+      });
+    const bytes = (v) =>
+      number(v) ? (v / 1073741824).toFixed(1) + " ГБ" : "—";
+    function state() {
+      try {
+        const d = JSON.parse(W && W.chatData);
+        data =
+          d && d.v === 1 && !W.isForward && W.chatType === "private" ? d : {};
+      } catch {
+        data = {};
+      }
+    }
+    function app() {
+      return typeof data.app === "string" &&
+        /^https:\/\/t\.me\/[A-Za-z0-9_]+\?startapp=$/.test(data.app)
+        ? data.app
+        : "";
+    }
+    function support() {
+      const s = data.support;
+      return typeof s === "string" &&
+        /^https:\/\/t\.me\/[A-Za-z0-9_]+$/.test(s) &&
+        s.toLowerCase() !== app().split("?")[0].toLowerCase()
+        ? s
+        : "";
+    }
+    function button(text, action, primary = false) {
+      return (
+        '<button class="' +
+        (primary ? "primary full" : "full") +
+        '" data-action="' +
+        action +
+        '">' +
+        text +
+        "</button>"
+      );
+    }
+    function check() {
+      if (data.status === "ACTIVE") {
+        if (
+          number(data.balance) &&
+          data.billing &&
+          !data.free &&
+          data.balance <= 0
+        )
+          return "Баланс пуст. Пополни его и обнови данные.";
+        return "Доступ разрешён. Соединение проверяй в VPN-клиенте.";
+      }
+      return (
+        {
+          EXPIRED: "Продли доступ в кабинете.",
+          DISABLED: "Проверь баланс в кабинете.",
+          LIMITED: "Трафик исчерпан. Открой кабинет.",
+          PENDING: "Проверь данные в кабинете или обратись в поддержку.",
+          UNLINKED: "Открой кабинет, чтобы оформить доступ.",
+        }[data.status] || "Обнови данные или открой кабинет."
+      );
+    }
+    function draw() {
+      document
+        .querySelectorAll("[data-view]")
+        .forEach(
+          (b) => (b.className = b.dataset.view === view ? "selected" : ""),
+        );
+      const label = status[data.status] || status.UNKNOWN,
+        expiry = date(data.expiry),
+        updated = date(data.updated);
+      let title = "Твой доступ",
+        sub = "Настройка в кабинете.";
+      if (data.status === "ACTIVE") {
+        if (Number.isFinite(expiry) && Number.isFinite(updated)) {
+          title =
+            Math.max(0, Math.ceil((expiry - updated) / 86400000)) +
+            " <small>дн.</small>";
+          sub = "До " + format(expiry);
+        } else if (data.expiry === null) {
+          title = "Без срока";
+          sub = "Без ограничения";
+        }
+      }
+      if (view === "access")
+        content.innerHTML =
+          '<div class="state">' +
+          label +
+          '</div><div class="hero"><h2>' +
+          title +
+          "</h2><p>" +
+          sub +
+          '</p></div><div class="stats"><div><small>Баланс</small><b>' +
+          (number(data.balance)
+            ? (data.balance / 100).toFixed(2) + " ₽"
+            : "—") +
+          "</b></div><div><small>Трафик</small><b>" +
+          bytes(data.used) +
+          (number(data.limit) && data.limit > 0
+            ? " / " + bytes(data.limit)
+            : data.limit === 0
+              ? " / ∞"
+              : "") +
+          "</b></div></div>" +
+          button("Подключить ↗", "connect", true) +
+          '<div class="row">' +
+          button(data.billing ? "Пополнить" : "Продлить", "balance") +
+          button(pending ? "Обновляем…" : "Обновить", "refresh") +
+          "</div>";
+      if (view === "connect")
+        content.innerHTML =
+          '<h3>Настрой устройство</h3><div class="row">' +
+          [
+            ["android", "Android"],
+            ["ios", "iPhone"],
+            ["windows", "Windows"],
+          ]
+            .map(
+              ([key, name]) =>
+                '<button data-device="' +
+                key +
+                '" class="' +
+                (device === key ? "selected" : "") +
+                '">' +
+                name +
+                "</button>",
+            )
+            .join("") +
+          '</div><ol class="steps"><li><b>01</b> Установи VPN-клиент.</li><li><b>02</b> Добавь личную ссылку подписки.</li><li><b>03</b> Включи VPN в приложении.</li></ol>' +
+          button("Открыть настройку ↗", "guide", true);
+      if (view === "help")
+        content.innerHTML = issue
+          ? "<h3>" +
+            issues[issue] +
+            '</h3><div class="result">' +
+            (issue === "access"
+              ? check()
+              : issue === "import"
+                ? "Скопируй ссылку из кабинета. Выбери импорт подписки в клиенте."
+                : "Обнови подписку и повтори подключение в клиенте.") +
+            "</div>" +
+            button(
+              support() ? "Открыть поддержку ↗" : "Открыть кабинет ↗",
+              support() ? "support" : "help",
+              true,
+            ) +
+            '<div class="row">' +
+            button("← Другая проблема", "back") +
+            button(pending ? "Обновляем…" : "Обновить", "refresh") +
+            "</div>"
+          : "<h3>Что случилось?</h3>" +
+            Object.keys(issues)
+              .map(
+                (key) =>
+                  '<button class="choice" data-issue="' +
+                  key +
+                  '">' +
+                  issues[key] +
+                  " ↗</button>",
+              )
+              .join("");
+      document
+        .querySelectorAll('[data-action="refresh"]')
+        .forEach(
+          (b) =>
+            (b.disabled =
+              pending ||
+              !W ||
+              W.isPreview ||
+              W.isForward ||
+              W.chatType !== "private"),
+        );
+      $("stamp").textContent = Number.isFinite(updated)
+        ? "Снимок: " +
+          format(updated) +
+          " · " +
+          new Date(updated).toLocaleTimeString("ru-RU", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "Открой личный чат с ботом";
+    }
+    function notice(text, error = false) {
+      $("notice").textContent = text;
+      $("notice").className = error ? "error" : "";
+    }
+    const errors = {
+      NOT_ALLOWED: "Открой личный чат с ботом.",
+      BUSY: "Запрос уже идёт. Подожди.",
+      RATE_LIMITED: "Слишком часто. Повтори позже.",
+      TIMEOUT: "Нет ответа. Повтори позже.",
+      FAILED: "Сбой обновления. Повтори.",
+      INVALID_ANSWER: "Ошибка ответа. Повтори позже.",
+    };
+    function fail(e) {
+      if (!pending) return;
+      clearTimeout(timer);
+      pending = false;
+      notice(errors[e && e.code] || errors.FAILED, true);
+      draw();
+    }
+    function refresh() {
+      if (pending) return;
+      pending = true;
+      notice("Обновляем…");
+      draw();
+      timer = setTimeout(() => fail({ code: "TIMEOUT" }), 25000);
+      try {
+        W.request("refresh").then((answer) => {
+          let r = null;
+          try {
+            r = JSON.parse(answer.result);
+          } catch {}
+          if (r && r.ok === false) fail({ code: "FAILED" });
+          else if (pending) notice("Ждём данные…");
+        }, fail);
+      } catch (e) {
+        fail(e);
+      }
+    }
+    document.addEventListener("click", (event) => {
+      const b = event.target.closest("button");
+      if (!b || b.disabled) return;
+      if (b.dataset.view) {
+        view = b.dataset.view;
+        issue = "";
+        notice("");
+      } else if (b.dataset.device) device = b.dataset.device;
+      else if (b.dataset.issue) issue = b.dataset.issue;
+      else {
+        const a = b.dataset.action;
+        if (a === "connect") view = "connect";
+        else if (a === "back") issue = "";
+        else if (a === "refresh") {
+          refresh();
+          return;
+        } else {
+          const url =
+            a === "support"
+              ? support()
+              : app() +
+                (a === "guide"
+                  ? "connect_" + device
+                  : a === "balance"
+                    ? "balance"
+                    : "help");
+          if (!W || !app()) {
+            notice("Открой кабинет под сообщением.", true);
+            return;
+          }
+          try {
+            W.openTelegramLink(url);
+          } catch {
+            notice("Открой кабинет под сообщением.", true);
+          }
+          return;
+        }
+      }
+      draw();
+    });
+    if (W) {
+      W.onEvent("chatDataChanged", () => {
+        clearTimeout(timer);
+        pending = false;
+        state();
+        draw();
+        notice(
+          data.status === "UNKNOWN"
+            ? "Нет данных. Повтори позже."
+            : "Данные обновлены",
+          data.status === "UNKNOWN",
+        );
+      });
+    }
+    state();
+    draw();
+    if (W) W.ready();
+  })();
+</script>

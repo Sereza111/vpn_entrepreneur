@@ -3,6 +3,9 @@ FROM node:20-alpine AS webbuild
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
+COPY scripts/build-widget.mjs /build/scripts/build-widget.mjs
+COPY src/bot/widget.source.html /build/src/bot/widget.source.html
+RUN node /build/scripts/build-widget.mjs
 COPY web/ ./
 RUN npm run build
 
@@ -17,6 +20,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
+COPY --from=webbuild /build/src/bot/widget.html ./src/bot/widget.html
 COPY --from=webbuild /build/public ./public
 COPY --from=sitebuild /sitecopy/public/site ./public/site
 ENV NODE_ENV=production

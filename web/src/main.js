@@ -1,5 +1,6 @@
 import "./style.css";
 import { applyAppearance, bindAppearance } from "./theme.js";
+import { mountConnectionWizard, readLaunchTarget } from "./connectionWizard.js";
 const root = document.getElementById("root");
 
 function markPngUrl() {
@@ -294,13 +295,6 @@ function vpnPlanTileHtml(p) {
     <span class="plan-tile__title">${title}</span>
     <span class="plan-tile__meta">${meta}</span>
   </button>`;
-}
-
-function compactSubscriptionUrl(url) {
-  const raw = String(url || "").trim();
-  if (!raw || raw === "—") return "—";
-  if (raw.length <= 54) return raw;
-  return `${raw.slice(0, 30)}...${raw.slice(-16)}`;
 }
 
 function proxyPurchaseTileHtml(days, label, priceMinor = 0) {
@@ -962,6 +956,18 @@ async function boot() {
   }
 
   const u = null;
+  const launchTarget = readLaunchTarget(tg);
+  const setupConnectionWizard = () => {
+    mountConnectionWizard(document.getElementById("connectionWizard"), {
+      subscriptionUrl: me.subscriptionUrl,
+      initialDevice: launchTarget?.device,
+      balanceEnabled: Boolean(me.balance?.enabled),
+      tg,
+      toast: showToast,
+    });
+    // Apply the launch hint once, only after auth, profile and tab handlers exist.
+    if (launchTarget) document.querySelector(`.seg-btn[data-target="${launchTarget.section}"]`)?.click();
+  };
   const xui = me.xui || null;
   const hasAccount = Boolean(u || xui?.linked);
   const priceMap = me?.payment?.prices || {};
@@ -1041,9 +1047,9 @@ async function boot() {
     root.appendChild(
       el(`
         <div class="card section" id="section-connect">
-          <h2 class="section-title">Подключение</h2>
-          <p class="muted">После оплаты доступ к VPN выдаётся автоматически. Затем здесь появится кнопка подключения.</p>
-          <button class="btn secondary" type="button" id="refreshBtn">Обновить статус</button>
+          <div class="eyebrow">ВАШЕ УСТРОЙСТВО / ВАША СЕТЬ</div>
+          <h2 class="section-title">Подключить VPN</h2>
+          <div id="connectionWizard"></div>
         </div>
       `),
     );
@@ -1128,7 +1134,6 @@ async function boot() {
     });
     bindWheelSwipe(document.getElementById("vlWheelDock"));
 
-    document.getElementById("refreshBtn").onclick = () => window.location.reload();
     const payBtnNoAcc = document.getElementById("payBtn");
     if (payBtnNoAcc) payBtnNoAcc.onclick = async () => {
       const pay = me.payment || {};
@@ -1234,6 +1239,7 @@ async function boot() {
       };
     };
     bindProxyAddonButtons();
+    setupConnectionWizard();
     return;
   }
 
@@ -1242,10 +1248,6 @@ async function boot() {
     ? new Date(st.expireAt).toLocaleString("ru-RU")
     : "—";
   const status = st?.panelStatus || "—";
-  const sub =
-    me.subscriptionPrimarySource === "xui"
-      ? me.subscriptionUrl || "—"
-      : me.subscriptionUrl || "—";
   const isActive = String(status).toUpperCase() === "ACTIVE";
   const usedBytes = Number(
     st?.usedTrafficBytes ?? 0,
@@ -1313,17 +1315,11 @@ async function boot() {
     : "";
 
   const connect = el(`<div class="card section" id="section-connect">
-    <h2 class="section-title">Ваше подключение</h2>
-    <p class="muted">Скопируйте ссылку и добавьте её в VPN-приложение. Одна подписка содержит все доступные направления.</p>
+    <div class="eyebrow">ВАШЕ УСТРОЙСТВО / ВАША СЕТЬ</div>
+    <h2 class="section-title">Подключить VPN</h2>
+    <div id="connectionWizard"></div>
     ${uiExtras}
-    <div class="link-block link-block--compact">
-      <div class="label">URL подписки</div>
-      <div class="subscription-url" id="subUrl" title="${escAttr(sub)}">${compactSubscriptionUrl(sub)}</div>
-    </div>
-    <button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Восстановить подключение" : "Получить подключение"}</button>
-    <button class="btn" type="button" id="copyBtn">Скопировать ссылку</button>
-    <button class="btn secondary" type="button" id="openBtn">Открыть ссылку</button>
-    <details class="connection-guide"><summary>Как подключиться <span aria-hidden="true">+</span></summary><ol><li><strong>Установи VPN-клиент.</strong><br>Например, Hiddify или v2rayN на своё устройство.</li><li><strong>Скопируй ссылку выше.</strong><br>В клиенте выбери импорт подписки из буфера обмена.</li><li><strong>Выбери направление.</strong><br>Включи подключение в VPN-клиенте.</li></ol></details>
+    <details class="connection-guide"><summary>Восстановление доступа <span aria-hidden="true">+</span></summary><p class="muted">Если подписка пропала после оплаты, можно запросить восстановление. Для обычного добавления в приложение используйте мастер выше.</p><button class="btn secondary" type="button" id="xuiProvisionBtn">${xui?.linked ? "Восстановить подключение" : "Получить подключение"}</button></details>
   </div>`);
   root.appendChild(connect);
 
@@ -1567,25 +1563,7 @@ async function boot() {
     };
   });
   bindWheelSwipe(document.getElementById("vlWheelDock"));
-
-  document.getElementById("copyBtn").onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(sub);
-      const b = document.getElementById("copyBtn");
-      b.textContent = "Скопировано";
-      b.classList.add("done");
-      showToast("Ссылка скопирована");
-      setTimeout(() => {
-        b.textContent = "Скопировать ссылку";
-        b.classList.remove("done");
-      }, 1200);
-    } catch {
-      tg.showAlert("Не удалось скопировать");
-    }
-  };
-  document.getElementById("openBtn").onclick = () => {
-    if (sub && sub !== "—") tg.openLink(sub);
-  };
+  setupConnectionWizard();
 
   // (Per-proxy copy buttons can be added later if needed)
 
